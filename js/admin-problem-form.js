@@ -55,7 +55,7 @@ async function loadExisting(id) {
   document.getElementById("problem-difficulty-input").value = p.difficulty;
   document.getElementById("problem-topic-input").value = p.topic || "";
   document.getElementById("problem-premium").checked = !!p.is_premium;
-  document.getElementById("starter-code").value = p.starter_code || "";
+  document.getElementById("solution-code").value = p.solution_code || "";
   document.getElementById("expected-output").value = p.expected_output || "";
 
   hintValues = Array.isArray(p.hints) ? [...p.hints] : [];
