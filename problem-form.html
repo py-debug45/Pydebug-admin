@@ -78,10 +78,13 @@
         <textarea id="starter-code" required placeholder="def example():&#10;    pass"></textarea>
       </div>
 
-      <div class="field">
-        <label>Solution code (fully correct/fixed code — used by "Use a Hint" for bug problems)</label>
+      <div class="field" id="solution-code-field">
+        <label for="solution-code">Solution code (fully correct/fixed code — used by "Use a Hint" for bug problems)</label>
         <textarea id="solution-code" placeholder="The correct, working version of the code..."></textarea>
       </div>
+
+      <div class="field">
+        <label id="expected-output-label" for="expected-output">Expected output</label>
         <textarea id="expected-output" required style="min-height:80px" placeholder="Exact output text..."></textarea>
       </div>
 
