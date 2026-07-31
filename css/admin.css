@@ -118,7 +118,24 @@ table.admin-table tr:last-child td { border-bottom: none; }
 /* Problem form */
 .admin-form { max-width: 720px; }
 .admin-form .field { margin-bottom: 18px; }
-.admin-form textarea { font-family: var(--font-mono); font-size: 0.88rem; min-height: 140px; resize: vertical; }
+.admin-form textarea {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  min-height: 140px;
+  resize: vertical;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  width: 100%;
+}
+.admin-form textarea::placeholder { color: var(--text-muted); }
+.admin-form textarea:focus {
+  outline: 2px solid var(--accent-mint);
+  outline-offset: 1px;
+  border-color: transparent;
+}
 .admin-form .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 
 .hint-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
