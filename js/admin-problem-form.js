@@ -55,6 +55,7 @@ async function loadExisting(id) {
   document.getElementById("problem-difficulty-input").value = p.difficulty;
   document.getElementById("problem-topic-input").value = p.topic || "";
   document.getElementById("problem-premium").checked = !!p.is_premium;
+  document.getElementById("starter-code").value = p.starter_code || "";
   document.getElementById("solution-code").value = p.solution_code || "";
   document.getElementById("expected-output").value = p.expected_output || "";
 
@@ -108,6 +109,7 @@ async function saveProblem(e) {
     difficulty: document.getElementById("problem-difficulty-input").value,
     topic: document.getElementById("problem-topic-input").value.trim(),
     is_premium: document.getElementById("problem-premium").checked,
+    starter_code: document.getElementById("starter-code").value,
     solution_code: document.getElementById("solution-code").value,
     expected_output: document.getElementById("expected-output").value,
     hints: hintValues.filter((h) => h.trim() !== ""),
