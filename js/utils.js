@@ -1,10 +1,11 @@
 // utils.js — small helpers shared across pages
 
 // Redirect to login if no active session. Call at the top of protected pages.
+// (In this admin app the login page is index.html — not login.html.)
 async function requireAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
-    window.location.href = "login.html";
+    window.location.href = "index.html";
     return null;
   }
   return session.user;
@@ -75,7 +76,7 @@ function qs(name) {
 
 async function logout() {
   await sb.auth.signOut();
-  window.location.href = "login.html";
+  window.location.href = "index.html";
 }
 
 // Highlights the current page in the sidebar/nav based on file name.
