@@ -1,13 +1,24 @@
 // admin-problem-form.js
 
 let editingId = null;
+let editingBlocked = false; // true when the problem to edit couldn't be loaded — saving is disabled
 let hintValues = [];
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 document.addEventListener("DOMContentLoaded", async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
   editingId = qs("id");
+
+  // Guard against malformed ids (problem-form.html?id=abc) — previously the
+  // page stayed in "Edit" mode and Save would fail/behave oddly.
+  if (editingId && !UUID_RE.test(editingId)) {
+    showToast("Invalid problem id — redirecting to dashboard.", "error");
+    setTimeout(() => (window.location.href = "dashboard.html"), 1200);
+    return;
+  }
 
   if (editingId) {
     document.getElementById("form-title").textContent = "Edit Problem";
@@ -42,8 +53,16 @@ function updateFieldLabels() {
 }
 
 async function loadExisting(id) {
-  const { data: p, error } = await sb.from("problems").select("*").eq("id", id).single();
+  let p = null;
+  let error = null;
+  try {
+    ({ data: p, error } = await sb.from("problems").select("*").eq("id", id).single());
+  } catch (err) {
+    error = err;
+  }
+
   if (error || !p) {
+    editingBlocked = true; // don't allow saving a bogus "edit"
     showToast("Problem not found", "error");
     setTimeout(() => (window.location.href = "dashboard.html"), 1200);
     return;
@@ -72,32 +91,35 @@ function renderHints() {
   hintValues.forEach((value, i) => {
     const row = document.createElement("div");
     row.className = "hint-input-row";
-    row.innerHTML = `
-      <input type="text" class="hint-input" data-index="${i}" value="${escapeAttr(value)}" placeholder="Hint ${i + 1}">
-      <button type="button" class="btn btn--secondary btn--sm remove-hint-btn" data-index="${i}">✕</button>
-    `;
-    container.appendChild(row);
-  });
 
-  container.querySelectorAll(".hint-input").forEach((input) => {
-    input.addEventListener("input", (e) => {
-      hintValues[Number(e.target.dataset.index)] = e.target.value;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "hint-input";
+    input.placeholder = `Hint ${i + 1}`;
+    input.value = value;
+    input.addEventListener("input", () => {
+      hintValues[i] = input.value;
     });
-  });
-  container.querySelectorAll(".remove-hint-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      hintValues.splice(Number(btn.dataset.index), 1);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn--secondary btn--sm remove-hint-btn";
+    removeBtn.textContent = "✕";
+    removeBtn.setAttribute("aria-label", `Remove hint ${i + 1}`);
+    removeBtn.addEventListener("click", () => {
+      hintValues.splice(i, 1);
       renderHints();
     });
-  });
-}
 
-function escapeAttr(str) {
-  return String(str).replace(/"/g, "&quot;");
+    row.append(input, removeBtn);
+    container.appendChild(row);
+  });
 }
 
 async function saveProblem(e) {
   e.preventDefault();
+  if (editingBlocked) return;
+
   const btn = e.target.querySelector("button[type=submit]");
   btn.disabled = true;
   btn.textContent = "Saving...";
@@ -115,11 +137,35 @@ async function saveProblem(e) {
     hints: hintValues.filter((h) => h.trim() !== ""),
   };
 
+  // Browser "required" attributes don't catch whitespace-only input.
+  if (!payload.title) {
+    showToast("Title is required.", "error");
+    btn.disabled = false;
+    btn.textContent = "Save Problem";
+    return;
+  }
+  if (!payload.starter_code.trim()) {
+    showToast("Code is required.", "error");
+    btn.disabled = false;
+    btn.textContent = "Save Problem";
+    return;
+  }
+  if (!payload.expected_output.trim()) {
+    showToast("Expected output is required.", "error");
+    btn.disabled = false;
+    btn.textContent = "Save Problem";
+    return;
+  }
+
   let error;
-  if (editingId) {
-    ({ error } = await sb.from("problems").update(payload).eq("id", editingId));
-  } else {
-    ({ error } = await sb.from("problems").insert(payload));
+  try {
+    if (editingId) {
+      ({ error } = await sb.from("problems").update(payload).eq("id", editingId));
+    } else {
+      ({ error } = await sb.from("problems").insert(payload));
+    }
+  } catch (err) {
+    error = err;
   }
 
   if (error) {

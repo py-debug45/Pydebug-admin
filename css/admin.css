@@ -138,6 +138,21 @@ table.admin-table tr:last-child td { border-bottom: none; }
 }
 .admin-form .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.pagination-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.tag--expired { background: rgba(139, 147, 167, 0.15); color: var(--text-muted); text-decoration: line-through; }
+
 .hint-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .hint-input-row .hint-input { flex: 1; }
 
