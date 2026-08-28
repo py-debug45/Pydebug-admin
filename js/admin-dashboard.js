@@ -52,7 +52,7 @@ async function loadProblems() {
   tbody.innerHTML = "";
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Error loading problems: ${error.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Error loading problems: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   if (!problems || problems.length === 0) {
@@ -63,10 +63,10 @@ async function loadProblems() {
   problems.forEach((p) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${p.title}</td>
-      <td><span class="tag tag--${p.type}">${p.type === "bug" ? "Bug" : "Question"}</span></td>
-      <td><span class="diff diff--${p.difficulty}">${p.difficulty}</span></td>
-      <td>${p.topic || "-"}</td>
+      <td>${escapeHtml(p.title)}</td>
+      <td><span class="tag tag--${escapeHtml(p.type)}">${p.type === "bug" ? "Bug" : "Question"}</span></td>
+      <td><span class="diff diff--${escapeHtml(p.difficulty)}">${escapeHtml(p.difficulty)}</span></td>
+      <td>${escapeHtml(p.topic || "-")}</td>
       <td>${p.is_premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>'}</td>
       <td class="row-actions">
         <a href="problem-form.html?id=${p.id}" class="btn btn--secondary btn--sm">Edit</a>
