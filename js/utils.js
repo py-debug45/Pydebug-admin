@@ -4,7 +4,7 @@
 async function requireAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
-    window.location.href = "login.html";
+    window.location.href = "index.html";
     return null;
   }
   return session.user;
@@ -73,9 +73,21 @@ function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
+// Escape a string for safe insertion into HTML (prevents stored XSS when we
+// render user/admin-supplied values — problem titles, names, emails, etc. —
+// via innerHTML).
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function logout() {
   await sb.auth.signOut();
-  window.location.href = "login.html";
+  window.location.href = "index.html";
 }
 
 // Highlights the current page in the sidebar/nav based on file name.

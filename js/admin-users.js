@@ -26,7 +26,7 @@ async function loadUsers() {
   tbody.innerHTML = "";
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Error: ${error.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Error: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   if (!users || users.length === 0) {
@@ -38,8 +38,8 @@ async function loadUsers() {
     const tr = document.createElement("tr");
     const premium = u.is_premium;
     tr.innerHTML = `
-      <td>${u.full_name || "-"}</td>
-      <td>${u.email || "-"}</td>
+      <td>${escapeHtml(u.full_name || "-")}</td>
+      <td>${escapeHtml(u.email || "-")}</td>
       <td>${u.xp ?? 0}</td>
       <td>${premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>'}</td>
       <td>${u.is_admin ? "Admin" : "User"}</td>
