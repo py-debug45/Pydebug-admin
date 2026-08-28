@@ -1,2 +1,19 @@
 [build]
   publish = "."
+
+# This is a private admin panel — keep it out of search engines and out of
+# other people's iframes, and don't leak the URL via Referer headers.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow, noarchive"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
+
+# Never let a browser serve a stale copy of the app shell after a deploy.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

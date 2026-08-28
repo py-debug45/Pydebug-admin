@@ -2,63 +2,88 @@
 
 let usersPage = 0;
 let usersTotal = 0;
+// See admin-dashboard.js — guards against a slow response for an old search
+// term painting over the results of a newer one.
+let usersRequestId = 0;
+let currentAdminId = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
-  await loadUsers(0);
-  document.getElementById("user-search").addEventListener("input", debounce(() => loadUsers(0), 300));
-});
+  currentAdminId = admin.id;
 
-function debounce(fn, delay) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), delay);
-  };
-}
+  const searchEl = document.getElementById("user-search");
+  if (searchEl) searchEl.addEventListener("input", debounce(() => loadUsers(0), 300));
+
+  await loadUsers(0);
+});
 
 function buildUsersQuery(search, from, to, includeOrder) {
   let query = sb.from("profiles").select("*", { count: "exact" });
   if (includeOrder) query = query.order("created_at", { ascending: false });
-  if (search) query = query.ilike("email", `%${search}%`);
+  if (search) query = query.ilike("email", likeContains(search));
   if (from !== undefined && to !== undefined) query = query.range(from, to);
   return query;
 }
 
 async function loadUsers(page = 0) {
-  const search = document.getElementById("user-search").value.trim();
-  const from = page * ADMIN_PAGE_SIZE;
+  const tbody = document.getElementById("users-tbody");
+  if (!tbody) return;
+
+  const searchEl = document.getElementById("user-search");
+  const search = searchEl ? searchEl.value.trim() : "";
+  const safePage = Math.max(0, Number(page) || 0);
+  const from = safePage * ADMIN_PAGE_SIZE;
   const to = from + ADMIN_PAGE_SIZE - 1;
 
-  let { data: users, error, count } = await buildUsersQuery(search, from, to, true);
+  const requestId = ++usersRequestId;
+  tbody.innerHTML = "";
+  appendEmptyRow(tbody, "Loading…");
+
+  let users = null;
+  let error = null;
+  let count = null;
+  try {
+    ({ data: users, error, count } = await buildUsersQuery(search, from, to, true));
+  } catch (err) {
+    error = err;
+  }
+
   // 42703 = undefined_column — retry without the created_at ordering if the
   // profiles table has no created_at column.
   if (error && error.code === "42703") {
-    ({ data: users, error, count } = await buildUsersQuery(search, from, to, false));
+    try {
+      ({ data: users, error, count } = await buildUsersQuery(search, from, to, false));
+    } catch (err) {
+      error = err;
+    }
   }
 
-  const tbody = document.getElementById("users-tbody");
+  if (requestId !== usersRequestId) return; // superseded by a newer request
+
   tbody.innerHTML = "";
 
   if (error) {
-    appendEmptyRow(tbody, "Error: " + error.message);
+    appendEmptyRow(tbody, "Error loading users: " + errorText(error));
+    renderPagination(document.getElementById("users-pagination"), 0, 0, () => {});
     return;
   }
 
   if (!users || users.length === 0) {
     // We're past the last page (e.g. removed the only row of page 2) — go back.
-    if ((count ?? 0) > from && page > 0) return loadUsers(page - 1);
+    if (isPastLastPage(count, from, safePage)) return loadUsers(safePage - 1);
     usersTotal = count ?? 0;
-    usersPage = page;
-    appendEmptyRow(tbody, "No users yet.");
-    renderPagination(document.getElementById("users-pagination"), usersPage, usersTotal, (p) => loadUsers(p));
+    usersPage = safePage;
+    appendEmptyRow(tbody, search ? "No users match that email." : "No users yet.");
+    renderPagination(document.getElementById("users-pagination"), usersPage, usersTotal, loadUsers);
     return;
   }
 
-  usersTotal = count ?? 0;
-  usersPage = page;
+  usersTotal = count ?? users.length;
+  usersPage = safePage;
+
+  const fragment = document.createDocumentFragment();
 
   users.forEach((u) => {
     // isPremiumUser() is expiry-aware: is_premium with a past expiry date is
@@ -92,49 +117,60 @@ async function loadUsers(page = 0) {
 
     const tdRole = document.createElement("td");
     tdRole.textContent = u.is_admin ? "Admin" : "User";
+    if (u.id && u.id === currentAdminId) {
+      const you = document.createElement("span");
+      you.className = "pagination-info";
+      you.textContent = " (you)";
+      tdRole.appendChild(you);
+    }
 
     const tdActions = document.createElement("td");
     tdActions.className = "row-actions";
     const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
     toggleBtn.className = activePremium ? "btn btn--danger btn--sm" : "btn btn--secondary btn--sm";
     toggleBtn.textContent = activePremium ? "Revoke Premium" : "Grant Premium";
-    toggleBtn.addEventListener("click", () => togglePremium(u.id, activePremium, toggleBtn));
+    toggleBtn.addEventListener("click", () => togglePremium(u, activePremium, toggleBtn));
     tdActions.appendChild(toggleBtn);
 
     tr.append(tdName, tdEmail, tdXp, tdPlan, tdRole, tdActions);
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
 
-  renderPagination(document.getElementById("users-pagination"), usersPage, usersTotal, (p) => loadUsers(p));
+  tbody.appendChild(fragment);
+
+  renderPagination(document.getElementById("users-pagination"), usersPage, usersTotal, loadUsers);
 }
 
-// All user/DB content goes through textContent (never innerHTML) so names and
-// emails can't execute markup in the admin's browser.
-function appendEmptyRow(tbody, message) {
-  const tr = document.createElement("tr");
-  const td = document.createElement("td");
-  td.colSpan = 6;
-  td.className = "empty-row";
-  td.textContent = message;
-  tr.appendChild(td);
-  tbody.appendChild(tr);
-}
+async function togglePremium(user, isCurrentlyPremium, btn) {
+  const who = user.email || user.full_name || "this user";
+  const action = isCurrentlyPremium ? "Revoke premium from" : "Grant premium to";
+  if (!confirm(`${action} ${who}?`)) return;
 
-async function togglePremium(id, isCurrentlyPremium, btn) {
-  btn.disabled = true;
   const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = isCurrentlyPremium ? "Revoking..." : "Granting...";
 
   const updates = isCurrentlyPremium
     ? { is_premium: false, premium_expires_at: null }
     : { is_premium: true, premium_expires_at: null }; // null = manual/lifetime grant
 
   try {
-    const { error } = await sb.from("profiles").update(updates).eq("id", id);
+    // .select() so an RLS policy that silently matches zero rows is reported
+    // as a failure instead of a false "Premium granted".
+    const { data, error } = await sb
+      .from("profiles")
+      .update(updates)
+      .eq("id", user.id)
+      .select("id");
     if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error("No row was updated — check the admin RLS policies (README step 1).");
+    }
     showToast(isCurrentlyPremium ? "Premium revoked" : "Premium granted", "success");
     await loadUsers(usersPage);
   } catch (err) {
-    showToast("Could not update: " + err.message, "error");
+    showToast("Could not update: " + errorText(err), "error");
     btn.disabled = false;
     btn.textContent = originalText;
   }

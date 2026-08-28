@@ -23,23 +23,43 @@ as $$
   select coalesce((select is_admin from profiles where id = auth.uid()), false);
 $$;
 
+-- RLS must actually be ON, or none of the policies below do anything.
+alter table profiles enable row level security;
+alter table problems enable row level security;
+alter table payments enable row level security;
+
 -- Admins can create/edit/delete problems (everyone can still just read them)
 drop policy if exists "Admins can insert problems" on problems;
-create policy "Admins can insert problems" on problems for insert with check (is_admin());
-drop policy if exists "Admins can update problems" on problems for update;
-create policy "Admins can update problems" on problems for update using (is_admin());
-drop policy if exists "Admins can delete problems" on problems for delete;
-create policy "Admins can delete problems" on problems for delete using (is_admin());
+create policy "Admins can insert problems" on problems
+  for insert with check (is_admin());
+
+drop policy if exists "Admins can update problems" on problems;
+create policy "Admins can update problems" on problems
+  for update using (is_admin()) with check (is_admin());
+
+drop policy if exists "Admins can delete problems" on problems;
+create policy "Admins can delete problems" on problems
+  for delete using (is_admin());
 
 -- Admins can read every profile (for the Users page) and grant/revoke premium
 drop policy if exists "Admins can read all profiles" on profiles;
-create policy "Admins can read all profiles" on profiles for select using (is_admin());
-drop policy if exists "Admins can update any profile" on profiles for update;
-create policy "Admins can update any profile" on profiles for update using (is_admin());
+create policy "Admins can read all profiles" on profiles
+  for select using (is_admin());
+
+drop policy if exists "Admins can update any profile" on profiles;
+create policy "Admins can update any profile" on profiles
+  for update using (is_admin()) with check (is_admin());
 
 -- Admins can read all payments (for the revenue stat on the dashboard)
 drop policy if exists "Admins can read all payments" on payments;
-create policy "Admins can read all payments" on payments for select using (is_admin());
+create policy "Admins can read all payments" on payments
+  for select using (is_admin());
+
+-- Let the signed-in user read their own profile row. Without this, the admin
+-- app's own is_admin lookup is blocked by RLS before it can ever succeed.
+drop policy if exists "Users can read own profile" on profiles;
+create policy "Users can read own profile" on profiles
+  for select using (auth.uid() = id);
 ```
 
 **Fallback-account protection (recommended):** before running this, add one
@@ -71,12 +91,21 @@ where table_name in ('profiles', 'problems', 'payments')
 order by table_name, column_name;
 
 -- Row Level Security must be ENABLED for every table above, and the
--- is_admin() policies must be listed. If relrowsecurity is false, the
+-- is_admin() policies must be listed. If rls_enabled is false, the
 -- policies do nothing and the data is effectively public.
-select relname as table, relrowsecurity as rls_enabled
+-- ("table" is a reserved word in SQL, so the alias has to be quoted.)
+select c.relname as "table", c.relrowsecurity as rls_enabled
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
-where n.nspname = 'public' and relname in ('profiles', 'problems', 'payments');
+where n.nspname = 'public'
+  and c.relname in ('profiles', 'problems', 'payments');
+
+-- List the policies that actually exist on those tables
+select tablename, policyname, cmd
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('profiles', 'problems', 'payments')
+order by tablename, policyname;
 ```
 
 ## 2. Make your account the admin
@@ -103,6 +132,27 @@ Netlify deploy works:
 Give it its own subdomain, e.g. `pydebug-admin.netlify.app`, so it's not
 guessable from the main user-facing URL.
 
+## Running the checks
+
+The app is dependency-free static HTML/CSS/JS, but there are two test suites
+you can run locally with Node (no build step, nothing to deploy):
+
+```bash
+# Pure helper functions — pagination maths, search escaping, premium expiry,
+# id validation, hint normalisation. Zero dependencies.
+node tests/logic.test.js
+
+# Full page smoke tests: every admin page is rendered headlessly against a
+# fake Supabase backend and asserted on (rows, stats, XSS escaping, delete /
+# grant-premium flows, pagination fallback, login redirects).
+npm install --no-save jsdom
+node tests/dom.test.js
+```
+
+`node_modules/` is gitignored and nothing in `tests/` is shipped to Netlify —
+`netlify.toml` publishes the repo root as-is with no build command.
+
+
 ## What's included
 
 - `index.html` — Admin login (only `is_admin = true` accounts get in)
@@ -110,3 +160,6 @@ guessable from the main user-facing URL.
 - `problem-form.html` — Add or edit a bug-fix / predict-output problem, with
   dynamic hints
 - `users.html` — All users, with manual Grant/Revoke Premium
+- `robots.txt` + `netlify.toml` headers — keeps this panel out of search
+  engines and out of other people's iframes
+- `tests/` — logic + headless DOM test suites (dev only)

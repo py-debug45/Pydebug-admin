@@ -3,7 +3,12 @@
 // Redirect to login if no active session. Call at the top of protected pages.
 // (In this admin app the login page is index.html — not login.html.)
 async function requireAuth() {
-  const { data: { session } } = await sb.auth.getSession();
+  let session = null;
+  try {
+    ({ data: { session } } = await sb.auth.getSession());
+  } catch (err) {
+    console.error("requireAuth: getSession failed:", err);
+  }
   if (!session) {
     window.location.href = "index.html";
     return null;
@@ -16,11 +21,17 @@ async function requireAuth() {
 // because email confirmation delayed the session), create it now that the
 // user is actually authenticated, instead of leaving the UI blank forever.
 async function getProfile(userId) {
-  const { data, error } = await sb
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
+  let data = null;
+  let error = null;
+  try {
+    ({ data, error } = await sb
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single());
+  } catch (err) {
+    error = err;
+  }
 
   if (!error) return data;
 
@@ -47,14 +58,18 @@ async function getProfile(userId) {
     return created;
   }
 
-  console.error("getProfile error:", error.message);
+  console.error("getProfile error:", error.message || error);
   return null;
 }
 
 function isPremiumUser(profile) {
   if (!profile || !profile.is_premium) return false;
   if (!profile.premium_expires_at) return true; // lifetime premium
-  return new Date(profile.premium_expires_at) > new Date();
+  const expiry = new Date(profile.premium_expires_at);
+  // An unparseable date used to make this return false (NaN comparison), which
+  // silently downgraded a paying user. Treat garbage as "no expiry" instead.
+  if (Number.isNaN(expiry.getTime())) return true;
+  return expiry > new Date();
 }
 
 function showToast(message, type = "info") {
@@ -75,13 +90,18 @@ function qs(name) {
 }
 
 async function logout() {
-  await sb.auth.signOut();
+  try {
+    await sb.auth.signOut();
+  } catch (err) {
+    // Network hiccup shouldn't trap the user in a logged-in-looking UI.
+    console.error("logout: signOut failed:", err);
+  }
   window.location.href = "index.html";
 }
 
 // Highlights the current page in the sidebar/nav based on file name.
 function markActiveNav() {
-  const page = window.location.pathname.split("/").pop() || "index.html";
+  const page = decodeURIComponent(window.location.pathname.split("/").pop() || "") || "index.html";
   document.querySelectorAll("[data-nav]").forEach((link) => {
     if (link.getAttribute("data-nav") === page) link.classList.add("active");
   });
@@ -104,7 +124,9 @@ function bindLogoutButtons() {
 function bindPasswordToggles() {
   document.querySelectorAll("[data-toggle-password]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const input = btn.closest(".password-field").querySelector("input");
+      const wrapper = btn.closest(".password-field");
+      const input = wrapper && wrapper.querySelector("input");
+      if (!input) return;
       const isHidden = input.type === "password";
       input.type = isHidden ? "text" : "password";
       btn.textContent = isHidden ? "Hide" : "Show";
@@ -119,7 +141,13 @@ async function fillSidebarAccount() {
   const nameEl = document.getElementById("sidebar-name");
   if (!nameEl) return; // this page has no sidebar account block
 
-  const { data: { session } } = await sb.auth.getSession();
+  let session = null;
+  try {
+    ({ data: { session } } = await sb.auth.getSession());
+  } catch (err) {
+    console.error("fillSidebarAccount: getSession failed:", err);
+    return;
+  }
   if (!session) return;
 
   const profile = await getProfile(session.user.id);
@@ -163,6 +191,9 @@ document.addEventListener("DOMContentLoaded", () => {
   markActiveNav();
   bindLogoutButtons();
   bindPasswordToggles();
-  fillSidebarAccount();
+  // async — swallow rejections so one failing helper can't break the others
+  Promise.resolve(fillSidebarAccount()).catch((err) =>
+    console.error("fillSidebarAccount failed:", err)
+  );
   bindMobileDrawer();
 });

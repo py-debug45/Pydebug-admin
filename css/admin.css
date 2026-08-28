@@ -169,3 +169,17 @@ table.admin-table tr:last-child td { border-bottom: none; }
   .admin-sidebar__account span { display: none; }
   .admin-main { padding: 18px; }
 }
+
+/* The problem form toggles [hidden] on the solution-code field; make sure a
+   more specific rule can never leave a hidden element visible. */
+[hidden] { display: none !important; }
+
+/* Buttons inside the sidebar/table rows must not shrink to nothing on mobile */
+.row-actions .btn { flex-shrink: 0; }
+
+/* Long titles/emails shouldn't blow the table layout out horizontally */
+table.admin-table td { word-break: break-word; }
+table.admin-table td:first-child { max-width: 340px; }
+
+/* Toast must sit above the mobile sidebar drawer (z-index 1001) */
+.app-toast { z-index: 1100; }
