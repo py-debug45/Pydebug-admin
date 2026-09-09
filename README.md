@@ -3,38 +3,20 @@
 Standalone admin panel for PyDebug. Deploy this as its **own** Netlify site
 (separate from the user-facing app), connected to the **same Supabase project**.
 
-## 1. Run this SQL in Supabase (SQL Editor) — required
+## 1. Run the SQL setup in Supabase (SQL Editor) — required
 
-This assumes the main user-panel tables (`profiles`, `problems`, `submissions`,
-`payments`, etc.) already exist from the user app's setup. This adds what the
-admin app itself needs:
+Open **`supabase-admin-setup.sql`** from this repo, paste it into
+Supabase → **SQL Editor**, and run it. It's idempotent, so it's safe to
+re-run after pulling new admin-panel upgrades.
 
-```sql
--- Mark who is an admin
-alter table profiles add column if not exists is_admin boolean default false;
+What it does (assuming the user-panel tables `profiles`, `problems`,
+`submissions`, `payments` already exist):
 
--- Security-definer helper so RLS policies can check "is this user an admin?"
--- without recursively re-triggering RLS on profiles.
-create or replace function public.is_admin()
-returns boolean
-language sql security definer
-set search_path = public
-as $$
-  select coalesce((select is_admin from profiles where id = auth.uid()), false);
-$$;
-
--- Admins can create/edit/delete problems (everyone can still just read them)
-create policy "Admins can insert problems" on problems for insert with check (is_admin());
-create policy "Admins can update problems" on problems for update using (is_admin());
-create policy "Admins can delete problems" on problems for delete using (is_admin());
-
--- Admins can read every profile (for the Users page) and grant/revoke premium
-create policy "Admins can read all profiles" on profiles for select using (is_admin());
-create policy "Admins can update any profile" on profiles for update using (is_admin());
-
--- Admins can read all payments (for the revenue stat on the dashboard)
-create policy "Admins can read all payments" on payments for select using (is_admin());
-```
+- Adds `profiles.is_admin` + an `is_admin()` helper for RLS checks
+- Lets admins insert/update/delete `problems`
+- Lets admins read all `profiles` + update any profile (premium, XP, role)
+- Lets admins read all `payments` (Payments page + revenue stats)
+- Lets admins read/delete `submissions` (Submissions page + analytics)
 
 If you already added the `prevent_self_premium_grant` trigger from the user
 app's setup (blocking users from self-granting premium), this still works
@@ -68,7 +50,27 @@ guessable from the main user-facing URL.
 ## What's included
 
 - `index.html` — Admin login (only `is_admin = true` accounts get in)
-- `dashboard.html` — Stats overview + all problems (search/filter/edit/delete)
-- `problem-form.html` — Add or edit a bug-fix / predict-output problem, with
-  dynamic hints
-- `users.html` — All users, with manual Grant/Revoke Premium
+- `dashboard.html` — Stats + analytics charts (signups, submissions,
+  difficulty & status donuts) + recent activity feed + top problems +
+  all problems (search / type / difficulty / access filters, duplicate,
+  edit, delete, CSV export)
+- `submissions.html` — Every user's code submissions: filter by status,
+  search by user/problem, view code+output in a modal, delete, CSV export
+- `payments.html` — Revenue overview (total / 30-day / avg) + full payment
+  log with status filter, search and CSV export
+- `problem-form.html` — Add or edit a bug-fix / predict-output problem,
+  with dynamic hints
+- `users.html` — All users with plan/role filters, sorting (newest / most
+  XP), quick Grant/Revoke Premium, CSV export — click through to…
+- `user-detail.html` — Per-user overview: XP adjust, premium grant with
+  expiry (lifetime / 1mo / 3mo / 1yr), make/remove admin, reset progress,
+  recent submissions
+
+Shared helpers: `js/admin-common.js` (auth gate + formatting),
+`js/admin-charts.js` (dependency-free SVG charts), `js/admin-export.js`
+(CSV downloads).
+
+> Note: the Submissions / Payments / User-detail pages auto-detect their
+> table's column names, so minor schema differences in the user panel won't
+> break them — but the tables themselves (`submissions`, `payments`) must
+> exist and the setup SQL above must have been run.

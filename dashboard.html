@@ -18,6 +18,8 @@
     <div class="admin-sidebar__tag">ADMIN PANEL</div>
     <nav>
       <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
+      <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
+      <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
       <a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
       <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
     </nav>
@@ -30,7 +32,9 @@
   <main class="admin-main">
     <div class="admin-topbar">
       <h1>Dashboard</h1>
-      <a href="problem-form.html" class="btn btn--primary">+ Add New Problem</a>
+      <div class="admin-topbar__actions">
+        <a href="problem-form.html" class="btn btn--primary">+ Add New Problem</a>
+      </div>
     </div>
 
     <div class="admin-stats-row">
@@ -38,8 +42,36 @@
       <div class="stat-card"><div class="value" id="stat-premium-users">0</div><div class="label">Premium users</div></div>
       <div class="stat-card"><div class="value" id="stat-total-problems">0</div><div class="label">Total problems</div></div>
       <div class="stat-card"><div class="value" id="stat-premium-problems">0</div><div class="label">Premium problems</div></div>
-      <div class="stat-card"><div class="value" id="stat-revenue">₹0</div><div class="label">Total revenue (logged)</div></div>
+      <div class="stat-card"><div class="value value--green" id="stat-revenue">₹0</div><div class="label">Total revenue</div><div class="sub">successful payments</div></div>
     </div>
+
+    <div class="admin-stats-row">
+      <div class="stat-card"><div class="value value--mint" id="stat-submissions">—</div><div class="label">Total submissions</div></div>
+      <div class="stat-card"><div class="value value--green" id="stat-solve-rate">—</div><div class="label">Solve rate</div></div>
+      <div class="stat-card"><div class="value value--mint" id="stat-new-users">—</div><div class="label">New users (7 days)</div></div>
+      <div class="stat-card"><div class="value" id="stat-month-revenue">—</div><div class="label">Revenue (30 days)</div></div>
+    </div>
+
+    <div class="admin-section-title">Analytics</div>
+    <div class="admin-charts-grid">
+      <div class="chart-card"><h3>New users — last 14 days</h3><div id="chart-signups"><div class="chart-empty">Loading...</div></div></div>
+      <div class="chart-card"><h3>Submissions — last 14 days</h3><div id="chart-submissions"><div class="chart-empty">Loading...</div></div></div>
+      <div class="chart-card"><h3>Problems by difficulty</h3><div id="chart-difficulty"><div class="chart-empty">Loading...</div></div></div>
+      <div class="chart-card"><h3>Submissions by status</h3><div id="chart-status"><div class="chart-empty">Loading...</div></div></div>
+    </div>
+
+    <div class="admin-cols">
+      <div class="section-card">
+        <h3>Recent activity</h3>
+        <ul class="activity-feed" id="activity-feed"><li class="empty-row">Loading...</li></ul>
+      </div>
+      <div class="section-card">
+        <h3>Top problems by attempts</h3>
+        <ul class="top-list" id="top-problems"><li class="empty-row">Loading...</li></ul>
+      </div>
+    </div>
+
+    <div class="admin-section-title">All problems <span class="count" id="problems-count"></span></div>
 
     <div class="admin-toolbar">
       <input type="text" id="admin-search" placeholder="Search problems by title...">
@@ -48,6 +80,18 @@
         <option value="bug">Fix the Bug</option>
         <option value="question">Predict Output</option>
       </select>
+      <select id="admin-filter-difficulty">
+        <option value="all">All difficulties</option>
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+      <select id="admin-filter-access">
+        <option value="all">Free + Premium</option>
+        <option value="free">Free only</option>
+        <option value="premium">Premium only</option>
+      </select>
+      <button class="btn btn--secondary btn--sm" id="export-problems-btn">Export CSV</button>
     </div>
 
     <div class="admin-table-wrap">
@@ -72,6 +116,8 @@
 <script src="js/supabaseClient.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/admin-common.js"></script>
+<script src="js/admin-charts.js"></script>
+<script src="js/admin-export.js"></script>
 <script src="js/admin-dashboard.js"></script>
 </body>
 </html>

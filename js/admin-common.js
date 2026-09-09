@@ -36,6 +36,54 @@ async function logoutAdmin() {
   window.location.href = "index.html";
 }
 
+// "5m ago" style relative time for activity feeds and tables.
+function timeAgo(iso) {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return "—";
+  const s = Math.floor((Date.now() - then) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "m ago";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + "h ago";
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + "d ago";
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// Rupees → "₹1,234" (callers pass rupees; divide paise by 100 first)
+function fmtINR(rupees) {
+  return "₹" + Math.round(rupees || 0).toLocaleString("en-IN");
+}
+
+// Coloured badge for submission / payment statuses (tolerates unknown values).
+function statusBadge(status) {
+  const s = String(status || "").toLowerCase();
+  let cls = "tag--unknown";
+  if (["solved", "success", "succeeded", "captured", "paid", "completed"].includes(s)) cls = "tag--solved";
+  else if (["attempted", "pending", "created", "authorized"].includes(s)) cls = "tag--attempted";
+  else if (["failed", "error", "cancelled", "canceled", "refunded"].includes(s)) cls = "tag--failed";
+  return `<span class="tag ${cls}">${escapeHtml(status || "—")}</span>`;
+}
+
+// Pick the first key from `candidates` that exists on the sample row.
+// Lets admin pages survive small schema differences in the user panel.
+function detectCol(sample, candidates) {
+  if (!sample) return candidates[0];
+  for (const c of candidates) {
+    if (Object.prototype.hasOwnProperty.call(sample, c)) return c;
+  }
+  return candidates[0];
+}
+
 function markAdminActiveNav() {
   const page = window.location.pathname.split("/").pop() || "dashboard.html";
   document.querySelectorAll("[data-admin-nav]").forEach((link) => {
