@@ -18,6 +18,10 @@
     <div class="admin-sidebar__tag">ADMIN PANEL</div>
     <nav>
       <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
+      <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
+      <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
+      <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
+      <a href="notifications.html" data-admin-nav="notifications.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Notifications</a>
       <a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
       <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
     </nav>
@@ -28,21 +32,44 @@
   </aside>
 
   <main class="admin-main">
-    <div class="admin-topbar"><h1>Users</h1></div>
+    <div class="admin-topbar">
+      <h1>Users <span class="pill-count" id="users-count"></span></h1>
+      <div class="admin-topbar__actions">
+        <button class="btn btn--secondary btn--sm" id="export-users-btn">Export CSV</button>
+      </div>
+    </div>
 
     <div class="admin-toolbar">
-      <input type="text" id="user-search" placeholder="Search by email...">
+      <input type="text" id="user-search" placeholder="Search by email or name...">
+      <select id="user-filter-plan">
+        <option value="all">All plans</option>
+        <option value="premium">Premium</option>
+        <option value="free">Free</option>
+      </select>
+      <select id="user-filter-role">
+        <option value="all">All roles</option>
+        <option value="admin">Admins</option>
+        <option value="user">Users</option>
+      </select>
+      <select id="user-sort">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="xp">Most XP</option>
+      </select>
     </div>
 
     <div class="admin-table-wrap">
       <table class="admin-table">
         <thead>
           <tr>
-            <th>Name</th>
+            <th>Display name</th>
             <th>Email</th>
             <th>XP</th>
+            <th>Monthly XP</th>
+            <th>Streak</th>
             <th>Plan</th>
             <th>Role</th>
+            <th>Joined</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -56,6 +83,7 @@
 <script src="js/supabaseClient.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/admin-common.js"></script>
+<script src="js/admin-export.js"></script>
 <script src="js/admin-users.js"></script>
 </body>
 </html>
