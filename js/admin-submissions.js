@@ -1,13 +1,13 @@
-// admin-submissions.js — monitor every user's code submissions.
+// admin-submissions.js — monitor every user's progress.
 //
-// Defensive by design: column names are auto-detected from the first row, so
-// small schema differences in the user panel won't break this page.
+// Exact user-panel schema: one row per (user, problem) with
+// status ('attempted' | 'solved'), the saved solved `code`, solved_at,
+// created_at. There is NO per-submission XP column — XP lives on profiles.
 
 let allSubmissions = [];
 let filteredSubmissions = [];
 let userMap = {};
 let problemMap = {};
-let subCols = { status: "status", xp: "xp_earned", code: "code", output: "output" };
 const PAGE_SIZE = 100;
 let visibleCount = PAGE_SIZE;
 
@@ -39,6 +39,14 @@ function debounce(fn, delay) {
   };
 }
 
+function displayNameOf(u) {
+  return u.display_name || u.full_name || u.email || "—";
+}
+
+function isSolvedRow(s) {
+  return String(s.status || "").toLowerCase() === "solved";
+}
+
 async function loadSubmissions() {
   const tbody = document.getElementById("submissions-tbody");
   tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Loading submissions...</td></tr>`;
@@ -58,16 +66,6 @@ async function loadSubmissions() {
   }
 
   allSubmissions = data || [];
-
-  // Auto-detect column names from the first row.
-  const sample = allSubmissions[0];
-  subCols = {
-    status: detectCol(sample, ["status", "result", "verdict"]),
-    xp: detectCol(sample, ["xp_earned", "xp", "xp_awarded"]),
-    code: detectCol(sample, ["code", "submitted_code", "user_code", "answer"]),
-    output: detectCol(sample, ["output", "actual_output", "result_output", "stdout"]),
-  };
-
   await buildLookupMaps();
   renderSubmissionStats();
   applySubmissionFilters();
@@ -80,7 +78,7 @@ async function buildLookupMaps() {
   const problemIds = [...new Set(allSubmissions.map((s) => s.problem_id).filter(Boolean))];
 
   if (userIds.length) {
-    const { data } = await sb.from("profiles").select("id, full_name, email").in("id", userIds);
+    const { data } = await sb.from("profiles").select("id, display_name, full_name, email").in("id", userIds);
     (data || []).forEach((u) => { userMap[u.id] = u; });
   }
   if (problemIds.length) {
@@ -89,22 +87,16 @@ async function buildLookupMaps() {
   }
 }
 
-function isSolvedRow(s) {
-  const v = String(s[subCols.status] ?? "").toLowerCase();
-  if (["solved", "success", "correct", "passed", "true", "1"].includes(v)) return true;
-  if (typeof s.is_correct === "boolean") return s.is_correct;
-  return false;
-}
-
 function renderSubmissionStats() {
   const total = allSubmissions.length;
   const solved = allSubmissions.filter(isSolvedRow).length;
-  const xp = allSubmissions.reduce((sum, s) => sum + (Number(s[subCols.xp]) || 0), 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const solvedToday = allSubmissions.filter((s) => isSolvedRow(s) && (s.solved_at || "").slice(0, 10) === today).length;
   document.getElementById("sub-total").textContent = total >= 1000 ? "1000+" : total;
-  document.getElementById("sub-total-sub").textContent = total >= 1000 ? "showing latest 1000" : "";
+  document.getElementById("sub-total-sub").textContent = total >= 1000 ? "showing latest 1000" : "one row per user × problem";
   document.getElementById("sub-solved").textContent = solved;
   document.getElementById("sub-rate").textContent = total ? Math.round((solved / total) * 100) + "%" : "0%";
-  document.getElementById("sub-xp").textContent = xp.toLocaleString("en-IN");
+  document.getElementById("sub-today").textContent = solvedToday;
 }
 
 function applySubmissionFilters() {
@@ -117,7 +109,7 @@ function applySubmissionFilters() {
     if (search) {
       const u = userMap[s.user_id] || {};
       const p = problemMap[s.problem_id] || {};
-      const hay = `${u.email || ""} ${u.full_name || ""} ${p.title || ""}`.toLowerCase();
+      const hay = `${u.email || ""} ${u.display_name || ""} ${u.full_name || ""} ${p.title || ""}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -143,10 +135,10 @@ function renderSubmissions() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="muted" title="${escapeHtml(fmtDateTime(s.created_at))}">${escapeHtml(timeAgo(s.created_at))}</td>
-      <td>${escapeHtml(u.email || u.full_name || "—")}</td>
+      <td>${escapeHtml(displayNameOf(u))}</td>
       <td>${escapeHtml(p.title || "—")}</td>
-      <td>${statusBadge(isSolvedRow(s) ? "solved" : (s[subCols.status] || "attempted"))}</td>
-      <td>${Number(s[subCols.xp]) || 0}</td>
+      <td>${statusBadge(s.status || "attempted")}</td>
+      <td class="muted" title="${escapeHtml(fmtDateTime(s.solved_at))}">${s.solved_at ? escapeHtml(timeAgo(s.solved_at)) : "—"}</td>
       <td class="row-actions">
         <button class="btn btn--secondary btn--sm" data-view-sub="${s.id}">View</button>
         <button class="btn btn--danger btn--sm" data-del-sub="${s.id}">Delete</button>
@@ -173,12 +165,10 @@ function openSubmissionModal(id) {
   const p = problemMap[s.problem_id] || {};
   document.getElementById("submission-modal-title").textContent = p.title || "Submission";
   document.getElementById("submission-modal-meta").innerHTML =
-    `${statusBadge(isSolvedRow(s) ? "solved" : (s[subCols.status] || "attempted"))}` +
-    `<span>${escapeHtml(u.email || u.full_name || "Unknown user")}</span>` +
-    `<span>XP: ${Number(s[subCols.xp]) || 0}</span>` +
-    `<span>${escapeHtml(fmtDateTime(s.created_at))}</span>`;
-  document.getElementById("submission-modal-code").textContent = s[subCols.code] || "(no code stored on this row)";
-  document.getElementById("submission-modal-output").textContent = s[subCols.output] || "(no output stored on this row)";
+    `${statusBadge(s.status || "attempted")}` +
+    `<span>${escapeHtml(u.email || displayNameOf(u))}</span>` +
+    (s.solved_at ? `<span>Solved ${escapeHtml(timeAgo(s.solved_at))}</span>` : `<span>Started ${escapeHtml(timeAgo(s.created_at))}</span>`);
+  document.getElementById("submission-modal-code").textContent = s.code || "(no saved code — only solved bug-fixes store code)";
   document.getElementById("submission-modal").classList.add("open");
 }
 
@@ -187,7 +177,7 @@ function closeSubmissionModal() {
 }
 
 async function deleteSubmission(id, btn) {
-  if (!confirm("Delete this submission? This can't be undone.")) return;
+  if (!confirm("Delete this submission? The user will lose this progress row (their XP stays).")) return;
   btn.disabled = true;
   const { error } = await sb.from("submissions").delete().eq("id", id);
   if (error) {
@@ -204,11 +194,11 @@ async function deleteSubmission(id, btn) {
 function exportSubmissions() {
   const rows = filteredSubmissions.map((s) => ({
     id: s.id,
-    date: s.created_at,
+    started: s.created_at,
+    solved_at: s.solved_at || "",
     user: (userMap[s.user_id] || {}).email || s.user_id,
     problem: (problemMap[s.problem_id] || {}).title || s.problem_id,
-    status: isSolvedRow(s) ? "solved" : (s[subCols.status] || "attempted"),
-    xp: Number(s[subCols.xp]) || 0,
+    status: s.status || "attempted",
   }));
   downloadCSV("pydebug-submissions.csv", rows);
 }

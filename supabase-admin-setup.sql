@@ -1,13 +1,67 @@
 -- =============================================================
 -- PyDebug Admin — Supabase setup (run ONCE in SQL Editor)
 -- =============================================================
--- Assumes the main user-panel tables (profiles, problems, submissions,
--- payments, etc.) already exist from the user app's setup.
+-- Assumes the user-panel tables (profiles, problems, submissions, etc.)
+-- already exist from the user app's setup.
 -- This script is idempotent — safe to re-run after upgrades.
+--
+-- It also backfills a few columns that the user app added to the live
+-- database without a migration file (problem_number, submissions.code,
+-- display_name, monthly_xp, ...), so fresh databases work too.
 -- =============================================================
 
--- 1. Mark who is an admin --------------------------------------
+-- 0. Backfill columns the user app expects ----------------------
+-- (all IF NOT EXISTS — no-ops on databases that already have them)
+
 alter table profiles add column if not exists is_admin boolean default false;
+alter table profiles add column if not exists display_name text;
+alter table profiles add column if not exists monthly_xp integer default 0;
+alter table profiles add column if not exists is_first_purchase boolean default true;
+alter table profiles add column if not exists theme_preference text;
+alter table profiles add column if not exists last_active_date date;
+alter table profiles add column if not exists streak_freezes integer not null default 1;
+alter table profiles add column if not exists last_streak_freeze_used_on date;
+alter table profiles add column if not exists reminder_opt_in boolean not null default true;
+
+alter table problems add column if not exists problem_number integer;
+
+alter table submissions add column if not exists code text;
+
+-- Number any problems that don't have a problem_number yet, continuing
+-- after the current max, oldest first. The user app's grid, Next/Previous
+-- buttons and SEO listing all order by problem_number.
+with numbered as (
+  select id, row_number() over (order by created_at, id) as rn
+  from problems
+  where problem_number is null
+)
+update problems p
+set problem_number = (select coalesce(max(problem_number), 0) from problems) + n.rn
+from numbered n
+where p.id = n.id;
+
+-- NOTE: the user panel does NOT have a problems.solution_code column —
+-- the admin panel no longer writes one. If your database has a leftover
+-- solution_code column from an experiment, you may drop it:
+--   alter table problems drop column if exists solution_code;
+
+-- 1. Notifications table (used by the user app's bell + the admin
+--    broadcast page). Created only if it doesn't exist yet.
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  type text default 'announcement',
+  title text not null,
+  message text not null,
+  link text,
+  is_read boolean default false,
+  created_at timestamptz default now()
+);
+alter table public.notifications add column if not exists type text default 'announcement';
+alter table public.notifications add column if not exists title text;
+alter table public.notifications add column if not exists message text;
+alter table public.notifications add column if not exists link text;
+alter table public.notifications add column if not exists is_read boolean default false;
 
 -- 2. Security-definer helper so RLS policies can check
 --    "is this user an admin?" without recursively re-triggering RLS.
@@ -38,7 +92,18 @@ create policy "Admins can read all profiles" on profiles for select using (is_ad
 drop policy if exists "Admins can update any profile" on profiles;
 create policy "Admins can update any profile" on profiles for update using (is_admin());
 
--- 5. Payments: admins can read all (Payments page + revenue stats)
+-- 5a. payment_grants: the REAL payment ledger in the user app
+--      (api/verify-payment.js writes here; `payments` is legacy/unused).
+--      The user app's migration left this table without RLS, i.e.
+--      world-readable — enabling RLS + an admin-read policy fixes that.
+--      verify-payment uses the service-role key, which bypasses RLS,
+--      so grants keep working.
+alter table public.payment_grants enable row level security;
+drop policy if exists "Admins can read all payment grants" on payment_grants;
+create policy "Admins can read all payment grants" on payment_grants for select using (is_admin());
+
+-- 5b. Legacy payments table: keep the old policy so nothing breaks
+--      if you ever backfill it.
 drop policy if exists "Admins can read all payments" on payments;
 create policy "Admins can read all payments" on payments for select using (is_admin());
 
@@ -49,6 +114,47 @@ create policy "Admins can read all submissions" on submissions for select using 
 
 drop policy if exists "Admins can delete submissions" on submissions;
 create policy "Admins can delete submissions" on submissions for delete using (is_admin());
+
+-- 7. Discussions moderation (problem_discussions + discussion_likes)
+drop policy if exists "Admins can read all discussions" on problem_discussions;
+create policy "Admins can read all discussions" on problem_discussions for select using (is_admin());
+
+drop policy if exists "Admins can delete discussions" on problem_discussions;
+create policy "Admins can delete discussions" on problem_discussions for delete using (is_admin());
+
+drop policy if exists "Admins can read all discussion likes" on discussion_likes;
+create policy "Admins can read all discussion likes" on discussion_likes for select using (is_admin());
+
+drop policy if exists "Admins can delete discussion likes" on discussion_likes;
+create policy "Admins can delete discussion likes" on discussion_likes for delete using (is_admin());
+
+-- 8. Achievements: admins can read badges (shown on the user-detail page).
+--    Unlocks stay server-side only — no admin insert/update/delete.
+drop policy if exists "Admins can read all achievements" on user_achievements;
+create policy "Admins can read all achievements" on user_achievements for select using (is_admin());
+
+-- 9. Notifications: users read/update their own (the bell), admins manage all.
+alter table public.notifications enable row level security;
+
+drop policy if exists "Users can read own notifications" on notifications;
+create policy "Users can read own notifications" on notifications for select using (auth.uid() = user_id);
+
+drop policy if exists "Users can mark own notifications read" on notifications;
+create policy "Users can mark own notifications read" on notifications for update using (auth.uid() = user_id);
+
+drop policy if exists "Admins can manage all notifications" on notifications;
+create policy "Admins can manage all notifications" on notifications for all using (is_admin());
+
+-- 10. Support lookups: hint unlocks, ad-hint usage, playground files.
+--      Read-only for admins (used for support/debugging later).
+drop policy if exists "Admins can read all hint unlocks" on hint_unlocks;
+create policy "Admins can read all hint unlocks" on hint_unlocks for select using (is_admin());
+
+drop policy if exists "Admins can read all ad hint log" on ad_hint_log;
+create policy "Admins can read all ad hint log" on ad_hint_log for select using (is_admin());
+
+drop policy if exists "Admins can read all playground files" on playground_files;
+create policy "Admins can read all playground files" on playground_files for select using (is_admin());
 
 -- NOTE: if you already added the `prevent_self_premium_grant` trigger from
 -- the user app's setup (blocking users from self-granting premium), it works

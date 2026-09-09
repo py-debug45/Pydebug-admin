@@ -1,5 +1,30 @@
 // admin-user-detail.js — single-user overview + management actions.
 
+// Badge catalogue — mirrors the user panel's js/achievements.js.
+// (Unlocks are computed server-side; the admin panel only displays them.)
+const PYDEBUG_BADGES = [
+  { id: "first-blood", emoji: "🩸", title: "First Blood" },
+  { id: "getting-started", emoji: "🌱", title: "Getting Started" },
+  { id: "half-century", emoji: "🎯", title: "Half Century" },
+  { id: "century-club", emoji: "💯", title: "Century Club" },
+  { id: "week-warrior", emoji: "🔥", title: "Week Warrior" },
+  { id: "consistency-king", emoji: "👑", title: "Consistency King" },
+  { id: "bug-hunter", emoji: "🐛", title: "Bug Hunter" },
+  { id: "fortune-teller", emoji: "🔮", title: "Fortune Teller" },
+  { id: "topic-master-loops", emoji: "🏅", title: "Topic Master: Loops" },
+  { id: "topic-master-strings", emoji: "🏅", title: "Topic Master: Strings" },
+  { id: "topic-master-lists", emoji: "🏅", title: "Topic Master: Lists" },
+  { id: "topic-master-dictionaries", emoji: "🏅", title: "Topic Master: Dictionaries" },
+  { id: "topic-master-functions", emoji: "🏅", title: "Topic Master: Functions" },
+  { id: "topic-master-oop", emoji: "🏅", title: "Topic Master: OOP" },
+  { id: "topic-master-recursion", emoji: "🏅", title: "Topic Master: Recursion" },
+  { id: "topic-master-exceptions", emoji: "🏅", title: "Topic Master: Exceptions" },
+  { id: "topic-master-sets", emoji: "🏅", title: "Topic Master: Sets" },
+  { id: "topic-master-sorting", emoji: "🏅", title: "Topic Master: Sorting" },
+  { id: "topic-master-generators", emoji: "🏅", title: "Topic Master: Generators" },
+  { id: "topic-master-tuples", emoji: "🏅", title: "Topic Master: Tuples" },
+];
+
 let currentAdmin = null;
 let detailUserId = null;
 let detailProfile = null;
@@ -19,6 +44,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("xp-add-btn").addEventListener("click", addXp);
   document.getElementById("xp-set-btn").addEventListener("click", setXp);
+  document.getElementById("freeze-add-btn").addEventListener("click", () => adjustFreezes(1));
+  document.getElementById("freeze-remove-btn").addEventListener("click", () => adjustFreezes(-1));
+  document.getElementById("display-name-save-btn").addEventListener("click", saveDisplayName);
   document.getElementById("premium-grant-btn").addEventListener("click", grantPremium);
   document.getElementById("premium-revoke-btn").addEventListener("click", revokePremium);
   document.getElementById("admin-toggle-btn").addEventListener("click", toggleAdmin);
@@ -34,15 +62,16 @@ async function reloadUser() {
   }
   detailProfile = data;
   renderProfile();
-  await renderUserSubmissions();
+  await Promise.all([renderUserSubmissions(), renderBadges()]);
 }
 
 function renderProfile() {
   const p = detailProfile;
-  const name = p.full_name || p.email || "User";
+  const name = p.display_name || p.full_name || p.email || "User";
   document.getElementById("detail-avatar").textContent = name.trim().charAt(0).toUpperCase();
   document.getElementById("detail-name").textContent = name;
-  document.getElementById("detail-email").textContent = p.email || "";
+  document.getElementById("detail-email").textContent =
+    (p.email || "") + (p.display_name && p.full_name && p.display_name !== p.full_name ? ` · ${p.full_name}` : "");
   document.getElementById("detail-joined").textContent = "Joined " + fmtDateTime(p.created_at);
 
   const premium = isPremiumUser(p);
@@ -51,7 +80,11 @@ function renderProfile() {
     (p.is_admin ? ' <span class="tag tag--info">Admin</span>' : "");
 
   document.getElementById("detail-xp").textContent = (p.xp ?? 0).toLocaleString("en-IN");
+  document.getElementById("detail-monthly-xp").textContent = (p.monthly_xp ?? 0).toLocaleString("en-IN");
   document.getElementById("detail-streak").textContent = p.streak ?? 0;
+  document.getElementById("detail-last-active").textContent = p.last_active_date ? `last active ${p.last_active_date}` : "";
+  document.getElementById("detail-freezes").textContent = p.streak_freezes ?? 0;
+  document.getElementById("display-name-input").value = p.display_name || "";
 
   const cur = document.getElementById("premium-current");
   if (premium) {
@@ -66,6 +99,25 @@ function renderProfile() {
   toggleBtn.textContent = p.is_admin ? "Remove admin" : "Make admin";
   toggleBtn.disabled = p.is_admin && p.id === currentAdmin.id;
   toggleBtn.title = toggleBtn.disabled ? "You can't remove your own admin access" : "";
+}
+
+async function renderBadges() {
+  const grid = document.getElementById("detail-badges-grid");
+  const { data, error } = await sb.from("user_achievements").select("achievement_id, unlocked_at").eq("user_id", detailUserId);
+  if (error) {
+    grid.innerHTML = `<div class="chart-empty">Couldn't load badges (${escapeHtml(error.message)}). Run <code>supabase-admin-setup.sql</code>, then reload.</div>`;
+    return;
+  }
+  const unlocked = {};
+  (data || []).forEach((r) => { unlocked[r.achievement_id] = r.unlocked_at; });
+  document.getElementById("detail-badge-count").textContent = `${Object.keys(unlocked).length}/${PYDEBUG_BADGES.length}`;
+  grid.innerHTML = PYDEBUG_BADGES.map((b) => {
+    const has = !!unlocked[b.id];
+    return `<div class="badge-chip ${has ? "badge-chip--on" : ""}" title="${escapeHtml(b.title)}${has ? " — unlocked " + escapeHtml(fmtDateTime(unlocked[b.id])) : " — locked"}">
+      <span class="badge-chip__emoji">${b.emoji}</span>
+      <span class="badge-chip__title">${escapeHtml(b.title)}</span>
+    </div>`;
+  }).join("");
 }
 
 async function renderUserSubmissions() {
@@ -87,14 +139,7 @@ async function renderUserSubmissions() {
   const rows = data || [];
   document.getElementById("detail-submissions").textContent = rows.length >= 20 ? "20+" : rows.length;
   document.getElementById("detail-sub-count").textContent = rows.length >= 20 ? "latest 20" : `${rows.length}`;
-
-  const statusCol = detectCol(rows[0], ["status", "result", "verdict"]);
-  const xpCol = detectCol(rows[0], ["xp_earned", "xp", "xp_awarded"]);
-  const solved = rows.filter((s) =>
-    ["solved", "success", "correct", "passed", "true", "1"].includes(String(s[statusCol] ?? "").toLowerCase()) ||
-    s.is_correct === true
-  ).length;
-  document.getElementById("detail-solved").textContent = solved;
+  document.getElementById("detail-solved").textContent = rows.filter((s) => s.status === "solved").length;
 
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="4" class="empty-row">No submissions yet.</td></tr>`;
@@ -110,13 +155,12 @@ async function renderUserSubmissions() {
 
   tbody.innerHTML = "";
   rows.forEach((s) => {
-    const isSolved = ["solved", "success", "correct", "passed", "true", "1"].includes(String(s[statusCol] ?? "").toLowerCase()) || s.is_correct === true;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="muted" title="${escapeHtml(fmtDateTime(s.created_at))}">${escapeHtml(timeAgo(s.created_at))}</td>
       <td>${escapeHtml(titles[s.problem_id] || "—")}</td>
-      <td>${statusBadge(isSolved ? "solved" : (s[statusCol] || "attempted"))}</td>
-      <td>${Number(s[xpCol]) || 0}</td>
+      <td>${statusBadge(s.status || "attempted")}</td>
+      <td class="muted" title="${escapeHtml(fmtDateTime(s.solved_at))}">${s.solved_at ? escapeHtml(timeAgo(s.solved_at)) : "—"}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -141,7 +185,12 @@ async function addXp(e) {
     showToast("Enter an XP amount first", "error");
     return;
   }
-  await updateProfile({ xp: (detailProfile.xp ?? 0) + delta }, `XP updated (${delta > 0 ? "+" : ""}${delta})`, e.target);
+  // Mirror a real solve: both leaderboards move together.
+  await updateProfile(
+    { xp: (detailProfile.xp ?? 0) + delta, monthly_xp: (detailProfile.monthly_xp ?? 0) + delta },
+    `XP updated (${delta > 0 ? "+" : ""}${delta} total + monthly)`,
+    e.target
+  );
 }
 
 async function setXp(e) {
@@ -150,7 +199,17 @@ async function setXp(e) {
     showToast("Enter a valid XP value (0 or more)", "error");
     return;
   }
-  await updateProfile({ xp: val }, `XP set to ${val}`, e.target);
+  await updateProfile({ xp: val }, `Total XP set to ${val}`, e.target);
+}
+
+async function adjustFreezes(delta) {
+  const next = Math.max(0, (detailProfile.streak_freezes ?? 0) + delta);
+  await updateProfile({ streak_freezes: next }, `Streak freezes: ${next}`, null);
+}
+
+async function saveDisplayName(e) {
+  const val = document.getElementById("display-name-input").value.trim().slice(0, 60);
+  await updateProfile({ display_name: val || null }, val ? "Display name saved" : "Display name cleared (fallback active)", e.target);
 }
 
 function expiryForDuration(d) {
@@ -186,6 +245,6 @@ async function toggleAdmin(e) {
 }
 
 async function resetProgress(e) {
-  if (!confirm("Reset this user's XP and streak to 0? Their submissions will be kept.")) return;
-  await updateProfile({ xp: 0, streak: 0 }, "Progress reset", e.target);
+  if (!confirm("Reset this user's total + monthly XP and streak to 0? Submissions and badges will be kept.")) return;
+  await updateProfile({ xp: 0, monthly_xp: 0, streak: 0 }, "Progress reset", e.target);
 }

@@ -9,19 +9,22 @@ Open **`supabase-admin-setup.sql`** from this repo, paste it into
 Supabase → **SQL Editor**, and run it. It's idempotent, so it's safe to
 re-run after pulling new admin-panel upgrades.
 
-What it does (assuming the user-panel tables `profiles`, `problems`,
-`submissions`, `payments` already exist):
+What it does (assuming the user-panel tables already exist):
 
 - Adds `profiles.is_admin` + an `is_admin()` helper for RLS checks
-- Lets admins insert/update/delete `problems`
-- Lets admins read all `profiles` + update any profile (premium, XP, role)
-- Lets admins read all `payments` (Payments page + revenue stats)
-- Lets admins read/delete `submissions` (Submissions page + analytics)
+- Backfills columns the user app expects (`problem_number`,
+  `submissions.code`, `display_name`, `monthly_xp`, …) and numbers any
+  un-numbered problems
+- Creates the `notifications` table if it doesn't exist yet
+- Lets admins manage `problems`, read/update `profiles`, read
+  `payment_grants` (the real payment ledger), read/delete `submissions`,
+  moderate `problem_discussions` (+ likes), read `user_achievements`,
+  manage `notifications`, and read hint/playground support tables
 
 If you already added the `prevent_self_premium_grant` trigger from the user
 app's setup (blocking users from self-granting premium), this still works
 fine alongside it — that trigger explicitly allows changes when `is_admin()`
-is true, so admin-panel premium grants/revokes continue to work.
+is true, so admin-panel premium grants/revokes keep working.
 
 ## 2. Make your account the admin
 
@@ -54,23 +57,35 @@ guessable from the main user-facing URL.
   difficulty & status donuts) + recent activity feed + top problems +
   all problems (search / type / difficulty / access filters, duplicate,
   edit, delete, CSV export)
-- `submissions.html` — Every user's code submissions: filter by status,
-  search by user/problem, view code+output in a modal, delete, CSV export
-- `payments.html` — Revenue overview (total / 30-day / avg) + full payment
-  log with status filter, search and CSV export
-- `problem-form.html` — Add or edit a bug-fix / predict-output problem,
-  with dynamic hints
+- `submissions.html` — Every user's progress row: filter by status, search
+  by user/problem, view saved code in a modal, delete, CSV export
+- `payments.html` — Revenue from the verified `payment_grants` ledger
+  (total / 30-day / by-plan donuts) + full grant log with plan filter,
+  search and CSV export
+- `discussions.html` — Moderate problem comments: search, filter
+  (solutions/replies), view full text, delete spam, CSV export
+- `notifications.html` — Broadcast announcements to All / Free / Premium
+  users' 🔔 bell + review recent notifications
+- `problem-form.html` — Add or edit a problem (12 fixed topics,
+  auto-suggested problem number, dynamic hints)
 - `users.html` — All users with plan/role filters, sorting (newest / most
   XP), quick Grant/Revoke Premium, CSV export — click through to…
-- `user-detail.html` — Per-user overview: XP adjust, premium grant with
-  expiry (lifetime / 1mo / 3mo / 1yr), make/remove admin, reset progress,
-  recent submissions
+- `user-detail.html` — Per-user overview: display-name edit, XP adjust
+  (total + monthly), streak freezes, premium grant with expiry
+  (lifetime / 1mo / 3mo / 1yr), make/remove admin, reset progress,
+  achievements grid, recent submissions
 
-Shared helpers: `js/admin-common.js` (auth gate + formatting),
+Shared helpers: `js/admin-common.js` (auth gate + formatting + plan prices),
 `js/admin-charts.js` (dependency-free SVG charts), `js/admin-export.js`
 (CSV downloads).
 
-> Note: the Submissions / Payments / User-detail pages auto-detect their
-> table's column names, so minor schema differences in the user panel won't
-> break them — but the tables themselves (`submissions`, `payments`) must
-> exist and the setup SQL above must have been run.
+## Keep in sync with the user panel
+
+- **Plan prices** (`js/admin-common.js` → `PYDEBUG_PLANS`) must match the
+  user repo's `api/_plans.js`, otherwise revenue numbers will be wrong.
+- **Badge list** (`js/admin-user-detail.js` → `PYDEBUG_BADGES`) mirrors the
+  user repo's `js/achievements.js`.
+- **After adding problems**, the user app's live grid picks them up
+  automatically (it reads the DB), but the prerendered SEO pages under
+  `problems/*.html` need the user repo's `scripts/prerender-problems.mjs`
+  re-run to include the new content.

@@ -20,6 +20,8 @@
       <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
       <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
       <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
+      <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
+      <a href="notifications.html" data-admin-nav="notifications.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Notifications</a>
       <a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
       <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
     </nav>
@@ -43,7 +45,7 @@
       <div class="stat-card"><div class="value" id="sub-total">0</div><div class="label">Total submissions</div><div class="sub" id="sub-total-sub"></div></div>
       <div class="stat-card"><div class="value value--green" id="sub-solved">0</div><div class="label">Solved</div></div>
       <div class="stat-card"><div class="value value--mint" id="sub-rate">0%</div><div class="label">Solve rate</div></div>
-      <div class="stat-card"><div class="value" id="sub-xp">0</div><div class="label">XP awarded</div></div>
+      <div class="stat-card"><div class="value" id="sub-today">0</div><div class="label">Solved today</div></div>
     </div>
 
     <div class="admin-toolbar">
@@ -83,10 +85,8 @@
       <button class="modal__close" id="submission-modal-close" aria-label="Close">✕</button>
     </div>
     <div class="modal__meta" id="submission-modal-meta"></div>
-    <h4>Submitted code</h4>
+    <h4>Saved code</h4>
     <pre class="code-block" id="submission-modal-code"></pre>
-    <h4>Output</h4>
-    <pre class="code-block" id="submission-modal-output"></pre>
   </div>
 </div>
 

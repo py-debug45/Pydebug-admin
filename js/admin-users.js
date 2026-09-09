@@ -16,10 +16,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("export-users-btn").addEventListener("click", () => {
     downloadCSV("pydebug-users.csv", cachedUsers.map((u) => ({
       id: u.id,
-      name: u.full_name || "",
+      display_name: u.display_name || "",
+      full_name: u.full_name || "",
       email: u.email || "",
       xp: u.xp ?? 0,
+      monthly_xp: u.monthly_xp ?? 0,
       streak: u.streak ?? 0,
+      streak_freezes: u.streak_freezes ?? 0,
+      last_active_date: u.last_active_date || "",
       plan: u.is_premium ? "premium" : "free",
       premium_expires_at: u.premium_expires_at || "",
       role: u.is_admin ? "admin" : "user",
@@ -44,7 +48,7 @@ async function loadUsers() {
   const sort = document.getElementById("user-sort").value;
 
   let query = sb.from("profiles").select("*").limit(500);
-  if (search) query = query.or(`email.ilike.%${search}%,full_name.ilike.%${search}%`);
+  if (search) query = query.or(`email.ilike.%${search}%,full_name.ilike.%${search}%,display_name.ilike.%${search}%`);
   if (plan === "premium") query = query.eq("is_premium", true);
   if (plan === "free") query = query.eq("is_premium", false);
   if (role === "admin") query = query.eq("is_admin", true);
@@ -60,11 +64,11 @@ async function loadUsers() {
   document.getElementById("users-count").textContent = cachedUsers.length ? `(${cachedUsers.length})` : "";
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">Error: ${escapeHtml(error.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-row">Error: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   if (!cachedUsers.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">No users found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-row">No users found.</td></tr>`;
     return;
   }
 
@@ -72,9 +76,10 @@ async function loadUsers() {
     const tr = document.createElement("tr");
     const premium = isPremiumUser(u);
     tr.innerHTML = `
-      <td>${escapeHtml(u.full_name || "-")}</td>
+      <td>${escapeHtml(u.display_name || u.full_name || "-")}</td>
       <td>${escapeHtml(u.email || "-")}</td>
       <td>${(u.xp ?? 0).toLocaleString("en-IN")}</td>
+      <td class="muted">${(u.monthly_xp ?? 0).toLocaleString("en-IN")}</td>
       <td>${u.streak ?? 0} 🔥</td>
       <td>${premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>'}</td>
       <td>${u.is_admin ? '<span class="tag tag--info">Admin</span>' : '<span class="muted">User</span>'}</td>

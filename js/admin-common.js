@@ -74,6 +74,22 @@ function statusBadge(status) {
   return `<span class="tag ${cls}">${escapeHtml(status || "—")}</span>`;
 }
 
+// Premium plans — MUST stay in sync with the user panel's api/_plans.js
+// (amount in paise). Used to derive revenue from the payment_grants ledger.
+const PYDEBUG_PLANS = {
+  monthly: { label: "Monthly Premium", amount: 9900, days: 30 },
+  sixmonth: { label: "6-Month Premium", amount: 49900, days: 182 },
+  yearly: { label: "Yearly Premium", amount: 79900, days: 365 },
+};
+
+function planLabel(key) {
+  return (PYDEBUG_PLANS[key] && PYDEBUG_PLANS[key].label) || key || "—";
+}
+
+function planAmountPaise(key) {
+  return (PYDEBUG_PLANS[key] && PYDEBUG_PLANS[key].amount) || 0;
+}
+
 // Pick the first key from `candidates` that exists on the sample row.
 // Lets admin pages survive small schema differences in the user panel.
 function detectCol(sample, candidates) {

@@ -15,6 +15,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     document.getElementById("form-title").textContent = "Add New Problem";
     renderHints();
+    // Suggest the next free problem_number (user app orders the grid,
+    // Next/Previous and SEO listing by it).
+    const { data } = await sb.from("problems").select("problem_number").order("problem_number", { ascending: false }).limit(1);
+    const maxNum = Number(data?.[0]?.problem_number) || 0;
+    document.getElementById("problem-number-input").value = maxNum + 1;
   }
 
   document.getElementById("add-hint-btn").addEventListener("click", () => {
@@ -53,10 +58,14 @@ async function loadExisting(id) {
   document.getElementById("problem-title-input").value = p.title;
   document.getElementById("problem-description").value = p.description || "";
   document.getElementById("problem-difficulty-input").value = p.difficulty;
-  document.getElementById("problem-topic-input").value = p.topic || "";
+  // Topic is one of the 12 fixed topics the user app aggregates by.
+  const topicSel = document.getElementById("problem-topic-input");
+  if ([...topicSel.options].some((o) => o.value === (p.topic || "").toLowerCase())) {
+    topicSel.value = (p.topic || "").toLowerCase();
+  }
+  document.getElementById("problem-number-input").value = p.problem_number ?? "";
   document.getElementById("problem-premium").checked = !!p.is_premium;
   document.getElementById("starter-code").value = p.starter_code || "";
-  document.getElementById("solution-code").value = p.solution_code || "";
   document.getElementById("expected-output").value = p.expected_output || "";
 
   hintValues = Array.isArray(p.hints) ? [...p.hints] : [];
@@ -107,15 +116,18 @@ async function saveProblem(e) {
   btn.disabled = true;
   btn.textContent = "Saving...";
 
+  // NOTE: the user panel has no solution_code column — don't send one,
+  // or the save fails. problem_number drives grid order + Next/Previous.
+  const numRaw = document.getElementById("problem-number-input").value;
   const payload = {
     type: document.getElementById("problem-type").value,
     title: document.getElementById("problem-title-input").value.trim(),
     description: document.getElementById("problem-description").value.trim(),
     difficulty: document.getElementById("problem-difficulty-input").value,
-    topic: document.getElementById("problem-topic-input").value.trim(),
+    topic: document.getElementById("problem-topic-input").value,
+    problem_number: numRaw === "" ? null : parseInt(numRaw, 10),
     is_premium: document.getElementById("problem-premium").checked,
     starter_code: document.getElementById("starter-code").value,
-    solution_code: document.getElementById("solution-code").value,
     expected_output: document.getElementById("expected-output").value,
     hints: hintValues.filter((h) => h.trim() !== ""),
   };

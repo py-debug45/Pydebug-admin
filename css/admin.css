@@ -378,6 +378,44 @@ td.muted, span.muted { color: var(--text-muted); }
 /* Load more */
 .load-more-wrap { text-align: center; margin: 18px 0 8px; }
 
+/* Achievements badge grid (user detail) */
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.badge-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  opacity: 0.38;
+  filter: grayscale(1);
+}
+.badge-chip--on { opacity: 1; filter: none; border-color: rgba(227, 179, 65, 0.4); }
+.badge-chip__emoji { font-size: 1.3rem; }
+.badge-chip__title { font-size: 0.78rem; line-height: 1.3; }
+
+/* Truncated comment cells */
+td.comment-excerpt {
+  max-width: 340px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Broadcast progress */
+.broadcast-progress {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 10px;
+  min-height: 1.2em;
+}
+
 @media (max-width: 1000px) {
   .detail-grid { grid-template-columns: 1fr; }
   .admin-cols { grid-template-columns: 1fr; }

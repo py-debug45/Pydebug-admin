@@ -17,8 +17,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("admin-filter-access").addEventListener("change", loadProblems);
   document.getElementById("export-problems-btn").addEventListener("click", () => {
     downloadCSV("pydebug-problems.csv", dashboardProblems.map((p) => ({
-      id: p.id, title: p.title, type: p.type, difficulty: p.difficulty,
-      topic: p.topic || "", access: p.is_premium ? "premium" : "free", created_at: p.created_at,
+      id: p.id, problem_number: p.problem_number ?? "", title: p.title, type: p.type,
+      difficulty: p.difficulty, topic: p.topic || "", access: p.is_premium ? "premium" : "free",
+      created_at: p.created_at,
     })));
   });
 });
@@ -30,8 +31,6 @@ function debounce(fn, delay) {
     t = setTimeout(() => fn(...args), delay);
   };
 }
-
-const PAY_SUCCESS = ["captured", "success", "succeeded", "paid", "completed", "authorized"];
 
 async function loadStats() {
   try {
@@ -51,19 +50,17 @@ async function loadStats() {
     console.warn("loadStats basic:", e.message);
   }
 
-  // Revenue from successful payments only.
+  // Revenue from the payment_grants ledger (the user app's real payment
+  // record — every row is a verified successful payment).
   try {
-    const { data: payments } = await sb.from("payments").select("*").limit(5000);
-    const rows = payments || [];
-    const amtCol = detectCol(rows[0], ["amount_paise", "amount", "price_paise", "price"]);
-    const stCol = detectCol(rows[0], ["status", "state"]);
-    const paise = /paise/i.test(amtCol);
-    const ok = rows.filter((p) => !p[stCol] || PAY_SUCCESS.includes(String(p[stCol]).toLowerCase()));
-    const total = ok.reduce((s, p) => s + (Number(p[amtCol]) || 0) * (paise ? 1 : 100), 0);
+    const { data, error } = await sb.from("payment_grants").select("plan_key, created_at").limit(5000);
+    if (error) throw error;
+    const rows = data || [];
+    const total = rows.reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
     const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const monthTotal = ok
-      .filter((p) => new Date(p.created_at).getTime() >= monthAgo)
-      .reduce((s, p) => s + (Number(p[amtCol]) || 0) * (paise ? 1 : 100), 0);
+    const monthTotal = rows
+      .filter((g) => new Date(g.created_at).getTime() >= monthAgo)
+      .reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
     document.getElementById("stat-revenue").textContent = fmtINR(total / 100);
     document.getElementById("stat-month-revenue").textContent = fmtINR(monthTotal / 100);
   } catch (e) {
@@ -252,17 +249,18 @@ async function loadProblems() {
   document.getElementById("problems-count").textContent = `${dashboardProblems.length}`;
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Error loading problems: ${escapeHtml(error.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-row">Error loading problems: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   if (!dashboardProblems.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">No problems yet — add your first one.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-row">No problems yet — add your first one.</td></tr>`;
     return;
   }
 
   dashboardProblems.forEach((p) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td class="mono muted">${p.problem_number ?? "—"}</td>
       <td>${escapeHtml(p.title)}</td>
       <td><span class="tag tag--${escapeHtml(p.type)}">${p.type === "bug" ? "Bug" : "Question"}</span></td>
       <td><span class="diff diff--${escapeHtml(p.difficulty)}">${escapeHtml(p.difficulty)}</span></td>
@@ -316,6 +314,9 @@ async function duplicateProblem(id, btn) {
   }
   const { id: _id, created_at: _c, ...copy } = p;
   copy.title = `${p.title} (Copy)`;
+  // Give the copy the next free number so grid order stays unique.
+  const { data: top } = await sb.from("problems").select("problem_number").order("problem_number", { ascending: false }).limit(1);
+  copy.problem_number = (Number(top?.[0]?.problem_number) || 0) + 1;
 
   const { error } = await sb.from("problems").insert(copy);
   if (error) {
