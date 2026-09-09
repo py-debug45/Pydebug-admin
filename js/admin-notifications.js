@@ -110,13 +110,22 @@ async function sendBroadcast(e) {
     let from = 0;
     const PAGE = 1000;
     for (;;) {
-      let q = sb.from("profiles").select("id").order("created_at", { ascending: true }).range(from, from + PAGE - 1);
-      if (audience === "free") q = q.eq("is_premium", false);
-      if (audience === "premium") q = q.eq("is_premium", true);
+      // Pull expiry so "premium" / "free" match isPremiumUser() (expired
+      // premium is not an active paid user).
+      let q = sb.from("profiles").select("id, is_premium, premium_expires_at").order("created_at", { ascending: true }).range(from, from + PAGE - 1);
       const { data, error } = await q;
       if (error) throw error;
-      recipients.push(...(data || []).map((r) => r.id));
-      if (!data || data.length < PAGE) break;
+      const rows = data || [];
+      const ids = rows
+        .filter((r) => {
+          const active = isPremiumUser(r);
+          if (audience === "premium") return active;
+          if (audience === "free") return !active;
+          return true;
+        })
+        .map((r) => r.id);
+      recipients.push(...ids);
+      if (rows.length < PAGE) break;
       from += PAGE;
     }
 

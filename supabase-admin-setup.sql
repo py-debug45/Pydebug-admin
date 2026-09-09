@@ -30,14 +30,17 @@ alter table submissions add column if not exists code text;
 -- Number any problems that don't have a problem_number yet, continuing
 -- after the current max, oldest first. The user app's grid, Next/Previous
 -- buttons and SEO listing all order by problem_number.
-with numbered as (
+-- Snapshot the current max once so per-row re-evaluation can't collide.
+with bounds as (
+  select coalesce(max(problem_number), 0) as mx from problems
+), numbered as (
   select id, row_number() over (order by created_at, id) as rn
   from problems
   where problem_number is null
 )
 update problems p
-set problem_number = (select coalesce(max(problem_number), 0) from problems) + n.rn
-from numbered n
+set problem_number = b.mx + n.rn
+from numbered n, bounds b
 where p.id = n.id;
 
 -- NOTE: the user panel does NOT have a problems.solution_code column —
@@ -118,9 +121,16 @@ drop policy if exists "Admins can read all payment grants" on payment_grants;
 create policy "Admins can read all payment grants" on payment_grants for select using (is_admin());
 
 -- 5b. Legacy payments table: keep the old policy so nothing breaks
---      if you ever backfill it.
-drop policy if exists "Admins can read all payments" on payments;
-create policy "Admins can read all payments" on payments for select using (is_admin());
+--      if you ever backfill it. Skip entirely when the table was never
+--      created — otherwise this statement aborts the rest of the script
+--      (submissions / discussions / notifications policies never apply).
+do $$
+begin
+  if to_regclass('public.payments') is not null then
+    execute 'drop policy if exists "Admins can read all payments" on public.payments';
+    execute 'create policy "Admins can read all payments" on public.payments for select using (is_admin())';
+  end if;
+end $$;
 
 -- 6. Submissions: admins can read all (Submissions page, dashboard
 --    analytics, user detail) and delete spam/bad rows
@@ -130,23 +140,33 @@ create policy "Admins can read all submissions" on submissions for select using 
 drop policy if exists "Admins can delete submissions" on submissions;
 create policy "Admins can delete submissions" on submissions for delete using (is_admin());
 
--- 7. Discussions moderation (problem_discussions + discussion_likes)
-drop policy if exists "Admins can read all discussions" on problem_discussions;
-create policy "Admins can read all discussions" on problem_discussions for select using (is_admin());
-
-drop policy if exists "Admins can delete discussions" on problem_discussions;
-create policy "Admins can delete discussions" on problem_discussions for delete using (is_admin());
-
-drop policy if exists "Admins can read all discussion likes" on discussion_likes;
-create policy "Admins can read all discussion likes" on discussion_likes for select using (is_admin());
-
-drop policy if exists "Admins can delete discussion likes" on discussion_likes;
-create policy "Admins can delete discussion likes" on discussion_likes for delete using (is_admin());
+-- 7. Discussions moderation (problem_discussions + discussion_likes).
+--    Guarded: a missing table must not abort later policies.
+do $$
+begin
+  if to_regclass('public.problem_discussions') is not null then
+    execute 'drop policy if exists "Admins can read all discussions" on public.problem_discussions';
+    execute 'create policy "Admins can read all discussions" on public.problem_discussions for select using (is_admin())';
+    execute 'drop policy if exists "Admins can delete discussions" on public.problem_discussions';
+    execute 'create policy "Admins can delete discussions" on public.problem_discussions for delete using (is_admin())';
+  end if;
+  if to_regclass('public.discussion_likes') is not null then
+    execute 'drop policy if exists "Admins can read all discussion likes" on public.discussion_likes';
+    execute 'create policy "Admins can read all discussion likes" on public.discussion_likes for select using (is_admin())';
+    execute 'drop policy if exists "Admins can delete discussion likes" on public.discussion_likes';
+    execute 'create policy "Admins can delete discussion likes" on public.discussion_likes for delete using (is_admin())';
+  end if;
+end $$;
 
 -- 8. Achievements: admins can read badges (shown on the user-detail page).
 --    Unlocks stay server-side only — no admin insert/update/delete.
-drop policy if exists "Admins can read all achievements" on user_achievements;
-create policy "Admins can read all achievements" on user_achievements for select using (is_admin());
+do $$
+begin
+  if to_regclass('public.user_achievements') is not null then
+    execute 'drop policy if exists "Admins can read all achievements" on public.user_achievements';
+    execute 'create policy "Admins can read all achievements" on public.user_achievements for select using (is_admin())';
+  end if;
+end $$;
 
 -- 9. Notifications: users read/update their own (the bell), admins manage all.
 alter table public.notifications enable row level security;
@@ -162,14 +182,21 @@ create policy "Admins can manage all notifications" on notifications for all usi
 
 -- 10. Support lookups: hint unlocks, ad-hint usage, playground files.
 --      Read-only for admins (used for support/debugging later).
-drop policy if exists "Admins can read all hint unlocks" on hint_unlocks;
-create policy "Admins can read all hint unlocks" on hint_unlocks for select using (is_admin());
-
-drop policy if exists "Admins can read all ad hint log" on ad_hint_log;
-create policy "Admins can read all ad hint log" on ad_hint_log for select using (is_admin());
-
-drop policy if exists "Admins can read all playground files" on playground_files;
-create policy "Admins can read all playground files" on playground_files for select using (is_admin());
+do $$
+begin
+  if to_regclass('public.hint_unlocks') is not null then
+    execute 'drop policy if exists "Admins can read all hint unlocks" on public.hint_unlocks';
+    execute 'create policy "Admins can read all hint unlocks" on public.hint_unlocks for select using (is_admin())';
+  end if;
+  if to_regclass('public.ad_hint_log') is not null then
+    execute 'drop policy if exists "Admins can read all ad hint log" on public.ad_hint_log';
+    execute 'create policy "Admins can read all ad hint log" on public.ad_hint_log for select using (is_admin())';
+  end if;
+  if to_regclass('public.playground_files') is not null then
+    execute 'drop policy if exists "Admins can read all playground files" on public.playground_files';
+    execute 'create policy "Admins can read all playground files" on public.playground_files for select using (is_admin())';
+  end if;
+end $$;
 
 -- NOTE: if you already added the `prevent_self_premium_grant` trigger from
 -- the user app's setup (blocking users from self-granting premium), it works

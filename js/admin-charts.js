@@ -50,6 +50,15 @@ function svgDonut(segments) {
   return `<div class="donut-wrap"><svg viewBox="0 0 140 140" class="chart-svg chart-svg--donut" role="img">${circles}<text x="70" y="66" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text-primary)">${total}</text><text x="70" y="84" text-anchor="middle" font-size="10" fill="var(--text-muted)">total</text></svg><div class="donut-legend">${legend}</div></div>`;
 }
 
+// Local calendar date (YYYY-MM-DD). toISOString() is UTC and shifts the
+// day for IST (UTC+5:30) around midnight, so charts were off-by-one.
+function localDayKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // Bucket rows by day for the last `days` days using the row's dateKey field.
 // Returns [{ label: "9 Sep", value: n }, ...] oldest → newest.
 function bucketByDay(rows, dateKey, days) {
@@ -58,7 +67,7 @@ function bucketByDay(rows, dateKey, days) {
     if (!r || !r[dateKey]) return;
     const d = new Date(r[dateKey]);
     if (isNaN(d)) return;
-    const k = d.toISOString().slice(0, 10);
+    const k = localDayKey(d);
     counts[k] = (counts[k] || 0) + 1;
   });
   const today = new Date();
@@ -67,7 +76,7 @@ function bucketByDay(rows, dateKey, days) {
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const k = d.toISOString().slice(0, 10);
+    const k = localDayKey(d);
     out.push({
       label: d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
       value: counts[k] || 0,

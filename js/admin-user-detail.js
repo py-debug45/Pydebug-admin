@@ -34,8 +34,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!currentAdmin) return;
 
   detailUserId = qs("id");
-  if (!detailUserId) {
-    showToast("No user id given", "error");
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!detailUserId || !UUID_RE.test(detailUserId)) {
+    showToast("No valid user id given", "error");
     setTimeout(() => (window.location.href = "users.html"), 1000);
     return;
   }

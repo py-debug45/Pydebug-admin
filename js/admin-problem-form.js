@@ -1,13 +1,24 @@
 // admin-problem-form.js
 
 let editingId = null;
+let editingBlocked = false; // true when the problem to edit couldn't be loaded — saving is disabled
 let hintValues = [];
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 document.addEventListener("DOMContentLoaded", async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
   editingId = qs("id");
+
+  // Guard against malformed ids (problem-form.html?id=abc) — previously the
+  // page stayed in "Edit" mode and Save would fail/behave oddly.
+  if (editingId && !UUID_RE.test(editingId)) {
+    showToast("Invalid problem id — redirecting to dashboard.", "error");
+    setTimeout(() => (window.location.href = "dashboard.html"), 1200);
+    return;
+  }
 
   if (editingId) {
     document.getElementById("form-title").textContent = "Edit Problem";
@@ -49,6 +60,7 @@ function updateFieldLabels() {
 async function loadExisting(id) {
   const { data: p, error } = await sb.from("problems").select("*").eq("id", id).single();
   if (error || !p) {
+    editingBlocked = true; // don't allow saving a bogus "edit"
     showToast("Problem not found", "error");
     setTimeout(() => (window.location.href = "dashboard.html"), 1200);
     return;
@@ -112,6 +124,8 @@ function escapeAttr(str) {
 
 async function saveProblem(e) {
   e.preventDefault();
+  if (editingBlocked) return;
+
   const btn = e.target.querySelector("button[type=submit]");
   btn.disabled = true;
   btn.textContent = "Saving...";
@@ -132,11 +146,35 @@ async function saveProblem(e) {
     hints: hintValues.filter((h) => h.trim() !== ""),
   };
 
+  // Browser "required" attributes don't catch whitespace-only input.
+  if (!payload.title) {
+    showToast("Title is required.", "error");
+    btn.disabled = false;
+    btn.textContent = "Save Problem";
+    return;
+  }
+  if (!payload.starter_code.trim()) {
+    showToast("Code is required.", "error");
+    btn.disabled = false;
+    btn.textContent = "Save Problem";
+    return;
+  }
+  if (!payload.expected_output.trim()) {
+    showToast("Expected output is required.", "error");
+    btn.disabled = false;
+    btn.textContent = "Save Problem";
+    return;
+  }
+
   let error;
-  if (editingId) {
-    ({ error } = await sb.from("problems").update(payload).eq("id", editingId));
-  } else {
-    ({ error } = await sb.from("problems").insert(payload));
+  try {
+    if (editingId) {
+      ({ error } = await sb.from("problems").update(payload).eq("id", editingId));
+    } else {
+      ({ error } = await sb.from("problems").insert(payload));
+    }
+  } catch (err) {
+    error = err;
   }
 
   if (error) {

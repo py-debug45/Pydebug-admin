@@ -56,7 +56,7 @@ guessable from the main user-facing URL.
 - `dashboard.html` — Stats + analytics charts (signups, submissions,
   difficulty & status donuts) + recent activity feed + top problems +
   all problems (search / type / difficulty / access filters, duplicate,
-  edit, delete, CSV export)
+  edit, delete, CSV export). Premium-user count is expiry-aware.
 - `submissions.html` — Every user's progress row: filter by status, search
   by user/problem, view saved code in a modal, delete, CSV export
 - `payments.html` — Revenue from the verified `payment_grants` ledger

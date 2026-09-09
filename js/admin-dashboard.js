@@ -1,53 +1,73 @@
 // admin-dashboard.js — stats, analytics, activity feed, top problems, problems table.
 
 let dashboardProblems = [];
+let problemsPage = 0;
+let problemsTotal = 0;
 
 document.addEventListener("DOMContentLoaded", async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
-  await Promise.all([loadStats(), loadProblems()]);
+  await Promise.all([loadStats(), loadProblems(0)]);
   loadAnalytics();
   loadActivity();
   loadTopProblems();
 
-  document.getElementById("admin-search").addEventListener("input", debounce(loadProblems, 300));
-  document.getElementById("admin-filter-type").addEventListener("change", loadProblems);
-  document.getElementById("admin-filter-difficulty").addEventListener("change", loadProblems);
-  document.getElementById("admin-filter-access").addEventListener("change", loadProblems);
-  document.getElementById("export-problems-btn").addEventListener("click", () => {
-    downloadCSV("pydebug-problems.csv", dashboardProblems.map((p) => ({
-      id: p.id, problem_number: p.problem_number ?? "", title: p.title, type: p.type,
-      difficulty: p.difficulty, topic: p.topic || "", access: p.is_premium ? "premium" : "free",
-      created_at: p.created_at,
-    })));
-  });
+  document.getElementById("admin-search").addEventListener("input", debounce(() => loadProblems(0), 300));
+  document.getElementById("admin-filter-type").addEventListener("change", () => loadProblems(0));
+  document.getElementById("admin-filter-difficulty").addEventListener("change", () => loadProblems(0));
+  document.getElementById("admin-filter-access").addEventListener("change", () => loadProblems(0));
+  document.getElementById("export-problems-btn").addEventListener("click", exportProblems);
 });
 
-function debounce(fn, delay) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), delay);
-  };
+async function countRows(queryBuilder, fallbackBuilder = null) {
+  let { count, error } = await queryBuilder;
+  if (error && fallbackBuilder) ({ count, error } = await fallbackBuilder);
+  if (error) return null;
+  return count ?? 0;
+}
+
+function setStat(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = value === null || value === undefined ? "—" : value;
+}
+
+async function countActivePremium() {
+  // Active premium = is_premium true AND (no expiry set OR not yet expired).
+  // Expired premium rows are NOT counted. Falls back to the plain is_premium
+  // count if this project's profiles table has no premium_expires_at column.
+  const nowIso = new Date().toISOString();
+  const [noExpiry, notExpired] = await Promise.all([
+    countRows(sb.from("profiles").select("*", { count: "exact", head: true }).eq("is_premium", true).is("premium_expires_at", null)),
+    countRows(sb.from("profiles").select("*", { count: "exact", head: true }).eq("is_premium", true).gte("premium_expires_at", nowIso)),
+  ]);
+  if (noExpiry === null || notExpired === null) {
+    return countRows(sb.from("profiles").select("*", { count: "exact", head: true }).eq("is_premium", true));
+  }
+  return noExpiry + notExpired;
 }
 
 async function loadStats() {
   try {
-    const [{ count: totalUsers }, { count: premiumUsers }, { count: totalProblems }, { count: premiumProblems }] =
-      await Promise.all([
-        sb.from("profiles").select("*", { count: "exact", head: true }),
-        sb.from("profiles").select("*", { count: "exact", head: true }).eq("is_premium", true),
-        sb.from("problems").select("*", { count: "exact", head: true }),
-        sb.from("problems").select("*", { count: "exact", head: true }).eq("is_premium", true),
-      ]);
+    const [totalUsers, premiumUsers, totalProblems, premiumProblems] = await Promise.all([
+      countRows(sb.from("profiles").select("*", { count: "exact", head: true })),
+      countActivePremium(),
+      countRows(sb.from("problems").select("*", { count: "exact", head: true })),
+      countRows(sb.from("problems").select("*", { count: "exact", head: true }).eq("is_premium", true)),
+    ]);
 
-    document.getElementById("stat-total-users").textContent = totalUsers ?? 0;
-    document.getElementById("stat-premium-users").textContent = premiumUsers ?? 0;
-    document.getElementById("stat-total-problems").textContent = totalProblems ?? 0;
-    document.getElementById("stat-premium-problems").textContent = premiumProblems ?? 0;
+    setStat("stat-total-users", totalUsers);
+    setStat("stat-premium-users", premiumUsers);
+    setStat("stat-total-problems", totalProblems);
+    setStat("stat-premium-problems", premiumProblems);
+
+    if ([totalUsers, premiumUsers, totalProblems, premiumProblems].some((v) => v === null)) {
+      showToast("Some stats couldn't be loaded — check the Supabase schema/RLS setup (README step 1).", "error");
+    }
   } catch (e) {
     console.warn("loadStats basic:", e.message);
+    showToast("Some stats couldn't be loaded — check the Supabase schema/RLS setup (README step 1).", "error");
   }
 
   // Revenue from the payment_grants ledger (the user app's real payment
@@ -65,6 +85,8 @@ async function loadStats() {
     document.getElementById("stat-month-revenue").textContent = fmtINR(monthTotal / 100);
   } catch (e) {
     console.warn("loadStats revenue:", e.message);
+    document.getElementById("stat-revenue").textContent = "₹—";
+    document.getElementById("stat-month-revenue").textContent = "₹—";
   }
 
   // Submissions + solve rate.
@@ -229,47 +251,77 @@ async function loadTopProblems() {
   }
 }
 
-async function loadProblems() {
-  const search = document.getElementById("admin-search").value.trim();
-  const type = document.getElementById("admin-filter-type").value;
-  const difficulty = document.getElementById("admin-filter-difficulty").value;
-  const access = document.getElementById("admin-filter-access").value;
+function currentProblemFilters() {
+  return {
+    search: sanitizeIlike(document.getElementById("admin-search").value),
+    type: document.getElementById("admin-filter-type").value,
+    difficulty: document.getElementById("admin-filter-difficulty").value,
+    access: document.getElementById("admin-filter-access").value,
+  };
+}
 
-  let query = sb.from("problems").select("*").order("created_at", { ascending: false });
-  if (type !== "all") query = query.eq("type", type);
-  if (difficulty !== "all") query = query.eq("difficulty", difficulty);
-  if (access === "free") query = query.eq("is_premium", false);
-  if (access === "premium") query = query.eq("is_premium", true);
-  if (search) query = query.ilike("title", `%${search}%`);
+function applyProblemFilters(query, filters) {
+  if (filters.type !== "all") query = query.eq("type", filters.type);
+  if (filters.difficulty !== "all") query = query.eq("difficulty", filters.difficulty);
+  if (filters.access === "free") query = query.eq("is_premium", false);
+  if (filters.access === "premium") query = query.eq("is_premium", true);
+  if (filters.search) query = query.ilike("title", `%${filters.search}%`);
+  return query;
+}
 
-  const { data: problems, error } = await query;
+async function loadProblems(page = 0) {
+  const filters = currentProblemFilters();
+  const from = page * ADMIN_PAGE_SIZE;
+  const to = from + ADMIN_PAGE_SIZE - 1;
+
+  async function run(includeOrder) {
+    let query = sb.from("problems").select("*", { count: "exact" });
+    if (includeOrder) query = query.order("created_at", { ascending: false });
+    query = applyProblemFilters(query, filters);
+    return query.range(from, to);
+  }
+
+  let { data: problems, error, count } = await run(true);
+  // 42703 = undefined_column — retry without created_at ordering.
+  if (error && error.code === "42703") {
+    ({ data: problems, error, count } = await run(false));
+  }
+
   const tbody = document.getElementById("problems-tbody");
   tbody.innerHTML = "";
   dashboardProblems = problems || [];
-  document.getElementById("problems-count").textContent = `${dashboardProblems.length}`;
+  problemsTotal = count ?? dashboardProblems.length;
+  problemsPage = page;
+  document.getElementById("problems-count").textContent = `${problemsTotal}`;
 
   if (error) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-row">Error loading problems: ${escapeHtml(error.message)}</td></tr>`;
+    renderPagination(document.getElementById("problems-pagination"), 0, 0, () => {});
     return;
   }
   if (!dashboardProblems.length) {
+    if ((count ?? 0) > from && page > 0) return loadProblems(page - 1);
     tbody.innerHTML = `<tr><td colspan="7" class="empty-row">No problems yet — add your first one.</td></tr>`;
+    renderPagination(document.getElementById("problems-pagination"), problemsPage, problemsTotal, (p) => loadProblems(p));
     return;
   }
 
   dashboardProblems.forEach((p) => {
+    const safeType = p.type === "bug" ? "bug" : "question";
+    const safeDiff = ["easy", "medium", "hard"].includes(p.difficulty) ? p.difficulty : "medium";
+    const id = encodeURIComponent(p.id);
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono muted">${p.problem_number ?? "—"}</td>
       <td>${escapeHtml(p.title)}</td>
-      <td><span class="tag tag--${escapeHtml(p.type)}">${p.type === "bug" ? "Bug" : "Question"}</span></td>
-      <td><span class="diff diff--${escapeHtml(p.difficulty)}">${escapeHtml(p.difficulty)}</span></td>
+      <td><span class="tag tag--${safeType}">${safeType === "bug" ? "Bug" : "Question"}</span></td>
+      <td><span class="diff diff--${safeDiff}">${escapeHtml(p.difficulty || safeDiff)}</span></td>
       <td>${escapeHtml(p.topic || "-")}</td>
       <td>${p.is_premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>'}</td>
       <td class="row-actions">
-        <a href="problem-form.html?id=${p.id}" class="btn btn--secondary btn--sm">Edit</a>
-        <button class="btn btn--secondary btn--sm" data-duplicate-id="${p.id}" title="Create a copy of this problem">Duplicate</button>
-        <button class="btn btn--danger btn--sm" data-delete-id="${p.id}">Delete</button>
+        <a href="problem-form.html?id=${id}" class="btn btn--secondary btn--sm">Edit</a>
+        <button class="btn btn--secondary btn--sm" data-duplicate-id="${id}" title="Create a copy of this problem">Duplicate</button>
+        <button class="btn btn--danger btn--sm" data-delete-id="${id}">Delete</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -281,6 +333,24 @@ async function loadProblems() {
   tbody.querySelectorAll("[data-duplicate-id]").forEach((btn) => {
     btn.addEventListener("click", () => duplicateProblem(btn.dataset.duplicateId, btn));
   });
+
+  renderPagination(document.getElementById("problems-pagination"), problemsPage, problemsTotal, (p) => loadProblems(p));
+}
+
+async function exportProblems() {
+  const filters = currentProblemFilters();
+  let query = sb.from("problems").select("*").order("created_at", { ascending: false }).limit(5000);
+  query = applyProblemFilters(query, filters);
+  const { data, error } = await query;
+  if (error) {
+    showToast("Could not export: " + error.message, "error");
+    return;
+  }
+  downloadCSV("pydebug-problems.csv", (data || []).map((p) => ({
+    id: p.id, problem_number: p.problem_number ?? "", title: p.title, type: p.type,
+    difficulty: p.difficulty, topic: p.topic || "", access: p.is_premium ? "premium" : "free",
+    created_at: p.created_at,
+  })));
 }
 
 async function deleteProblem(id, btn) {
@@ -297,7 +367,7 @@ async function deleteProblem(id, btn) {
   }
   showToast("Problem deleted", "success");
   await loadStats();
-  await loadProblems();
+  await loadProblems(problemsPage);
 }
 
 async function duplicateProblem(id, btn) {
@@ -327,5 +397,5 @@ async function duplicateProblem(id, btn) {
   }
   showToast("Problem duplicated", "success");
   await loadStats();
-  await loadProblems();
+  await loadProblems(problemsPage);
 }
