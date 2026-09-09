@@ -94,6 +94,21 @@ create policy "Admins can update any profile" on profiles for update using (is_a
 
 -- 5a. payment_grants: the REAL payment ledger in the user app
 --      (api/verify-payment.js writes here; `payments` is legacy/unused).
+--      Create it if the user-panel migration was never run — definition
+--      matches db/migrations/20260907_payment_grants.sql exactly.
+create table if not exists public.payment_grants (
+  payment_id text primary key,
+  order_id text not null,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  plan_key text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists payment_grants_user_idx
+  on public.payment_grants (user_id);
+create index if not exists payment_grants_order_idx
+  on public.payment_grants (order_id);
+
 --      The user app's migration left this table without RLS, i.e.
 --      world-readable — enabling RLS + an admin-read policy fixes that.
 --      verify-payment uses the service-role key, which bypasses RLS,
