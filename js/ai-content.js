@@ -48,7 +48,7 @@ async function AI_runGapFill(count, opts) {
 
   const { fps, maxNum } = await AI_fetchProblemsIndex();
   let nextNum = maxNum;
-  const added = [];
+  const batch = [];
   let skipped = 0;
   for (let slot = 0; slot < n; slot++) {
     const cell = ranked[slot % ranked.length];
@@ -69,6 +69,11 @@ async function AI_runGapFill(count, opts) {
       fps.add(AI_fingerprint(p.starter_code, p.expected_output));
     }
     if (!payload) { skipped++; continue; }
+    batch.push(payload);
+  }
+  const premCount = AI_applyPremiumMix(batch, settings);
+  const added = [];
+  for (const payload of batch) {
     const { _gap, _bug, ...row } = payload;
     const { error } = await sb.from("problems").insert(row);
     if (error) {
@@ -77,7 +82,10 @@ async function AI_runGapFill(count, opts) {
       continue;
     }
     added.push(row);
-    AI_log("problem_added", `#${row.problem_number} "${row.title}" — gap-fill ${_gap}.`, "success");
+    AI_log("problem_added", `#${row.problem_number} "${row.title}"${row.is_premium ? " ⭐ PREMIUM" : ""} — gap-fill ${_gap}.`, "success");
+  }
+  if (premCount) {
+    AI_log("premium_mix", `Gap-fill: marked ${premCount}/${batch.length} problem(s) as ⭐ Premium.`, "info");
   }
   if (!added.length) AI_log("problem_run", `Gap-fill tried ${n} — all skipped (duplicates).`, "warn");
   return { added, skipped, cells: ranked.slice(0, 5) };
@@ -153,6 +161,11 @@ async function AI_qualityReport() {
     else if (numCount[p.problem_number] > 1) flags.push(`dup-number:${p.problem_number}`);
     if (!["easy", "medium", "hard"].includes(String(p.difficulty || "").toLowerCase())) flags.push("bad-difficulty");
     if (!AI_TOPICS.includes(String(p.topic || "").toLowerCase())) flags.push("bad-topic");
+    if (String(p.type || "").toLowerCase() === "bug" && String(p.starter_code || "").trim()) {
+      try {
+        if (!AI_detectPythonError(p.starter_code).error) flags.push("no-error");
+      } catch (e) { /* ignore */ }
+    }
     if (flags.length) issues.push({ id: p.id, number: p.problem_number, title: p.title, type: p.type, flags });
   });
   AI_log("quality_run", `Quality scan: ${probs.length} problems, ${issues.length} with issues.`, issues.length ? "warn" : "success");

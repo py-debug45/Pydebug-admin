@@ -92,13 +92,24 @@ every admin page), control UI: `ai.html` + `js/admin-ai.js`.
   notification to the offender. Abusive rows also get a ⚠️ badge on the
   Discussions page.
 - **Problem factory** — generates Fix-the-Bug + Predict-Output problems
-  with ALL fields filled + exactly 3 hints. Every bug template carries a
-  verified bug (off-by-one, IndentationError, NameError, TypeError,
-  KeyError, IndexError, ZeroDivisionError, missing return, wrong except,
-  tuple/set errors, RecursionError, consumed generator, swapped args…)
-  and every expected output is COMPUTED from the same values in the code,
-  never guessed. Use "👁️ Preview" to inspect buggy code + fixed
+  with ALL fields filled + exactly 3 hints. EVERY Fix-the-Bug snippet is
+  verified to RAISE a real Python error when run (SyntaxError,
+  IndentationError, NameError, TypeError, ValueError, IndexError,
+  KeyError, ZeroDivisionError, AttributeError, RecursionError,
+  ModuleNotFoundError, FileNotFoundError, StopIteration, AssertionError,
+  UnboundLocalError, NotImplementedError…) — proven by a built-in static
+  detector before insert, never a silent wrong answer — and every
+  Predict-Output expected output is COMPUTED from the same values in the
+  code, never guessed. Use "👁️ Preview" to inspect buggy code + fixed
   reference code + the validation checklist before inserting.
+- **⭐ Premium mix** — optionally marks a configurable share of factory
+  problems as Premium (default 25% ≈ 2–3 of every 10, hardest first);
+  gap-filler honors it too, and broadcasts mention the Premium count.
+- **🧹 Bug error guard** — auto-deletes Fix-the-Bug problems (AI-made OR
+  admin-added) whose code runs WITHOUT raising any Python error; hourly
+  while ON, plus a manual "Delete error-free bugs now" button (dry-run +
+  confirm), a ❤️ health-check entry and a 🔎 quality-report `no-error`
+  flag for review.
 - **Duplicate guard** — fingerprints every problem (code + output); new
   problems that already exist are skipped, and "🧹 Remove duplicates"
   deletes existing dupes (keeping the oldest), including their

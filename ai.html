@@ -45,7 +45,7 @@
       <div class="ai-master__info">
         <div class="ai-master__title">Own-AI Master Switch</div>
         <div class="ai-master-state ai-master-state--off" id="ai-master-label">OFF — AI is sleeping</div>
-        <p class="muted" style="font-size:0.85rem;margin:6px 0 0">When ON, the AI watches your whole panel in the background: it scans discussions, removes abusive comments, warns offenders, deletes duplicate problems and (if enabled) auto-adds new verified problems + sends notifications.</p>
+        <p class="muted" style="font-size:0.85rem;margin:6px 0 0">When ON, the AI watches your whole panel in the background: it scans discussions, removes abusive comments, warns offenders, deletes duplicate problems + error-free bug code and (if enabled) auto-adds new verified problems (a share marked ⭐ Premium) + sends notifications.</p>
       </div>
       <label class="ai-switch ai-switch--lg" title="Turn Own-AI on/off">
         <input type="checkbox" id="ai-master">
@@ -59,6 +59,8 @@
       <div class="stat-card"><div class="value value--mint" id="ai-stat-warned">0</div><div class="label">Warnings sent</div></div>
       <div class="stat-card"><div class="value value--green" id="ai-stat-added">0</div><div class="label">AI problems added</div></div>
       <div class="stat-card"><div class="value" id="ai-stat-dups">0</div><div class="label">Duplicates deleted</div></div>
+      <div class="stat-card"><div class="value" id="ai-stat-premium">0</div><div class="label">⭐ Premium added</div></div>
+      <div class="stat-card"><div class="value value--red" id="ai-stat-errguard">0</div><div class="label">Error-free bugs deleted</div></div>
     </div>
 
     <div class="admin-cols">
@@ -74,8 +76,16 @@
           <label class="ai-switch"><input type="checkbox" id="ai-warn"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
         </div>
         <div class="ai-module">
-          <div><strong>Auto problem factory</strong><p>Auto-adds verified Bug + Output problems (all fields + 3 hints) on schedule.</p></div>
+          <div><strong>Auto problem factory</strong><p>Auto-adds verified Bug (always raises a real Python error) + Output (exact computed output) problems on schedule.</p></div>
           <label class="ai-switch"><input type="checkbox" id="ai-autoproblems"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>⭐ Premium mix</strong><p>Marks a share of factory problems as Premium (default ~25% = 2–3 of every 10, hard ones first). Free users can't open them.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-premiummix"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>🧹 Bug error guard</strong><p>Auto-deletes Fix-the-Bug problems (AI-made OR admin-added) whose code runs WITHOUT raising any Python error.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-errguard"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
         </div>
         <div class="ai-module">
           <div><strong>Duplicate guard</strong><p>Never inserts a duplicate; auto-deletes existing duplicate problems (keeps oldest).</p></div>
@@ -133,6 +143,22 @@
             </select>
           </div>
         </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="ai-premium-pct">⭐ Premium share (when mix is ON)</label>
+            <select id="ai-premium-pct">
+              <option value="10">10% — 1 of 10</option>
+              <option value="20">20% — 2 of 10</option>
+              <option value="25">25% — 2–3 of 10</option>
+              <option value="30">30% — 3 of 10</option>
+              <option value="50">50% — 5 of 10</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>🐞 Bug-code guarantee</label>
+            <p class="muted" style="font-size:0.82rem;margin:6px 0 0">Every Fix-the-Bug snippet is verified to <strong>raise a real Python error</strong> (Syntax, Indentation, Name, Type, Value, Index, Key, ZeroDivision, Attribute, Recursion…) before insert. Silent wrong-answer bugs are never generated.</p>
+          </div>
+        </div>
 
         <h3 style="margin-top:18px">⚡ Run now</h3>
         <div class="ai-actions">
@@ -140,11 +166,13 @@
           <button class="btn btn--secondary btn--sm" id="ai-btn-preview">👁️ Preview a problem</button>
           <button class="btn btn--secondary btn--sm" id="ai-btn-scan">🔍 Scan discussions now</button>
           <button class="btn btn--secondary btn--sm" id="ai-btn-dedup">🧹 Remove duplicates now</button>
+          <button class="btn btn--secondary btn--sm" id="ai-btn-errguard">🧹 Delete error-free bugs now</button>
           <button class="btn btn--secondary btn--sm" id="ai-btn-welcome">👋 Welcome new users now</button>
         </div>
         <div class="ai-schedule">
           <div>Moderation: <strong id="ai-last-mod">—</strong></div>
           <div>Last duplicate cleanup: <strong id="ai-last-dedup">—</strong></div>
+          <div>Last error-guard cleanup: <strong id="ai-last-errguard">—</strong></div>
           <div>Last auto-generate: <strong id="ai-last-gen">—</strong></div>
           <div>Last welcome run: <strong id="ai-last-welcome">—</strong></div>
         </div>
