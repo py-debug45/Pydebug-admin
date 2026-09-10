@@ -149,6 +149,8 @@ begin
     execute 'create policy "Admins can read all discussions" on public.problem_discussions for select using (is_admin())';
     execute 'drop policy if exists "Admins can delete discussions" on public.problem_discussions';
     execute 'create policy "Admins can delete discussions" on public.problem_discussions for delete using (is_admin())';
+    execute 'drop policy if exists "Admins can insert discussions" on public.problem_discussions';
+    execute 'create policy "Admins can insert discussions" on public.problem_discussions for insert with check (is_admin())';
   end if;
   if to_regclass('public.discussion_likes') is not null then
     execute 'drop policy if exists "Admins can read all discussion likes" on public.discussion_likes';
