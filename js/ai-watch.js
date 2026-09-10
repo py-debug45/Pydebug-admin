@@ -79,6 +79,16 @@
         }
       }
 
+      // 2b. Bug error guard — delete error-free Fix-the-Bug code, hourly.
+      if (s.error_guard && typeof AI_runErrorGuard === "function" && now - (last.errguard || 0) > 60 * 60 * 1000) {
+        try {
+          await AI_runErrorGuard({ auto: true });
+          AI_setLastRun("errguard");
+        } catch (e) {
+          console.warn("AI errguard:", e.message);
+        }
+      }
+
       // 3. Auto problem generation — per configured interval.
       const hours = Math.min(72, Math.max(1, Number(s.auto_hours) || 12));
       if (s.auto_problems && now - (last.problems || 0) > hours * 60 * 60 * 1000) {

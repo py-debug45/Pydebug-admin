@@ -22,6 +22,8 @@ function renderAll(s) {
   setToggle("ai-mod", s.moderation);
   setToggle("ai-warn", s.warn_user);
   setToggle("ai-autoproblems", s.auto_problems);
+  setToggle("ai-premiummix", s.premium_mix);
+  setToggle("ai-errguard", s.error_guard);
   setToggle("ai-dedup", s.dedup);
   setToggle("ai-announce", s.announce);
   setToggle("ai-welcome", s.welcome);
@@ -31,6 +33,8 @@ function renderAll(s) {
   document.getElementById("ai-hours").value = String(s.auto_hours || 12);
   document.getElementById("ai-mix").value = s.mix || "both";
   document.getElementById("ai-difficulty").value = s.difficulty || "mixed";
+  const pctEl = document.getElementById("ai-premium-pct");
+  if (pctEl) pctEl.value = String(s.premium_percent || 25);
 }
 
 function setToggle(id, on) {
@@ -62,6 +66,8 @@ function bindControls() {
     ["ai-mod", "moderation", "Discussion moderation"],
     ["ai-warn", "warn_user", "Offender warnings"],
     ["ai-autoproblems", "auto_problems", "Auto problem factory"],
+    ["ai-premiummix", "premium_mix", "Premium mix"],
+    ["ai-errguard", "error_guard", "Bug error guard"],
     ["ai-dedup", "dedup", "Duplicate guard"],
     ["ai-announce", "announce", "New-problem announcements"],
     ["ai-welcome", "welcome", "Welcome messages"],
@@ -91,12 +97,18 @@ function bindControls() {
     AI_saveSettings({ difficulty: e.target.value });
     showToast("Difficulty saved", "success");
   });
+  const pctEl = document.getElementById("ai-premium-pct");
+  if (pctEl) pctEl.addEventListener("change", (e) => {
+    AI_saveSettings({ premium_percent: Math.max(0, Math.min(90, Number(e.target.value) || 25)) });
+    showToast("Premium share saved", "success");
+  });
 
   // Action buttons
   document.getElementById("ai-btn-scan").addEventListener("click", runModerationNow);
   document.getElementById("ai-btn-generate").addEventListener("click", generateNow);
   document.getElementById("ai-btn-preview").addEventListener("click", previewNow);
   document.getElementById("ai-btn-dedup").addEventListener("click", dedupNow);
+  document.getElementById("ai-btn-errguard").addEventListener("click", errguardNow);
   document.getElementById("ai-btn-welcome").addEventListener("click", welcomeNow);
   document.getElementById("ai-btn-test").addEventListener("click", testModeration);
   document.getElementById("ai-btn-clear-log").addEventListener("click", () => {
@@ -181,7 +193,7 @@ async function previewNow() {
       <ol class="ai-hints">${p.hints.map((h) => `<li>${esc(h)}</li>`).join("")}</ol>
       <div class="ai-preview__label">✔️ Validation checklist</div>
       <ul class="ai-checks">${checks.map((c) => `<li class="${c.pass ? "pass" : "fail"}">${c.pass ? "✅" : "❌"} ${esc(c.label)}</li>`).join("")}</ul>
-      <p class="muted" style="font-size:0.8rem">Template: <code>${esc(templateId)}</code> · Not saved — press "Generate problems now" to insert verified problems.</p>
+      <p class="muted" style="font-size:0.8rem">Template: <code>${esc(templateId)}</code> · Not saved — press "Generate problems now" to insert verified problems.${(() => { try { const s = AI_getSettings(); return s.premium_mix ? ` · ⭐ Premium mix is ON — ~${s.premium_percent || 25}% of factory batches are marked Premium.` : ""; } catch (e) { return ""; } })()}</p>
     `;
     box.style.display = "";
     box.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -201,6 +213,30 @@ async function dedupNow() {
     showToast("Dedup failed: " + e.message, "error");
   }
   setBusy("ai-btn-dedup", false, "🧹 Remove duplicates now");
+  renderLogs();
+  refreshStats();
+}
+
+async function errguardNow() {
+  setBusy("ai-btn-errguard", true);
+  try {
+    const scan = await AI_runErrorGuard({ auto: false, dryRun: true });
+    if (!scan.candidates.length) {
+      showToast(`Checked ${scan.scanned} Fix-the-Bug problem(s) — every snippet raises a real error ✅`, "success");
+    } else {
+      const names = scan.candidates.slice(0, 8).map((p) => `• #${p.problem_number ?? "?"} ${p.title}`).join("\n");
+      const more = scan.candidates.length > 8 ? `\n…+${scan.candidates.length - 8} more` : "";
+      if (!confirm(`Found ${scan.candidates.length} Fix-the-Bug problem(s) whose code runs WITHOUT any error:\n\n${names}${more}\n\nDelete them all (with their submissions + discussions)?`)) {
+        setBusy("ai-btn-errguard", false, "🧹 Delete error-free bugs now");
+        return;
+      }
+      const r = await AI_runErrorGuard({ auto: false });
+      showToast(`Checked ${r.scanned}: removed ${r.removed.length} error-free bug problem(s)`, r.removed.length ? "info" : "success");
+    }
+  } catch (e) {
+    showToast("Error-guard failed: " + e.message, "error");
+  }
+  setBusy("ai-btn-errguard", false, "🧹 Delete error-free bugs now");
   renderLogs();
   refreshStats();
 }
@@ -245,9 +281,12 @@ function refreshStats() {
   set("ai-stat-warned", st.warningsSent);
   set("ai-stat-added", st.problemsAdded);
   set("ai-stat-dups", st.duplicatesRemoved);
+  set("ai-stat-premium", st.premiumAdded || 0);
+  set("ai-stat-errguard", st.bugGuardRemoved || 0);
   const fmt = (ts) => (ts ? timeAgo(new Date(ts).toISOString()) : "never");
   set("ai-last-mod", "every minute while ON");
   set("ai-last-dedup", fmt(st.lastRuns.dedup));
+  set("ai-last-errguard", fmt(st.lastRuns.errguard));
   set("ai-last-gen", fmt(st.lastRuns.problems));
   set("ai-last-welcome", fmt(st.lastRuns.welcome));
 }
@@ -375,7 +414,7 @@ async function refreshHealth(manual) {
     }
     if (list) {
       const icon = { ok: "✅", warn: "⚠️", bad: "🔴" };
-      const fixLabel = { dedup: "Fix: remove", moderation: "Fix: scan", factory: "Fix: generate 3", "factory-hard": "Fix: 3 hard", discussions: "Open", hints: "Review", broadcast: "Open" };
+      const fixLabel = { dedup: "Fix: remove", errguard: "Fix: delete", moderation: "Fix: scan", factory: "Fix: generate 3", "factory-hard": "Fix: 3 hard", discussions: "Open", hints: "Review", broadcast: "Open" };
       list.innerHTML = h.checks.map((c) => `
         <li class="${c.status === "ok" ? "pass" : c.status === "bad" ? "fail" : ""}">
           <span>${icon[c.status] || "•"} <strong>${escapeHtml(c.label)}</strong> — ${escapeHtml(c.detail)}</span>
@@ -400,6 +439,14 @@ async function onHealthFix(e) {
     if (fix === "dedup") {
       const r = await AI_runDedup({ auto: false });
       showToast(`Removed ${r.removed.length} duplicate(s)`, "success");
+    } else if (fix === "errguard") {
+      const scan = await AI_runErrorGuard({ auto: false, dryRun: true });
+      if (!scan.candidates.length) {
+        showToast("No error-free bug code found", "success");
+      } else if (confirm(`Delete ${scan.candidates.length} error-free Fix-the-Bug problem(s)?`)) {
+        const r = await AI_runErrorGuard({ auto: false });
+        showToast(`Removed ${r.removed.length} error-free bug problem(s)`, "success");
+      }
     } else if (fix === "moderation") {
       const r = await AI_runModeration({ auto: false });
       showToast(`Removed ${r.removed} comment(s), warned ${r.warned}`, "success");
