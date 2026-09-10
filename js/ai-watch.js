@@ -41,6 +41,9 @@
   async function tick() {
     if (running) return;
     try {
+      // Do not let background automation start before the page's second
+      // (DB-backed) admin lock has been passed.
+      if (document.body.classList.contains("admin-panel-locked")) return;
       if (typeof AI_getSettings !== "function") return;
       const s = AI_getSettings();
       if (!s.master) {
@@ -262,12 +265,17 @@
     AI_refreshBell();
   }
 
-  window.addEventListener("load", () => {
+  function startWatcher() {
     setTimeout(tick, 5000);       // first pass shortly after page load
     setInterval(tick, 60000);
     AI_mountBell();     // then every minute
     try {
       if (typeof AI_getSettings === "function") paintGuardPill(AI_getSettings());
     } catch (e) {}
-  });
+  }
+
+  // The bundle is lazy-loaded after the panel unlocks. Support both cases:
+  // loading before the window event and loading after it has already fired.
+  if (document.readyState === "complete") startWatcher();
+  else window.addEventListener("load", startWatcher, { once: true });
 })();

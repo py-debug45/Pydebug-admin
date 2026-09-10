@@ -22,9 +22,10 @@ alter table profiles add column if not exists last_active_date date;
 alter table profiles add column if not exists streak_freezes integer not null default 1;
 alter table profiles add column if not exists last_streak_freeze_used_on date;
 alter table profiles add column if not exists reminder_opt_in boolean not null default true;
-
+alter table profiles add column if not exists premium_expires_at timestamptz;
 alter table problems add column if not exists problem_number integer;
-
+alter table problems add column if not exists is_premium boolean default false;
+alter table problems add column if not exists hints jsonb default '[]'::jsonb;
 alter table submissions add column if not exists code text;
 
 -- Number any problems that don't have a problem_number yet, continuing
@@ -231,3 +232,58 @@ create table if not exists public.ai_logs (
 alter table public.ai_logs enable row level security;
 drop policy if exists "Admins can manage ai logs" on ai_logs;
 create policy "Admins can manage ai logs" on ai_logs for all using (is_admin());
+
+-- 12. DB-backed panel password -----------------------------------
+-- The browser never receives this value or the hash. The client invokes a
+-- SECURITY DEFINER verifier only after Supabase has authenticated an admin.
+-- Default passcode: imtiyaj khan 9329
+create extension if not exists pgcrypto with schema extensions;
+set search_path = public, extensions;
+
+create table if not exists public.admin_panel_security (
+  id integer primary key check (id = 1),
+  password_hash text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.admin_panel_security enable row level security;
+
+insert into public.admin_panel_security (id, password_hash)
+values (1, crypt('imtiyaj khan 9329', gen_salt('bf')))
+on conflict (id) do nothing;
+
+create or replace function public.verify_admin_panel_password(input_password text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if auth.uid() is null then
+    return false;
+  end if;
+
+  if not exists (
+    select 1 from public.profiles
+    where id = auth.uid() and coalesce(is_admin, false) = true
+  ) then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+    from public.admin_panel_security
+    where id = 1
+      and password_hash = crypt(coalesce(input_password, ''), password_hash)
+  );
+end;
+$$;
+
+revoke all on function public.verify_admin_panel_password(text) from public;
+grant execute on function public.verify_admin_panel_password(text) to authenticated;
+revoke all on table public.admin_panel_security from anon, authenticated;
+
+-- To rotate the passcode later, replace the text below and run only this
+-- statement in the SQL editor:
+-- update public.admin_panel_security
+-- set password_hash = crypt('your new passcode', gen_salt('bf')), updated_at = now()
+-- where id = 1;

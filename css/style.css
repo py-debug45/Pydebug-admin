@@ -3,8 +3,8 @@
    Theme: dark IDE / terminal aesthetic (fits a Python debugging tool)
    ========================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
+/* Deliberately use local system stacks: the admin shell should paint before
+   an external font request completes, especially on mobile connections. */
 :root {
   /* Color tokens */
   --bg-primary: #0b0e14;
@@ -22,9 +22,9 @@
   --accent-green: #3fb950;
 
   /* Type */
-  --font-display: 'Space Grotesk', sans-serif;
-  --font-body: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -267,6 +267,8 @@ code, pre { font-family: var(--font-mono); }
   padding: 6px 8px;
 }
 .password-toggle-btn:hover { text-decoration: underline; }
+.password-toggle-btn .svg-icon { width: 17px; height: 17px; display: block; }
+.password-toggle-btn:has(.svg-icon) { text-decoration: none; }
 
 .auth-switch { margin-top: 18px; text-align: center; color: var(--text-muted); font-size: 0.88rem; }
 .auth-switch a { color: var(--accent-mint); font-weight: 500; }
