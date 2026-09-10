@@ -3,12 +3,34 @@
 // (same Supabase project as the user panel, so `sb` is already available).
 
 const ADMIN_PAGE_SIZE = 50;
-let adminPanelUnlocked = false;
+const ADMIN_UNLOCK_SESSION_KEY = "pydebug_admin_panel_unlocked_v1";
 
-// The panel passcode is deliberately never kept in browser storage. A fresh
-// page load or refresh therefore always requires the DB-backed check again.
+// Keep the unlock only for this browser tab. sessionStorage survives normal
+// navigation between the admin's HTML pages, but we explicitly clear it when
+// the browser tells us this document was loaded by a refresh. This gives us
+// the intended behaviour: one password check per visit, never once per page,
+// and a fresh check after reload/reopen.
+function isDocumentReload() {
+  const navigation = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+  if (navigation) return navigation.type === "reload";
+  return performance.navigation && performance.navigation.type === 1;
+}
+
+function getPanelUnlockState() {
+  if (isDocumentReload()) {
+    try { sessionStorage.removeItem(ADMIN_UNLOCK_SESSION_KEY); } catch (e) {}
+    return false;
+  }
+  try { return sessionStorage.getItem(ADMIN_UNLOCK_SESSION_KEY) === "true"; } catch (e) { return false; }
+}
+
+let adminPanelUnlocked = getPanelUnlockState();
+
 async function requirePanelPassword() {
-  if (adminPanelUnlocked) return true;
+  if (adminPanelUnlocked) {
+    document.body.classList.remove("admin-panel-locked");
+    return true;
+  }
 
   const overlay = document.createElement("div");
   overlay.className = "admin-password-overlay";
@@ -93,6 +115,7 @@ async function requirePanelPassword() {
     }
 
     adminPanelUnlocked = true;
+    try { sessionStorage.setItem(ADMIN_UNLOCK_SESSION_KEY, "true"); } catch (e) {}
     document.body.classList.remove("admin-panel-locked");
     overlay.classList.add("is-unlocked");
     window.setTimeout(() => overlay.remove(), 240);
@@ -201,20 +224,21 @@ async function requireAdmin() {
   document.body.classList.add("admin-panel-locked");
   const unlocked = await requirePanelPassword();
   if (!unlocked) return null;
-  // The control center needs the AI APIs before its first render. Other pages
-  // start their normal data fetch immediately while the optional bundle loads
-  // in parallel, keeping the dashboard usable on slower mobile connections.
-  const aiLoad = loadAdminAI();
-  const pageName = window.location.pathname.split("/").pop();
-  if (pageName === "ai.html" || pageName === "discussions.html") {
-    try { await aiLoad; } catch (error) { console.warn("Admin automation bundle:", error.message); }
-  } else {
-    aiLoad.catch((error) => console.warn("Admin automation bundle:", error.message));
+  // Always finish loading the AI bundle on every admin page, irrespective of
+  // the master switch. The switch controls what the AI does, not whether its
+  // feature set is available; awaiting it also prevents page actions (such as
+  // AI variations) racing the script load.
+  try {
+    await loadAdminAI();
+  } catch (error) {
+    console.warn("Admin automation bundle:", error.message);
   }
   return profile;
 }
 
 async function logoutAdmin() {
+  adminPanelUnlocked = false;
+  try { sessionStorage.removeItem(ADMIN_UNLOCK_SESSION_KEY); } catch (e) {}
   await sb.auth.signOut();
   window.location.href = "index.html";
 }
