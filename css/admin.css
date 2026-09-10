@@ -1,6 +1,96 @@
 /* admin.css — admin panel specific styles (reuses tokens from ../css/style.css) */
 
+/* Keep the protected application out of view until the DB-backed panel lock
+   has been passed. This prevents a protected table from flashing on refresh. */
+.admin-protected.admin-panel-locked .admin-shell,
+.admin-protected.admin-panel-locked .admin-mobile-menu,
+.admin-protected.admin-panel-locked .admin-sidebar-backdrop,
+.admin-protected.admin-panel-locked .ai-bell { visibility: hidden; }
+.admin-protected { min-height: 100vh; }
+
 .admin-shell { display: flex; min-height: 100vh; }
+
+/* ---------- DB-backed mobile-style panel lock ---------- */
+.admin-password-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(79, 209, 197, 0.13), transparent 32%),
+    radial-gradient(circle at 84% 90%, rgba(227, 179, 65, 0.09), transparent 34%),
+    rgba(8, 11, 17, 0.98);
+  animation: admin-lock-in 0.24s ease-out;
+}
+.admin-password-overlay.is-unlocked { animation: admin-lock-out 0.22s ease-in forwards; pointer-events: none; }
+.admin-password-card {
+  width: min(100%, 390px);
+  padding: 30px 26px 22px;
+  background: linear-gradient(145deg, rgba(25, 31, 44, 0.98), rgba(15, 19, 28, 0.98));
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 24px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255,255,255,0.025) inset;
+  text-align: center;
+}
+.admin-password-card.has-error { animation: admin-lock-shake 0.28s ease-in-out; }
+.admin-password-icon {
+  width: 68px; height: 68px; margin: 0 auto 18px;
+  display: grid; place-items: center;
+  color: var(--accent-mint);
+  background: rgba(79, 209, 197, 0.12);
+  border: 1px solid rgba(79, 209, 197, 0.25);
+  border-radius: 20px;
+}
+.admin-password-icon .svg-icon { width: 31px; height: 31px; }
+.admin-password-eyebrow {
+  color: var(--accent-mint); font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.14em; margin-bottom: 8px;
+}
+.admin-password-card h1 { font-size: 1.45rem; margin-bottom: 8px; }
+.admin-password-card p { margin: 0 auto 22px; max-width: 315px; font-size: 0.84rem; line-height: 1.55; }
+.admin-password-label { display: block; text-align: left; color: var(--text-muted); font-size: 0.78rem; font-weight: 600; margin: 0 0 7px 2px; }
+.admin-password-input-wrap { position: relative; display: flex; align-items: center; }
+.admin-password-input-wrap input {
+  width: 100%; height: 50px; padding: 0 48px 0 15px;
+  color: var(--text-primary); background: rgba(9, 13, 20, 0.78);
+  border: 1px solid var(--border-subtle); border-radius: 13px; outline: none;
+  font: 500 0.96rem var(--font-body); letter-spacing: 0.02em;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.admin-password-input-wrap input:focus { border-color: var(--accent-mint); box-shadow: 0 0 0 3px rgba(79, 209, 197, 0.13); }
+.admin-password-input-wrap input[aria-invalid="true"] { border-color: var(--accent-red); }
+.admin-password-toggle {
+  position: absolute; right: 7px; width: 36px; height: 36px; display: grid; place-items: center;
+  color: var(--text-muted); background: none; border: 0; border-radius: 9px; cursor: pointer;
+}
+.admin-password-toggle:hover { color: var(--accent-mint); background: var(--bg-elevated); }
+.admin-password-toggle .svg-icon { width: 19px; height: 19px; }
+.admin-password-error { min-height: 20px; padding: 7px 2px 2px; text-align: left; color: var(--accent-red); font-size: 0.76rem; }
+.admin-password-submit { min-height: 48px; margin-top: 7px; border-radius: 13px; }
+.admin-password-submit .svg-icon { width: 17px; height: 17px; }
+.admin-password-submit.is-loading { cursor: wait; }
+.admin-password-meta { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 19px; color: var(--text-muted); font-size: 0.7rem; }
+.admin-password-meta .svg-icon { width: 13px; height: 13px; color: var(--accent-green); }
+@keyframes admin-lock-in { from { opacity: 0; transform: scale(1.015); } to { opacity: 1; transform: scale(1); } }
+@keyframes admin-lock-out { to { opacity: 0; transform: scale(1.015); } }
+@keyframes admin-lock-shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+/* ---------- Fast, quiet navigation ---------- */
+.admin-sidebar { box-shadow: 8px 0 24px rgba(0, 0, 0, 0.06); }
+.admin-sidebar nav a, .admin-topbar .btn, .stat-card, .chart-card, .section-card, .admin-table-wrap { transition: background-color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
+.admin-sidebar nav a svg { stroke-width: 1.8; }
+.admin-mobile-menu, .admin-sidebar-backdrop { display: none; }
+.admin-main { width: 100%; margin: 0 auto; }
+.admin-topbar { padding-bottom: 2px; }
+.admin-topbar h1 { letter-spacing: -0.035em; }
+.admin-section-title { letter-spacing: -0.02em; }
+
+.admin-table-wrap { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08); }
+table.admin-table tbody tr { transition: background-color .16s ease; }
+
 
 .admin-sidebar {
   width: 220px;
@@ -38,6 +128,9 @@
   margin-bottom: 2px;
   border-left: 2px solid transparent;
 }
+.svg-icon { width: 1em; height: 1em; display: inline-block; flex: 0 0 auto; vertical-align: -0.16em; }
+.svg-icon-holder { display: inline-flex; align-items: center; justify-content: center; vertical-align: -0.13em; line-height: 0; margin: 0 0.12em; }
+.svg-icon-holder .svg-icon { width: 1em; height: 1em; }
 .admin-sidebar nav a svg { width: 17px; height: 17px; flex-shrink: 0; }
 .admin-sidebar__account button svg { width: 17px; height: 17px; display: block; }
 .admin-sidebar nav a:hover { background: var(--bg-elevated); color: var(--text-primary); }
@@ -433,15 +526,49 @@ td.comment-excerpt {
 
 @media (max-width: 800px) {
   .admin-shell { flex-direction: column; }
-  .admin-sidebar { width: 100%; height: auto; position: static; flex-direction: row; align-items: center; padding: 12px 16px; }
-  .admin-sidebar__tag { display: none; }
-  .admin-sidebar nav { display: flex; gap: 4px; overflow-x: auto; }
-  .admin-sidebar nav a { white-space: nowrap; }
-  .admin-sidebar__account { margin-top: 0; padding-top: 0; border-top: none; margin-left: auto; }
-  .admin-sidebar__account span { display: none; }
-  .admin-main { padding: 18px; }
+  .admin-sidebar {
+    position: fixed; inset: 0 auto 0 0; width: min(286px, 84vw); height: 100dvh;
+    transform: translateX(-105%); transition: transform .24s ease;
+    z-index: 1101; padding: 22px 14px; align-items: stretch;
+    box-shadow: 18px 0 40px rgba(0,0,0,.34);
+  }
+  .admin-sidebar.is-open { transform: translateX(0); }
+  .admin-sidebar__tag { display: block; }
+  .admin-sidebar nav { display: flex; flex-direction: column; gap: 2px; overflow: visible; }
+  .admin-sidebar nav a { white-space: normal; }
+  .admin-sidebar__account { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border-subtle); margin-left: 0; }
+  .admin-sidebar__account span { display: block; }
+  .admin-mobile-menu {
+    position: fixed; top: 13px; left: 13px; z-index: 1100; width: 42px; height: 42px;
+    display: grid; place-items: center; color: var(--text-primary); background: rgba(19, 23, 34, .92);
+    border: 1px solid var(--border-subtle); border-radius: 12px; cursor: pointer;
+    box-shadow: 0 8px 22px rgba(0,0,0,.18); backdrop-filter: blur(10px);
+  }
+  .admin-mobile-menu .svg-icon { width: 20px; height: 20px; }
+  .admin-sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 1100; background: rgba(4, 6, 10, .64);
+    opacity: 0; pointer-events: none; transition: opacity .24s ease;
+  }
+  .admin-sidebar-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .admin-main { padding: 74px 18px 24px; }
+  .admin-topbar { padding-left: 52px; }
+  .admin-topbar h1 { font-size: 1.35rem; }
   .detail-head__badges { margin-left: 0; }
+  .admin-password-card { padding: 27px 20px 20px; border-radius: 22px; }
 }
+
+@media (max-width: 480px) {
+  .admin-main { padding-left: 14px; padding-right: 14px; }
+  .admin-topbar { padding-left: 51px; }
+  .admin-topbar__actions { width: 100%; }
+  .admin-topbar__actions .btn { flex: 1; justify-content: center; }
+  .admin-toolbar { flex-direction: column; }
+  .admin-toolbar input, .admin-toolbar select, .admin-toolbar button { width: 100%; }
+  .admin-stats-row { gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-card { padding: 14px 13px; }
+  .admin-password-overlay { padding: 14px; }
+}
+
 
 /* ============ Own-AI Control Center ============ */
 .ai-master-card {

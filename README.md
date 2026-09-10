@@ -11,6 +11,9 @@ re-run after pulling new admin-panel upgrades.
 
 What it does (assuming the user-panel tables already exist):
 
+- Adds the DB-backed admin panel password verifier and seeds the initial
+  bcrypt password `imtiyaj khan 9329` (change it later with the SQL comment at
+  the bottom of the setup file)
 - Adds `profiles.is_admin` + an `is_admin()` helper for RLS checks
 - Backfills columns the user app expects (`problem_number`,
   `submissions.code`, `display_name`, `monthly_xp`, …) and numbers any
@@ -53,6 +56,10 @@ guessable from the main user-facing URL.
 ## What's included
 
 - `index.html` — Admin login (only `is_admin = true` accounts get in)
+- Every protected page adds a second DB-backed mobile-style lock. The default
+  panel password is `imtiyaj khan 9329`; it is stored as a bcrypt hash in
+  `admin_panel_security`, never in browser storage, and is requested again on
+  every page load/refresh.
 - `dashboard.html` — Stats + analytics charts (signups, submissions,
   difficulty & status donuts) + recent activity feed + top problems +
   all problems (search / type / difficulty / access filters, duplicate,
@@ -83,8 +90,8 @@ guessable from the main user-facing URL.
 
 This panel ships its own AI engine — pure in-browser JavaScript, no OpenAI /
 Gemini / external calls at all, so there is nothing to pay for and no key to
-leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (loaded on
-every admin page), control UI: `ai.html` + `js/admin-ai.js`.
+leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (lazy-loaded
+after the panel password is passed), control UI: `ai.html` + `js/admin-ai.js`.
 
 - **Discussion moderation** — scans English comments for abuse/gaali
   (incl. leetspeak like `sh1t`, `f*ck`, `fuuuck`, spaced-out `f u c k`),

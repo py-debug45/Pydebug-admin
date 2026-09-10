@@ -3,6 +3,160 @@
 // (same Supabase project as the user panel, so `sb` is already available).
 
 const ADMIN_PAGE_SIZE = 50;
+let adminPanelUnlocked = false;
+
+// The panel passcode is deliberately never kept in browser storage. A fresh
+// page load or refresh therefore always requires the DB-backed check again.
+async function requirePanelPassword() {
+  if (adminPanelUnlocked) return true;
+
+  const overlay = document.createElement("div");
+  overlay.className = "admin-password-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "admin-password-title");
+  overlay.innerHTML = `
+    <div class="admin-password-card">
+      <div class="admin-password-icon">${window.adminIcon ? adminIcon("lock") : ""}</div>
+      <div class="admin-password-eyebrow">PRIVATE ADMIN AREA</div>
+      <h1 id="admin-password-title">Unlock PyDebug Admin</h1>
+      <p>Enter the panel password to continue. This lock returns every time the page is refreshed.</p>
+      <form id="admin-password-form" novalidate>
+        <label class="admin-password-label" for="admin-panel-password">Panel password</label>
+        <div class="admin-password-input-wrap">
+          <input id="admin-panel-password" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required autofocus placeholder="Enter your password">
+          <button type="button" class="admin-password-toggle" id="admin-password-toggle" aria-label="Show password" title="Show password">${window.adminIcon ? adminIcon("eye") : "Show"}</button>
+        </div>
+        <div class="admin-password-error" id="admin-password-error" role="alert" aria-live="polite"></div>
+        <button type="submit" class="btn btn--primary btn--full admin-password-submit" id="admin-password-submit">
+          ${window.adminIcon ? adminIcon("key") : ""}<span>Unlock panel</span>
+        </button>
+      </form>
+      <div class="admin-password-meta">${window.adminIcon ? adminIcon("shield") : ""}<span>Protected by your Supabase admin account</span></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const form = overlay.querySelector("#admin-password-form");
+  const input = overlay.querySelector("#admin-panel-password");
+  const errorEl = overlay.querySelector("#admin-password-error");
+  const submit = overlay.querySelector("#admin-password-submit");
+  const toggle = overlay.querySelector("#admin-password-toggle");
+  const setError = (message) => {
+    errorEl.textContent = message || "";
+    input.setAttribute("aria-invalid", message ? "true" : "false");
+    overlay.querySelector(".admin-password-card").classList.toggle("has-error", !!message);
+  };
+
+  toggle.addEventListener("click", () => {
+    const hidden = input.type === "password";
+    input.type = hidden ? "text" : "password";
+    toggle.innerHTML = window.adminIcon ? adminIcon(hidden ? "eyeOff" : "eye") : (hidden ? "Hide" : "Show");
+    toggle.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = input.value;
+    if (!password) {
+      setError("Enter the panel password to continue.");
+      input.focus();
+      return;
+    }
+    submit.disabled = true;
+    submit.classList.add("is-loading");
+    submit.querySelector("span").textContent = "Checking access…";
+    setError("");
+
+    let data = false;
+    let error = null;
+    try {
+      ({ data, error } = await sb.rpc("verify_admin_panel_password", { input_password: password }));
+    } catch (err) {
+      error = err;
+    }
+
+    if (error) {
+      console.error("Panel password check:", error);
+      setError("Password service is not ready. Run the latest supabase-admin-setup.sql migration first.");
+      submit.disabled = false;
+      submit.classList.remove("is-loading");
+      submit.querySelector("span").textContent = "Unlock panel";
+      return;
+    }
+    if (!data) {
+      setError("That password is incorrect. Try again.");
+      input.select();
+      submit.disabled = false;
+      submit.classList.remove("is-loading");
+      submit.querySelector("span").textContent = "Unlock panel";
+      return;
+    }
+
+    adminPanelUnlocked = true;
+    document.body.classList.remove("admin-panel-locked");
+    overlay.classList.add("is-unlocked");
+    window.setTimeout(() => overlay.remove(), 240);
+  });
+
+  window.setTimeout(() => input.focus(), 80);
+  return new Promise((resolve) => {
+    const check = window.setInterval(() => {
+      if (adminPanelUnlocked) {
+        window.clearInterval(check);
+        resolve(true);
+      } else if (!document.body.contains(overlay)) {
+        window.clearInterval(check);
+        resolve(false);
+      }
+    }, 50);
+  });
+}
+
+const ADMIN_AI_FILES = [
+  "js/ai-brain.js",
+  "js/ai-growth.js",
+  "js/ai-content.js",
+  "js/ai-safety.js",
+  "js/ai-watch.js",
+];
+let adminAILoadPromise = null;
+
+// AI automation is intentionally loaded only after the admin has unlocked the
+// panel. This keeps the first paint and the password screen light; it also
+// means a public visitor never downloads the large automation bundle.
+function loadAdminAI() {
+  if (adminAILoadPromise) return adminAILoadPromise;
+  adminAILoadPromise = ADMIN_AI_FILES.reduce((chain, src) => chain.then(() => new Promise((resolve, reject) => {
+    if (document.querySelector(`script[data-admin-ai="${src}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.dataset.adminAi = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Could not load ${src}`));
+    document.body.appendChild(script);
+  })), Promise.resolve());
+  return adminAILoadPromise;
+}
+
+function injectAdminMobileNavigation() {
+  const sidebar = document.querySelector(".admin-sidebar");
+  if (!sidebar || document.querySelector(".admin-mobile-menu")) return;
+  const menu = document.createElement("button");
+  menu.className = "admin-mobile-menu";
+  menu.type = "button";
+  menu.setAttribute("aria-label", "Open admin navigation");
+  menu.innerHTML = window.adminIcon ? adminIcon("menu") : "☰";
+  const backdrop = document.createElement("div");
+  backdrop.className = "admin-sidebar-backdrop";
+  document.body.append(menu, backdrop);
+  const close = () => { sidebar.classList.remove("is-open"); backdrop.classList.remove("is-open"); };
+  menu.addEventListener("click", () => { sidebar.classList.add("is-open"); backdrop.classList.add("is-open"); });
+  backdrop.addEventListener("click", close);
+  sidebar.querySelectorAll("nav a").forEach((link) => link.addEventListener("click", close));
+}
 
 // Redirects to admin login unless the logged-in user has is_admin = true on
 // their profiles row. This is a UX gate only — the real security boundary is
@@ -44,6 +198,19 @@ async function requireAdmin() {
   const nameEl = document.getElementById("admin-name");
   if (nameEl) nameEl.textContent = profile.display_name || profile.full_name || profile.email;
 
+  document.body.classList.add("admin-panel-locked");
+  const unlocked = await requirePanelPassword();
+  if (!unlocked) return null;
+  // The control center needs the AI APIs before its first render. Other pages
+  // start their normal data fetch immediately while the optional bundle loads
+  // in parallel, keeping the dashboard usable on slower mobile connections.
+  const aiLoad = loadAdminAI();
+  const pageName = window.location.pathname.split("/").pop();
+  if (pageName === "ai.html" || pageName === "discussions.html") {
+    try { await aiLoad; } catch (error) { console.warn("Admin automation bundle:", error.message); }
+  } else {
+    aiLoad.catch((error) => console.warn("Admin automation bundle:", error.message));
+  }
   return profile;
 }
 
@@ -167,6 +334,7 @@ function renderPagination(container, page, total, onPageChange) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  injectAdminMobileNavigation();
   markAdminActiveNav();
   document.querySelectorAll("[data-admin-logout]").forEach((btn) =>
     btn.addEventListener("click", (e) => {

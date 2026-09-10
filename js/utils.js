@@ -118,7 +118,7 @@ function bindPasswordToggles() {
       const input = btn.closest(".password-field").querySelector("input");
       const isHidden = input.type === "password";
       input.type = isHidden ? "text" : "password";
-      btn.textContent = isHidden ? "Hide" : "Show";
+      btn.innerHTML = window.adminIcon ? adminIcon(isHidden ? "eyeOff" : "eye") : (isHidden ? "Hide" : "Show");
       btn.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
     });
   });
