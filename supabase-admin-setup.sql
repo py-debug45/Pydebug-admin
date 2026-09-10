@@ -202,3 +202,30 @@ end $$;
 -- the user app's setup (blocking users from self-granting premium), it works
 -- fine alongside these policies — that trigger explicitly allows changes
 -- when is_admin() is true, so admin-panel premium grants/revokes keep working.
+
+-- 11. Own-AI control tables (idempotent) ------------------------
+-- ai_settings: single-row ("control") JSON with the master switch +
+-- module toggles, so ON/OFF state follows the admin on every device.
+-- (The panel also keeps a localStorage copy and works fully offline from
+-- these tables — they are only a cloud sync layer.)
+create table if not exists public.ai_settings (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.ai_settings enable row level security;
+drop policy if exists "Admins can manage ai settings" on ai_settings;
+create policy "Admins can manage ai settings" on ai_settings for all using (is_admin());
+
+-- ai_logs: cloud copy of the AI activity log (best-effort inserts from
+-- the panel; the full log always lives in the browser too).
+create table if not exists public.ai_logs (
+  id uuid primary key default gen_random_uuid(),
+  level text not null default 'info',
+  action text not null,
+  detail text,
+  created_at timestamptz not null default now()
+);
+alter table public.ai_logs enable row level security;
+drop policy if exists "Admins can manage ai logs" on ai_logs;
+create policy "Admins can manage ai logs" on ai_logs for all using (is_admin());

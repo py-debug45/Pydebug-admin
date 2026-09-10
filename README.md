@@ -74,6 +74,43 @@ guessable from the main user-facing URL.
   (total + monthly), streak freezes, premium grant with expiry
   (lifetime / 1mo / 3mo / 1yr), make/remove admin, reset progress,
   achievements grid, recent submissions
+- `ai.html` — 🤖 **Own-AI Control Center** (no API key needed): master
+  ON/OFF switch, per-module toggles, problem-factory settings, manual
+  run buttons, problem preview with validation checklist, moderation
+  tester and the AI activity log
+
+## 🤖 Own-AI (built-in, zero API keys)
+
+This panel ships its own AI engine — pure in-browser JavaScript, no OpenAI /
+Gemini / external calls at all, so there is nothing to pay for and no key to
+leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (loaded on
+every admin page), control UI: `ai.html` + `js/admin-ai.js`.
+
+- **Discussion moderation** — scans English comments for abuse/gaali
+  (incl. leetspeak like `sh1t`, `f*ck`, `fuuuck`, spaced-out `f u c k`),
+  spam and promo links; auto-deletes the comment and sends a ⚠️ warning
+  notification to the offender. Abusive rows also get a ⚠️ badge on the
+  Discussions page.
+- **Problem factory** — generates Fix-the-Bug + Predict-Output problems
+  with ALL fields filled + exactly 3 hints. Every bug template carries a
+  verified bug (off-by-one, IndentationError, NameError, TypeError,
+  KeyError, IndexError, ZeroDivisionError, missing return, wrong except,
+  tuple/set errors, RecursionError, consumed generator, swapped args…)
+  and every expected output is COMPUTED from the same values in the code,
+  never guessed. Use "👁️ Preview" to inspect buggy code + fixed
+  reference code + the validation checklist before inserting.
+- **Duplicate guard** — fingerprints every problem (code + output); new
+  problems that already exist are skipped, and "🧹 Remove duplicates"
+  deletes existing dupes (keeping the oldest), including their
+  submissions/discussions.
+- **Auto notifications** — offender warnings, new-problem broadcasts to
+  all users (🔔 bell compatible) and welcome messages for new joiners.
+- **Scheduling** — while the master switch is ON and any admin page is
+  open, the watcher runs moderation every minute, duplicate cleanup +
+  welcome hourly, and auto-generation every 6/12/24h (configurable).
+- **Sync** — toggles persist in `localStorage` instantly and sync
+  best-effort to the `ai_settings` / `ai_logs` tables (created by
+  `supabase-admin-setup.sql` §11) so every admin device agrees.
 
 Shared helpers: `js/admin-common.js` (auth gate + formatting + plan prices),
 `js/admin-charts.js` (dependency-free SVG charts), `js/admin-export.js`

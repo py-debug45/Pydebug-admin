@@ -138,7 +138,7 @@ function renderComments() {
       <td>${escapeHtml(displayNameOf(u))}</td>
       <td class="comment-excerpt" title="${escapeHtml((c.content || "").slice(0, 300))}">${escapeHtml(c.content || "")}</td>
       <td>${Number(c.like_count) || 0}</td>
-      <td>${commentTypeBadge(c)}</td>
+      <td>${commentTypeBadge(c)}${typeof AI_badgeFor === "function" ? AI_badgeFor(c.content) : ""}</td>
       <td class="row-actions">
         <button class="btn btn--secondary btn--sm" data-view-comment="${c.id}">View</button>
         <button class="btn btn--danger btn--sm" data-del-comment="${c.id}">Delete</button>
