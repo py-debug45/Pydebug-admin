@@ -36,6 +36,12 @@ const AI_DEFAULTS = {
   dedup: true,          // auto-delete duplicate problems
   announce: false,      // broadcast a notification when AI adds problems
   welcome: false,       // welcome notification for brand-new users
+  expiry: true,        // premium expiry / expired reminders
+  winback: false,      // win-back ping for inactive users
+  stuck: true,         // encouragement for stuck users
+  leaderboard: false,  // leaderboard climb alerts
+  faq: false,          // FAQ auto-helper replies
+  hindi: true,         // Hindi/Hinglish abuse filter (English always on)
 };
 
 function AI_getSettings() {

@@ -295,6 +295,9 @@ function initReports() {
 
   refreshHealth(false);
   refreshCalibration(false);
+  initGrowth();
+  initSafety();
+  initContent();
 }
 
 /* ---- Daily digest ---- */
@@ -497,4 +500,259 @@ async function onCalibClick(e) {
     renderLogs();
     refreshCalibration(false);
   }
+}
+
+/* ================= Growth / Safety / Content UI ================= */
+
+function growthToggle(id, key, label) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.checked = !!AI_getSettings()[key];
+  el.addEventListener("change", () => {
+    AI_saveSettings({ [key]: el.checked });
+    AI_log("setting_changed", `${label} → ${el.checked ? "ON" : "OFF"}.`, "info");
+    renderLogs();
+    showToast(`${label} ${el.checked ? "enabled" : "disabled"}`, "info");
+  });
+}
+
+function paintGrowthLast() {
+  const last = AI_getStats().lastRuns || {};
+  const fmt = (ts) => (ts ? "Last run: " + timeAgo(new Date(ts).toISOString()) : "Last run: never");
+  const map = { "ai-last-exp": "expiry", "ai-last-winback": "winback", "ai-last-stuck": "stuck", "ai-last-lead": "lead", "ai-last-faq": "faq" };
+  Object.entries(map).forEach(([id, k]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = fmt(last[k]);
+  });
+}
+
+function initGrowth() {
+  growthToggle("ai-exp", "expiry", "Expiry reminders");
+  growthToggle("ai-winback", "winback", "Win-back");
+  growthToggle("ai-stuck", "stuck", "Stuck-user help");
+  growthToggle("ai-lead", "leaderboard", "Leaderboard alerts");
+  paintGrowthLast();
+  const runs = [
+    ["ai-btn-exp", "expiry", async () => {
+      const r = await AI_runExpiryReminders({ auto: false });
+      return `${r.expiring} expiring, ${r.expired} expired, ${r.notified} notified`;
+    }],
+    ["ai-btn-winback", "winback", async () => {
+      const r = await AI_runWinback({ auto: false });
+      return r.skipped ? "skipped (no activity column)" : `${r.found} inactive, ${r.notified} nudged`;
+    }],
+    ["ai-btn-stuck", "stuck", async () => {
+      const r = await AI_runStuckHelp({ auto: false });
+      return `${r.stuck} stuck, ${r.notified} encouraged`;
+    }],
+    ["ai-btn-lead", "lead", async () => {
+      const r = await AI_runLeaderboardAlerts({ auto: false });
+      return r.skipped ? "skipped (no XP column)" : r.baseline ? "snapshot saved — alerts from next run" : `${r.alerts} alert(s) sent`;
+    }],
+  ];
+  runs.forEach(([btnId, key, fn]) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const idle = btn.textContent;
+      btn.textContent = "Working...";
+      try {
+        const msg = await fn();
+        AI_setLastRun(key);
+        showToast(msg, "success");
+      } catch (e) {
+        showToast("Failed: " + e.message, "error");
+      }
+      btn.disabled = false;
+      btn.textContent = idle;
+      renderLogs();
+      refreshStats();
+      paintGrowthLast();
+    });
+  });
+}
+
+function initSafety() {
+  growthToggle("ai-faq", "faq", "FAQ auto-helper");
+  growthToggle("ai-hindi", "hindi", "Hindi filter");
+  const faqBtn = document.getElementById("ai-btn-faq");
+  if (faqBtn) faqBtn.addEventListener("click", async () => {
+    faqBtn.disabled = true;
+    const idle = faqBtn.textContent;
+    faqBtn.textContent = "Working...";
+    try {
+      const r = await AI_runFaqReplies(10, { auto: false });
+      AI_setLastRun("faq");
+      showToast(`${r.waiting} waiting, ${r.replied} answered`, "success");
+    } catch (e) {
+      showToast("FAQ run failed: " + e.message, "error");
+    }
+    faqBtn.disabled = false;
+    faqBtn.textContent = idle;
+    renderLogs();
+    refreshStats();
+    paintGrowthLast();
+  });
+  const cheatBtn = document.getElementById("ai-btn-cheat");
+  if (cheatBtn) cheatBtn.addEventListener("click", async () => {
+    const body = document.getElementById("ai-cheat-body");
+    cheatBtn.disabled = true;
+    if (body) body.innerHTML = `<p class="muted">Scanning submissions...</p>`;
+    try {
+      const r = await AI_cheatReport();
+      if (!r.hits.length) {
+        if (body) body.innerHTML = `<p class="muted">Checked ${r.checked} submissions — no copy-paste rings. ✅</p>`;
+      } else if (body) {
+        body.innerHTML = `
+          <p class="muted" style="font-size:0.85rem">${r.hits.length} group(s) share identical code (review on the <a href="submissions.html">Submissions</a> page):</p>
+          <table class="ai-calib-table">
+            <thead><tr><th>Problem</th><th>Users</th><th>Submissions</th></tr></thead>
+            <tbody>${r.hits.map((h) => `
+              <tr>
+                <td>${escapeHtml(h.problemTitle)}</td>
+                <td>${h.userNames.map((n) => escapeHtml(n)).join("<br>")}</td>
+                <td>${h.submissions}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>`;
+      }
+      showToast(`Checked ${r.checked}: ${r.hits.length} group(s)`, r.hits.length ? "info" : "success");
+    } catch (e) {
+      if (body) body.innerHTML = `<p class="muted">Scan failed: ${escapeHtml(e.message)}</p>`;
+      showToast("Scan failed: " + e.message, "error");
+    }
+    cheatBtn.disabled = false;
+    renderLogs();
+  });
+}
+
+let AIUI_bulkCache = [];
+
+function initContent() {
+  const gapBtn = document.getElementById("ai-btn-gap");
+  if (gapBtn) gapBtn.addEventListener("click", async () => {
+    gapBtn.disabled = true;
+    try {
+      const r = await AI_runGapFill(3, { auto: false });
+      const el = document.getElementById("ai-gap-result");
+      if (el) el.textContent = r.added.length ? `Added: ${r.added.map((p) => "#" + p.problem_number + " " + p.title).join(" · ")}` : "All candidates were duplicates — nothing added.";
+      showToast(`Gap-fill added ${r.added.length}`, r.added.length ? "success" : "info");
+    } catch (e) {
+      showToast("Gap-fill failed: " + e.message, "error");
+    }
+    gapBtn.disabled = false;
+    renderLogs();
+    refreshStats();
+  });
+
+  const qBtn = document.getElementById("ai-btn-quality");
+  if (qBtn) qBtn.addEventListener("click", async () => {
+    const body = document.getElementById("ai-quality-body");
+    qBtn.disabled = true;
+    if (body) body.innerHTML = `<p class="muted">Scanning problems...</p>`;
+    try {
+      const r = await AI_qualityReport();
+      if (!r.issues.length) {
+        if (body) body.innerHTML = `<p class="muted">All ${r.total} problems passed quality checks. ✅</p>`;
+      } else if (body) {
+        body.innerHTML = `
+          <p class="muted" style="font-size:0.85rem">${r.issues.length}/${r.total} problem(s) need attention:</p>
+          <table class="ai-calib-table">
+            <thead><tr><th>#</th><th>Title</th><th>Issues</th><th></th></tr></thead>
+            <tbody>${r.issues.slice(0, 50).map((p) => `
+              <tr>
+                <td class="mono muted">${p.number ?? "—"}</td>
+                <td>${escapeHtml(p.title || "(untitled)")}</td>
+                <td><code>${p.flags.map((f) => escapeHtml(f)).join(", ")}</code></td>
+                <td><a class="btn btn--secondary btn--sm" href="problem-form.html?id=${encodeURIComponent(p.id)}">Edit</a></td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+          ${r.issues.length > 50 ? `<p class="muted" style="font-size:0.8rem">Showing 50 of ${r.issues.length}.</p>` : ""}`;
+      }
+      showToast(`Quality: ${r.issues.length} issue(s) in ${r.total}`, r.issues.length ? "info" : "success");
+    } catch (e) {
+      if (body) body.innerHTML = `<p class="muted">Report failed: ${escapeHtml(e.message)}</p>`;
+      showToast("Report failed: " + e.message, "error");
+    }
+    qBtn.disabled = false;
+    renderLogs();
+  });
+
+  const hBtn = document.getElementById("ai-btn-hints");
+  if (hBtn) hBtn.addEventListener("click", async () => {
+    if (!confirm("Top up all problems with fewer than 3 hints?")) return;
+    hBtn.disabled = true;
+    try {
+      const r = await AI_fixHints();
+      const el = document.getElementById("ai-hints-result");
+      if (el) el.textContent = `Checked ${r.checked}, fixed ${r.fixed}.`;
+      showToast(`Fixed hints on ${r.fixed} problem(s)`, "success");
+    } catch (e) {
+      showToast("Hint fix failed: " + e.message, "error");
+    }
+    hBtn.disabled = false;
+    renderLogs();
+  });
+
+  const bCheck = document.getElementById("ai-btn-bulk-check");
+  if (bCheck) bCheck.addEventListener("click", async () => {
+    const body = document.getElementById("ai-bulk-body");
+    const impBtn = document.getElementById("ai-btn-bulk-import");
+    const fmt = document.getElementById("ai-bulk-format").value;
+    const text = document.getElementById("ai-bulk-text").value;
+    if (impBtn) impBtn.disabled = true;
+    AIUI_bulkCache = [];
+    if (!text.trim()) {
+      if (body) body.innerHTML = `<p class="muted">Paste something first.</p>`;
+      return;
+    }
+    if (body) body.innerHTML = `<p class="muted">Validating...</p>`;
+    try {
+      const { rows, errors } = AI_parseBulkImport(text, fmt);
+      const verdicts = await AI_validateBulkRows(rows);
+      AIUI_bulkCache = verdicts;
+      const okCount = verdicts.filter((v) => v.ok).length;
+      if (body) {
+        body.innerHTML = `
+          ${errors.map((e) => `<p class="ai-bulk-bad">Row ${e.row}: ${escapeHtml(e.error)}</p>`).join("")}
+          <p class="muted" style="font-size:0.85rem">${okCount}/${verdicts.length} row(s) valid.</p>
+          <table class="ai-calib-table">
+            <thead><tr><th>Row</th><th>Title</th><th>Verdict</th><th>Failed checks</th></tr></thead>
+            <tbody>${verdicts.map((v) => `
+              <tr>
+                <td>${v.row}</td>
+                <td>${escapeHtml(v.title)}</td>
+                <td class="${v.ok ? "ai-bulk-ok" : "ai-bulk-bad"}">${v.ok ? "✅ Valid" : "❌ Invalid"}</td>
+                <td class="muted" style="font-size:0.8rem">${v.checks.filter((c) => !c.pass).map((c) => escapeHtml(c.label)).join(", ") || "—"}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>`;
+      }
+      if (impBtn) impBtn.disabled = okCount === 0;
+      showToast(`${okCount}/${verdicts.length} valid`, okCount ? "success" : "error");
+    } catch (e) {
+      if (body) body.innerHTML = `<p class="muted">Validation failed: ${escapeHtml(e.message)}</p>`;
+    }
+  });
+
+  const bImp = document.getElementById("ai-btn-bulk-import");
+  if (bImp) bImp.addEventListener("click", async () => {
+    const good = AIUI_bulkCache.filter((v) => v.ok);
+    if (!good.length) return;
+    if (!confirm(`Import ${good.length} valid row(s)?`)) return;
+    bImp.disabled = true;
+    try {
+      const r = await AI_runBulkImport(AIUI_bulkCache);
+      showToast(`Imported ${r.added} problem(s)`, "success");
+      document.getElementById("ai-bulk-text").value = "";
+      document.getElementById("ai-bulk-body").innerHTML = `<p class="muted">Imported ${r.added}. Paste more or leave.</p>`;
+      AIUI_bulkCache = [];
+    } catch (e) {
+      showToast("Import failed: " + e.message, "error");
+    }
+    renderLogs();
+    refreshStats();
+  });
 }

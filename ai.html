@@ -170,6 +170,82 @@
       </div>
     </div>
 
+    <!-- Growth + Safety -->
+    <div class="admin-cols">
+      <div class="section-card">
+        <h3>💰 Growth &amp; retention</h3>
+        <div class="ai-module">
+          <div><strong>Premium expiry reminders</strong><p>Notifies users whose Premium ends in ≤3 days (or just expired). Max once a week per user.</p><div class="muted ai-last" id="ai-last-exp">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-exp"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-exp">Run</button></div>
+        </div>
+        <div class="ai-module">
+          <div><strong>Win-back inactive users</strong><p>Pings users sleeping 7+ days with their XP. Max once every 2 weeks per user.</p><div class="muted ai-last" id="ai-last-winback">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-winback"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-winback">Run</button></div>
+        </div>
+        <div class="ai-module">
+          <div><strong>Stuck-user help</strong><p>Encourages users with 5+ failed attempts and zero solves on one problem.</p><div class="muted ai-last" id="ai-last-stuck">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-stuck"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-stuck">Run</button></div>
+        </div>
+        <div class="ai-module">
+          <div><strong>Leaderboard climb alerts</strong><p>Celebrates Top-10 entries and 3+ spot climbs. First run only saves a snapshot.</p><div class="muted ai-last" id="ai-last-lead">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-lead"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-lead">Run</button></div>
+        </div>
+      </div>
+      <div class="section-card">
+        <h3>🛡️ Safety+</h3>
+        <div class="ai-module">
+          <div><strong>🇮🇳 Hindi / Hinglish filter</strong><p>Part of moderation: catches Hindi gaali in Roman + Devanagari script. English filter always stays on.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-hindi"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>FAQ auto-helper</strong><p>Replies (as you) to questions waiting 24h+ with no answer. Max 10 per run.</p><div class="muted ai-last" id="ai-last-faq">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-faq"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-faq">Run</button></div>
+        </div>
+        <h3 style="margin-top:14px">🕵️ Copy-paste detector</h3>
+        <p class="muted" style="font-size:0.85rem">Finds identical code submitted by 3+ users on one problem (30 days). Report only — never auto-punishes.</p>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-cheat">🔍 Scan submissions</button>
+        <div id="ai-cheat-body" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Content AI -->
+    <div class="section-card">
+      <h3>🏭 Content AI</h3>
+      <div class="ai-module">
+        <div><strong>🧩 Gap filler</strong><p>Generates problems for the emptiest topic × difficulty cells first.</p><div class="muted ai-last" id="ai-gap-result"></div></div>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-gap">Fill gaps (3)</button>
+      </div>
+      <div class="ai-module">
+        <div><strong>✨ Variations</strong><p>Open the Dashboard and press ✨ on any problem row to spawn 3 fresh variations of it.</p></div>
+        <a class="btn btn--secondary btn--sm" href="dashboard.html">Open Dashboard</a>
+      </div>
+      <div class="ai-module">
+        <div><strong>🔎 Quality report</strong><p>Flags weak titles, descriptions, hints, missing numbers and bad topics.</p></div>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-quality">Run report</button>
+      </div>
+      <div id="ai-quality-body" style="margin:4px 0 8px"></div>
+      <div class="ai-module">
+        <div><strong>💡 Auto-fix hints</strong><p>Tops up every problem with fewer than 3 hints from the topic hint bank.</p><div class="muted ai-last" id="ai-hints-result"></div></div>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-hints">Fix hints</button>
+      </div>
+      <h3 style="margin-top:14px">📥 Bulk import (JSON / CSV)</h3>
+      <p class="muted" style="font-size:0.85rem">Paste problems, validate with the AI checklist (fields + duplicates), then import only the valid rows. CSV header: <code>type,title,description,difficulty,topic,starter_code,expected_output,hint1,hint2,hint3,is_premium</code></p>
+      <div class="form-row">
+        <div class="field" style="max-width:180px">
+          <label for="ai-bulk-format">Format</label>
+          <select id="ai-bulk-format"><option value="json">JSON array</option><option value="csv">CSV</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <textarea id="ai-bulk-text" class="ai-bulk-text" placeholder='[{"type":"question","title":"...","description":"...","difficulty":"easy","topic":"loops","starter_code":"...","expected_output":"...","hints":["...","...","..."]}]'></textarea>
+      </div>
+      <div class="ai-actions">
+        <button class="btn btn--secondary btn--sm" id="ai-btn-bulk-check">✔️ Validate</button>
+        <button class="btn btn--primary btn--sm" id="ai-btn-bulk-import" disabled>📥 Import valid rows</button>
+      </div>
+      <div id="ai-bulk-body" style="margin-top:10px"></div>
+    </div>
+
     <!-- Preview -->
     <div class="section-card" id="ai-preview" style="display:none"></div>
 
@@ -208,6 +284,9 @@
 <script src="js/utils.js"></script>
 <script src="js/admin-common.js"></script>
 <script src="js/ai-brain.js"></script>
+<script src="js/ai-growth.js"></script>
+<script src="js/ai-content.js"></script>
+<script src="js/ai-safety.js"></script>
 <script src="js/ai-watch.js"></script>
 <script src="js/admin-ai.js"></script>
 </body>

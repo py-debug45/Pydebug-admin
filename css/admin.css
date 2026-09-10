@@ -610,3 +610,10 @@ td.comment-excerpt {
 .ai-bell__item:last-child { border-bottom: none; }
 .ai-bell__empty { padding: 16px 12px; font-size: 0.85rem; color: var(--text-muted, #8b95a5); }
 .ai-bell__foot { display: block; text-align: center; padding: 10px; font-size: 0.85rem; font-weight: 700; color: #2ecc71; text-decoration: none; }
+
+/* ============ AI Growth / Safety / Content ============ */
+.ai-module__side { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex-shrink: 0; }
+.ai-last { font-size: 0.78rem; margin-top: 3px; }
+.ai-bulk-text { min-height: 110px; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.ai-bulk-ok { color: #2ecc71; font-weight: 700; }
+.ai-bulk-bad { color: #e74c3c; font-weight: 700; }

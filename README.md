@@ -117,6 +117,22 @@ every admin page), control UI: `ai.html` + `js/admin-ai.js`.
   open, the watcher runs moderation every minute, duplicate cleanup +
   welcome hourly, digest daily, and auto-generation every 6/12/24h
   (configurable).
+- **Growth bundle** (`js/ai-growth.js`) — ⏰ premium expiry/expired
+  reminders (weekly cooldown), 🥺 win-back pings for 7+ day inactive
+  users with XP personalization, 💡 stuck-user encouragement after 5+
+  failed attempts, 🚀 leaderboard Top-10/climb alerts from daily
+  snapshots. Each with ON/OFF toggle + Run-now + daily auto-run.
+- **Content bundle** (`js/ai-content.js`) — 🧩 gap filler (emptiest
+  topic × difficulty cells first), ✨ one-click Variations on every
+  dashboard problem row, 🔎 quality report (weak titles/descriptions/
+  hints, dup numbers, bad topics) with Edit links, 💡 one-click hint
+  repair from a 12-topic hint bank, 📥 bulk import (JSON/CSV) with
+  AI validation (fields + duplicates) before insert.
+- **Safety+ bundle** (`js/ai-safety.js`) — 🇮🇳 Hindi/Hinglish abuse
+  filter (Roman + Devanagari + phrases, toggleable, merged into the
+  main scanner), 🤖 FAQ auto-helper (answers 24h+ unanswered questions
+  as the admin, max 10/run), 🕵️ copy-paste detector (identical code by
+  3+ users — report only, never auto-punishes).
 - **Sync** — toggles persist in `localStorage` instantly and sync
   best-effort to the `ai_settings` / `ai_logs` tables (created by
   `supabase-admin-setup.sql` §11) so every admin device agrees.

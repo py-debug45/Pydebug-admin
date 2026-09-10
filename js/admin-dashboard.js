@@ -321,6 +321,7 @@ async function loadProblems(page = 0) {
       <td class="row-actions">
         <a href="problem-form.html?id=${id}" class="btn btn--secondary btn--sm">Edit</a>
         <button class="btn btn--secondary btn--sm" data-duplicate-id="${id}" title="Create a copy of this problem">Duplicate</button>
+        <button class="btn btn--secondary btn--sm" data-vary-id="${id}" title="AI: create 3 fresh variations of this problem">✨</button>
         <button class="btn btn--danger btn--sm" data-delete-id="${id}">Delete</button>
       </td>
     `;
@@ -332,6 +333,9 @@ async function loadProblems(page = 0) {
   });
   tbody.querySelectorAll("[data-duplicate-id]").forEach((btn) => {
     btn.addEventListener("click", () => duplicateProblem(btn.dataset.duplicateId, btn));
+  });
+  tbody.querySelectorAll("[data-vary-id]").forEach((btn) => {
+    btn.addEventListener("click", () => varyProblem(btn.dataset.varyId, btn));
   });
 
   renderPagination(document.getElementById("problems-pagination"), problemsPage, problemsTotal, (p) => loadProblems(p));
@@ -398,4 +402,30 @@ async function duplicateProblem(id, btn) {
   showToast("Problem duplicated", "success");
   await loadStats();
   await loadProblems(problemsPage);
+}
+
+// AI Variations: spawns 3 fresh verified problems modelled on this one
+// (same topic/type/difficulty, new values, never duplicates).
+async function varyProblem(id, btn) {
+  if (typeof AI_generateVariations !== "function") {
+    showToast("AI engine not loaded — reload the page.", "error");
+    return;
+  }
+  if (!confirm("Create 3 AI variations of this problem?")) return;
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = "✨...";
+  try {
+    const r = await AI_generateVariations(id, 3);
+    showToast(
+      r.added.length ? `Added ${r.added.length} variation(s)` : "All variations were duplicates — nothing added",
+      r.added.length ? "success" : "info"
+    );
+    await loadStats();
+    await loadProblems(problemsPage);
+  } catch (e) {
+    showToast("Variations failed: " + e.message, "error");
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
 }

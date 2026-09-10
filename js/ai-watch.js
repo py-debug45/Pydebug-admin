@@ -100,6 +100,32 @@
         }
       }
 
+      // 6. Growth + safety daily runners (each at most once per 24h).
+      try {
+        const DAY = 24 * 60 * 60 * 1000;
+        const daily = [
+          ["expiry", s.expiry, "AI_runExpiryReminders"],
+          ["winback", s.winback, "AI_runWinback"],
+          ["stuck", s.stuck, "AI_runStuckHelp"],
+          ["lead", s.leaderboard, "AI_runLeaderboardAlerts"],
+          ["faq", s.faq, "AI_runFaqReplies"],
+        ];
+        for (const [key, enabled, fnName] of daily) {
+          const fn = typeof window !== "undefined" ? window[fnName] : null;
+          if (enabled && typeof fn === "function" && now - (last[key] || 0) > DAY) {
+            try {
+              if (key === "faq") await fn(10, { auto: true });
+              else await fn({ auto: true });
+              AI_setLastRun(key);
+            } catch (e) {
+              console.warn("AI " + key + ":", e.message);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("AI daily runners:", e.message);
+      }
+
       // 5. Daily digest — auto-build once every ~20h while Guard is ON.
       if (now - (last.digest || 0) > 20 * 60 * 60 * 1000) {
         try {
