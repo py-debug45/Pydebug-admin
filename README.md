@@ -58,8 +58,9 @@ guessable from the main user-facing URL.
 - `index.html` — Admin login (only `is_admin = true` accounts get in)
 - Every protected page adds a second DB-backed mobile-style lock. The default
   panel password is `imtiyaj khan 9329`; it is stored as a bcrypt hash in
-  `admin_panel_security`, never in browser storage, and is requested again on
-  every page load/refresh.
+  `admin_panel_security`. It is requested once per admin visit, shared while
+  moving between admin pages in the same tab, and requested again after a
+  reload or a new visit.
 - `dashboard.html` — Stats + analytics charts (signups, submissions,
   difficulty & status donuts) + recent activity feed + top problems +
   all problems (search / type / difficulty / access filters, duplicate,
@@ -90,7 +91,7 @@ guessable from the main user-facing URL.
 
 This panel ships its own AI engine — pure in-browser JavaScript, no OpenAI /
 Gemini / external calls at all, so there is nothing to pay for and no key to
-leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (lazy-loaded
+leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (loaded on every protected admin page
 after the panel password is passed), control UI: `ai.html` + `js/admin-ai.js`.
 
 - **Discussion moderation** — scans English comments for abuse/gaali
