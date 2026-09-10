@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>AI Control — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav>
+      <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
+      <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
+      <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
+      <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
+      <a href="notifications.html" data-admin-nav="notifications.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Notifications</a>
+      <a href="ai.html" data-admin-nav="ai.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="8" height="8" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg> AI Control</a>
+      <a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
+      <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
+    </nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <h1>🤖 AI Control Center</h1>
+      <div class="admin-topbar__actions">
+        <span class="muted" style="font-size:0.8rem">Your own AI — no API key needed</span>
+      </div>
+    </div>
+
+    <!-- Master switch -->
+    <div class="ai-master-card" id="ai-master-card">
+      <div class="ai-master__info">
+        <div class="ai-master__title">Own-AI Master Switch</div>
+        <div class="ai-master-state ai-master-state--off" id="ai-master-label">OFF — AI is sleeping</div>
+        <p class="muted" style="font-size:0.85rem;margin:6px 0 0">When ON, the AI watches your whole panel in the background: it scans discussions, removes abusive comments, warns offenders, deletes duplicate problems and (if enabled) auto-adds new verified problems + sends notifications.</p>
+      </div>
+      <label class="ai-switch ai-switch--lg" title="Turn Own-AI on/off">
+        <input type="checkbox" id="ai-master">
+        <span class="ai-switch__track"><span class="ai-switch__thumb"></span></span>
+      </label>
+    </div>
+
+    <!-- Stats -->
+    <div class="admin-stats-row">
+      <div class="stat-card"><div class="value value--red" id="ai-stat-removed">0</div><div class="label">Abusive comments removed</div></div>
+      <div class="stat-card"><div class="value value--mint" id="ai-stat-warned">0</div><div class="label">Warnings sent</div></div>
+      <div class="stat-card"><div class="value value--green" id="ai-stat-added">0</div><div class="label">AI problems added</div></div>
+      <div class="stat-card"><div class="value" id="ai-stat-dups">0</div><div class="label">Duplicates deleted</div></div>
+    </div>
+
+    <div class="admin-cols">
+      <!-- Modules -->
+      <div class="section-card">
+        <h3>🧩 AI Modules</h3>
+        <div class="ai-module">
+          <div><strong>Discussion moderation</strong><p>Scans English comments (abuse, gaali, spam, links). Deletes bad comments automatically.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-mod"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>Warn the offender</strong><p>Sends a ⚠️ warning notification to the user whose comment was deleted.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-warn"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>Auto problem factory</strong><p>Auto-adds verified Bug + Output problems (all fields + 3 hints) on schedule.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-autoproblems"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>Duplicate guard</strong><p>Never inserts a duplicate; auto-deletes existing duplicate problems (keeps oldest).</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-dedup"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>New-problem announcements</strong><p>Notifies ALL users when the AI adds fresh problems. <span class="muted">(uses bell 🔔)</span></p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-announce"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>Welcome new users</strong><p>Sends a 👋 welcome notification to users who joined in the last 24 hours.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-welcome"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+      </div>
+
+      <!-- Factory settings + manual actions -->
+      <div class="section-card">
+        <h3>🏭 Problem factory settings</h3>
+        <div class="form-row">
+          <div class="field">
+            <label for="ai-per-run">Problems per run</label>
+            <select id="ai-per-run">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+              <option value="10">10</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ai-hours">Auto-generate every</label>
+            <select id="ai-hours">
+              <option value="6">6 hours</option>
+              <option value="12">12 hours</option>
+              <option value="24">24 hours</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="ai-mix">Problem mix</label>
+            <select id="ai-mix">
+              <option value="both">Both (Bug + Output)</option>
+              <option value="bug">Fix the Bug only</option>
+              <option value="question">Predict Output only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ai-difficulty">Difficulty</label>
+            <select id="ai-difficulty">
+              <option value="mixed">Mixed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
+        <h3 style="margin-top:18px">⚡ Run now</h3>
+        <div class="ai-actions">
+          <button class="btn btn--primary btn--sm" id="ai-btn-generate">⚙️ Generate problems now</button>
+          <button class="btn btn--secondary btn--sm" id="ai-btn-preview">👁️ Preview a problem</button>
+          <button class="btn btn--secondary btn--sm" id="ai-btn-scan">🔍 Scan discussions now</button>
+          <button class="btn btn--secondary btn--sm" id="ai-btn-dedup">🧹 Remove duplicates now</button>
+          <button class="btn btn--secondary btn--sm" id="ai-btn-welcome">👋 Welcome new users now</button>
+        </div>
+        <div class="ai-schedule">
+          <div>Moderation: <strong id="ai-last-mod">—</strong></div>
+          <div>Last duplicate cleanup: <strong id="ai-last-dedup">—</strong></div>
+          <div>Last auto-generate: <strong id="ai-last-gen">—</strong></div>
+          <div>Last welcome run: <strong id="ai-last-welcome">—</strong></div>
+        </div>
+        <p class="muted" style="font-size:0.8rem">Note: background runs happen while any admin page is open in your browser. Manual buttons work anytime.</p>
+      </div>
+    </div>
+
+    <!-- Daily digest -->
+    <div class="section-card">
+      <h3>📰 Daily AI Digest <button class="btn btn--secondary btn--sm" id="ai-btn-digest" style="margin-left:10px">↻ Generate fresh</button></h3>
+      <div id="ai-digest-body"><p class="muted">Loading digest...</p></div>
+    </div>
+
+    <div class="admin-cols">
+      <div class="section-card">
+        <h3>❤️ Panel health <button class="btn btn--secondary btn--sm" id="ai-btn-health" style="margin-left:10px">↻ Recheck</button></h3>
+        <div id="ai-health-body"><p class="muted">Checking...</p></div>
+        <ul class="ai-checks ai-health-list" id="ai-health-list" style="margin-top:10px"></ul>
+      </div>
+      <div class="section-card">
+        <h3>🎯 Difficulty calibration <button class="btn btn--secondary btn--sm" id="ai-btn-calib" style="margin-left:10px">↻ Re-analyse</button></h3>
+        <div id="ai-calib-body"><p class="muted">Analysing solve rates...</p></div>
+      </div>
+    </div>
+
+    <!-- Growth + Safety -->
+    <div class="admin-cols">
+      <div class="section-card">
+        <h3>💰 Growth &amp; retention</h3>
+        <div class="ai-module">
+          <div><strong>Premium expiry reminders</strong><p>Notifies users whose Premium ends in ≤3 days (or just expired). Max once a week per user.</p><div class="muted ai-last" id="ai-last-exp">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-exp"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-exp">Run</button></div>
+        </div>
+        <div class="ai-module">
+          <div><strong>Win-back inactive users</strong><p>Pings users sleeping 7+ days with their XP. Max once every 2 weeks per user.</p><div class="muted ai-last" id="ai-last-winback">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-winback"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-winback">Run</button></div>
+        </div>
+        <div class="ai-module">
+          <div><strong>Stuck-user help</strong><p>Encourages users with 5+ failed attempts and zero solves on one problem.</p><div class="muted ai-last" id="ai-last-stuck">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-stuck"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-stuck">Run</button></div>
+        </div>
+        <div class="ai-module">
+          <div><strong>Leaderboard climb alerts</strong><p>Celebrates Top-10 entries and 3+ spot climbs. First run only saves a snapshot.</p><div class="muted ai-last" id="ai-last-lead">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-lead"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-lead">Run</button></div>
+        </div>
+      </div>
+      <div class="section-card">
+        <h3>🛡️ Safety+</h3>
+        <div class="ai-module">
+          <div><strong>🇮🇳 Hindi / Hinglish filter</strong><p>Part of moderation: catches Hindi gaali in Roman + Devanagari script. English filter always stays on.</p></div>
+          <label class="ai-switch"><input type="checkbox" id="ai-hindi"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label>
+        </div>
+        <div class="ai-module">
+          <div><strong>FAQ auto-helper</strong><p>Replies (as you) to questions waiting 24h+ with no answer. Max 10 per run.</p><div class="muted ai-last" id="ai-last-faq">Last run: never</div></div>
+          <div class="ai-module__side"><label class="ai-switch"><input type="checkbox" id="ai-faq"><span class="ai-switch__track"><span class="ai-switch__thumb"></span></span></label><button class="btn btn--secondary btn--sm" id="ai-btn-faq">Run</button></div>
+        </div>
+        <h3 style="margin-top:14px">🕵️ Copy-paste detector</h3>
+        <p class="muted" style="font-size:0.85rem">Finds identical code submitted by 3+ users on one problem (30 days). Report only — never auto-punishes.</p>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-cheat">🔍 Scan submissions</button>
+        <div id="ai-cheat-body" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Content AI -->
+    <div class="section-card">
+      <h3>🏭 Content AI</h3>
+      <div class="ai-module">
+        <div><strong>🧩 Gap filler</strong><p>Generates problems for the emptiest topic × difficulty cells first.</p><div class="muted ai-last" id="ai-gap-result"></div></div>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-gap">Fill gaps (3)</button>
+      </div>
+      <div class="ai-module">
+        <div><strong>✨ Variations</strong><p>Open the Dashboard and press ✨ on any problem row to spawn 3 fresh variations of it.</p></div>
+        <a class="btn btn--secondary btn--sm" href="dashboard.html">Open Dashboard</a>
+      </div>
+      <div class="ai-module">
+        <div><strong>🔎 Quality report</strong><p>Flags weak titles, descriptions, hints, missing numbers and bad topics.</p></div>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-quality">Run report</button>
+      </div>
+      <div id="ai-quality-body" style="margin:4px 0 8px"></div>
+      <div class="ai-module">
+        <div><strong>💡 Auto-fix hints</strong><p>Tops up every problem with fewer than 3 hints from the topic hint bank.</p><div class="muted ai-last" id="ai-hints-result"></div></div>
+        <button class="btn btn--secondary btn--sm" id="ai-btn-hints">Fix hints</button>
+      </div>
+      <h3 style="margin-top:14px">📥 Bulk import (JSON / CSV)</h3>
+      <p class="muted" style="font-size:0.85rem">Paste problems, validate with the AI checklist (fields + duplicates), then import only the valid rows. CSV header: <code>type,title,description,difficulty,topic,starter_code,expected_output,hint1,hint2,hint3,is_premium</code></p>
+      <div class="form-row">
+        <div class="field" style="max-width:180px">
+          <label for="ai-bulk-format">Format</label>
+          <select id="ai-bulk-format"><option value="json">JSON array</option><option value="csv">CSV</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <textarea id="ai-bulk-text" class="ai-bulk-text" placeholder='[{"type":"question","title":"...","description":"...","difficulty":"easy","topic":"loops","starter_code":"...","expected_output":"...","hints":["...","...","..."]}]'></textarea>
+      </div>
+      <div class="ai-actions">
+        <button class="btn btn--secondary btn--sm" id="ai-btn-bulk-check">✔️ Validate</button>
+        <button class="btn btn--primary btn--sm" id="ai-btn-bulk-import" disabled>📥 Import valid rows</button>
+      </div>
+      <div id="ai-bulk-body" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Preview -->
+    <div class="section-card" id="ai-preview" style="display:none"></div>
+
+    <!-- Moderation tester -->
+    <div class="section-card">
+      <h3>🧪 Test the moderation filter</h3>
+      <p class="muted" style="font-size:0.85rem">Type any comment below and see how the AI judges it (nothing is deleted here).</p>
+      <div class="field">
+        <textarea id="ai-test-input" style="min-height:70px" placeholder="e.g. This solution is wrong, you idiot..."></textarea>
+      </div>
+      <button class="btn btn--secondary btn--sm" id="ai-btn-test">Check text</button>
+      <div id="ai-test-result" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Activity log -->
+    <div class="admin-section-title">AI activity log
+      <button class="btn btn--secondary btn--sm" id="ai-btn-clear-log" style="margin-left:10px">Clear</button>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th style="width:110px">When</th>
+            <th style="width:80px">Level</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="ai-log-tbody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/admin-common.js"></script>
+<script src="js/ai-brain.js"></script>
+<script src="js/ai-growth.js"></script>
+<script src="js/ai-content.js"></script>
+<script src="js/ai-safety.js"></script>
+<script src="js/ai-watch.js"></script>
+<script src="js/admin-ai.js"></script>
+</body>
+</html>
