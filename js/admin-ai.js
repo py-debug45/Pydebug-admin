@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindControls();
   refreshStats();
   renderLogs();
+  initReports();
 });
 
 function renderAll(s) {
@@ -272,4 +273,228 @@ function renderLogs() {
       <td><strong>${escapeHtml(l.action)}</strong> — ${escapeHtml(l.detail)}</td>
     </tr>
   `).join("");
+}
+
+/* ================= Reports bundle UI ================= */
+
+let AIUI_calibCache = [];
+
+function initReports() {
+  renderDigestCached();
+  const bD = document.getElementById("ai-btn-digest");
+  if (bD) bD.addEventListener("click", buildDigestNow);
+  const bH = document.getElementById("ai-btn-health");
+  if (bH) bH.addEventListener("click", () => refreshHealth(true));
+  const bC = document.getElementById("ai-btn-calib");
+  if (bC) bC.addEventListener("click", () => refreshCalibration(true));
+
+  const hList = document.getElementById("ai-health-list");
+  if (hList) hList.addEventListener("click", onHealthFix);
+  const cBody = document.getElementById("ai-calib-body");
+  if (cBody) cBody.addEventListener("click", onCalibClick);
+
+  refreshHealth(false);
+  refreshCalibration(false);
+}
+
+/* ---- Daily digest ---- */
+
+async function renderDigestCached() {
+  const body = document.getElementById("ai-digest-body");
+  if (!body) return;
+  try {
+    const d = await AI_getDigest();
+    if (d && d.stats) renderDigest(d, true);
+    else body.innerHTML = `<p class="muted">No digest yet — press "↻ Generate fresh" to build one.</p>`;
+  } catch (e) {
+    body.innerHTML = `<p class="muted">No digest yet — press "↻ Generate fresh" to build one.</p>`;
+  }
+}
+
+function renderDigest(d, cached) {
+  const body = document.getElementById("ai-digest-body");
+  if (!body) return;
+  const s = d.stats || {};
+  const num = (v) => (v === null || v === undefined ? "—" : v);
+  const chip = (label, v) => `<span class="ai-chip">${label}: <strong>${num(v)}</strong></span>`;
+  body.innerHTML = `
+    <div class="ai-digest-chips">
+      ${chip("👥 Users", s.totalUsers)}
+      ${chip("🎉 New (24h)", s.newUsers)}
+      ${chip("📝 Problems", s.totalProblems)}
+      ${chip("⚡ Submissions (24h)", s.subs24)}
+      ${chip("✅ Solve rate", s.solveRate === null || s.solveRate === undefined ? "—" : s.solveRate + "%")}
+      ${chip("💬 Comments (24h)", s.comments24)}
+      ${chip("🛡️ Removed (24h)", s.removed24)}
+      ${chip("🤖 AI-added (24h)", s.added24)}
+    </div>
+    <ul class="ai-highlights">${(d.highlights || []).map((h) => `<li>${escapeHtml(h)}</li>`).join("")}</ul>
+    <p class="muted" style="font-size:0.8rem;margin-bottom:0">Generated ${escapeHtml(timeAgo(d.generated_at))}${cached ? " (refresh for latest)" : ""} · Auto-rebuilds daily while the Guard is ON.</p>
+  `;
+}
+
+async function buildDigestNow() {
+  const body = document.getElementById("ai-digest-body");
+  const btn = document.getElementById("ai-btn-digest");
+  if (btn) { btn.disabled = true; btn.textContent = "Building..."; }
+  if (body) body.innerHTML = `<p class="muted">Gathering stats...</p>`;
+  try {
+    const d = await AI_buildDigest();
+    renderDigest(d, false);
+    renderLogs();
+    showToast("Digest built", "success");
+  } catch (e) {
+    if (body) body.innerHTML = `<p class="muted">Could not build digest: ${escapeHtml(e.message)}</p>`;
+    showToast("Digest failed: " + e.message, "error");
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "↻ Generate fresh"; }
+}
+
+/* ---- Health score ---- */
+
+async function refreshHealth(manual) {
+  const wrap = document.getElementById("ai-health-body");
+  const list = document.getElementById("ai-health-list");
+  const btn = document.getElementById("ai-btn-health");
+  if (btn) { btn.disabled = true; btn.textContent = "Checking..."; }
+  if (wrap) wrap.innerHTML = `<p class="muted">Running health checks...</p>`;
+  if (list) list.innerHTML = "";
+  try {
+    const h = await AI_healthCheck();
+    const color = h.score >= 85 ? "#2ecc71" : h.score >= 65 ? "#e3b341" : "#e74c3c";
+    const verdict = h.score >= 85 ? "Excellent" : h.score >= 65 ? "Fair" : "Needs attention";
+    if (wrap) {
+      wrap.innerHTML = `
+        <div style="font-size:1.6rem;font-weight:800">${h.score}<span class="muted" style="font-size:0.9rem">/100 · ${verdict}</span></div>
+        <div class="ai-health-scorebar"><div style="width:${h.score}%;background:${color}"></div></div>
+        <div class="muted" style="font-size:0.8rem">Checked ${escapeHtml(timeAgo(h.generated_at))}</div>
+      `;
+    }
+    if (list) {
+      const icon = { ok: "✅", warn: "⚠️", bad: "🔴" };
+      const fixLabel = { dedup: "Fix: remove", moderation: "Fix: scan", factory: "Fix: generate 3", "factory-hard": "Fix: 3 hard", discussions: "Open", hints: "Review", broadcast: "Open" };
+      list.innerHTML = h.checks.map((c) => `
+        <li class="${c.status === "ok" ? "pass" : c.status === "bad" ? "fail" : ""}">
+          <span>${icon[c.status] || "•"} <strong>${escapeHtml(c.label)}</strong> — ${escapeHtml(c.detail)}</span>
+          ${c.fix ? `<button class="btn btn--secondary btn--sm ai-fix-btn" data-fix="${escapeHtml(c.fix.id)}">${escapeHtml(fixLabel[c.fix.id] || "Fix")}</button>` : ""}
+        </li>
+      `).join("");
+    }
+    if (manual) showToast(`Health score: ${h.score}/100`, "success");
+  } catch (e) {
+    if (wrap) wrap.innerHTML = `<p class="muted">Health check failed: ${escapeHtml(e.message)}</p>`;
+    if (manual) showToast("Health check failed: " + e.message, "error");
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "↻ Recheck"; }
+}
+
+async function onHealthFix(e) {
+  const btn = e.target.closest("[data-fix]");
+  if (!btn) return;
+  const fix = btn.dataset.fix;
+  btn.disabled = true;
+  try {
+    if (fix === "dedup") {
+      const r = await AI_runDedup({ auto: false });
+      showToast(`Removed ${r.removed.length} duplicate(s)`, "success");
+    } else if (fix === "moderation") {
+      const r = await AI_runModeration({ auto: false });
+      showToast(`Removed ${r.removed} comment(s), warned ${r.warned}`, "success");
+    } else if (fix === "factory") {
+      const r = await AI_generateProblems(3, { auto: false });
+      showToast(`Added ${r.added.length} problem(s)`, "success");
+    } else if (fix === "factory-hard") {
+      const r = await AI_generateProblems(3, { auto: false, difficulty: "hard" });
+      showToast(`Added ${r.added.length} hard problem(s)`, "success");
+    } else if (fix === "discussions") {
+      window.location.href = "discussions.html";
+      return;
+    } else if (fix === "hints") {
+      window.location.href = "dashboard.html";
+      return;
+    } else if (fix === "broadcast") {
+      window.location.href = "notifications.html";
+      return;
+    }
+  } catch (err) {
+    showToast("Fix failed: " + err.message, "error");
+  }
+  renderLogs();
+  refreshStats();
+  refreshHealth(true);
+}
+
+/* ---- Difficulty calibration ---- */
+
+async function refreshCalibration(manual) {
+  const body = document.getElementById("ai-calib-body");
+  const btn = document.getElementById("ai-btn-calib");
+  if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
+  if (body) body.innerHTML = `<p class="muted">Analysing solve rates...</p>`;
+  try {
+    const { suggestions, judged } = await AI_calibration();
+    AIUI_calibCache = suggestions;
+    if (!suggestions.length) {
+      if (body) body.innerHTML = `<p class="muted">${judged ? `Checked ${judged} problem(s) with 8+ attempts — all difficulties look right. ✅` : "Not enough submission data yet (needs 8+ attempts per problem)."}</p>`;
+    } else if (body) {
+      body.innerHTML = `
+        <p class="muted" style="font-size:0.85rem">${suggestions.length} suggestion(s) from ${judged} judged problem(s):</p>
+        <table class="ai-calib-table">
+          <thead><tr><th></th><th>Problem</th><th>Now → Suggested</th><th>Rate</th><th></th></tr></thead>
+          <tbody>
+            ${suggestions.map((s, i) => `
+              <tr>
+                <td><input type="checkbox" data-calib-check="${i}" checked></td>
+                <td>${escapeHtml(s.title)}<div class="muted" style="font-size:0.75rem">${s.attempts} attempts · ${escapeHtml(s.reason)}</div></td>
+                <td><span class="diff diff--${escapeHtml(s.current)}">${escapeHtml(s.current)}</span> → <span class="diff diff--${escapeHtml(s.suggested)}">${escapeHtml(s.suggested)}</span></td>
+                <td>${s.rate}%</td>
+                <td><button class="btn btn--secondary btn--sm" data-calib-one="${i}">Apply</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="ai-calib-actions">
+          <button class="btn btn--primary btn--sm" id="ai-btn-calib-apply">Apply selected</button>
+          <button class="btn btn--secondary btn--sm" id="ai-btn-calib-apply-all">Apply all</button>
+        </div>
+      `;
+    }
+    if (manual) showToast("Calibration refreshed", "success");
+  } catch (e) {
+    if (body) body.innerHTML = `<p class="muted">Calibration failed: ${escapeHtml(e.message)}</p>`;
+    if (manual) showToast("Calibration failed: " + e.message, "error");
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "↻ Re-analyse"; }
+}
+
+async function onCalibClick(e) {
+  const one = e.target.closest("[data-calib-one]");
+  if (one) {
+    const s = AIUI_calibCache[Number(one.dataset.calibOne)];
+    if (!s) return;
+    one.disabled = true;
+    const n = await AI_applyDifficulty([s]);
+    showToast(n ? `Updated "${s.title}" → ${s.suggested}` : "Update failed", n ? "success" : "error");
+    renderLogs();
+    refreshCalibration(false);
+    return;
+  }
+  if (e.target.closest("#ai-btn-calib-apply-all")) {
+    if (!AIUI_calibCache.length) return;
+    if (!confirm(`Apply all ${AIUI_calibCache.length} difficulty change(s)?`)) return;
+    const n = await AI_applyDifficulty(AIUI_calibCache);
+    showToast(`Updated ${n} problem(s)`, "success");
+    renderLogs();
+    refreshCalibration(false);
+    return;
+  }
+  if (e.target.closest("#ai-btn-calib-apply")) {
+    const idx = [...document.querySelectorAll("[data-calib-check]:checked")].map((c) => Number(c.dataset.calibCheck));
+    const items = idx.map((i) => AIUI_calibCache[i]).filter(Boolean);
+    if (!items.length) { showToast("Nothing selected", "error"); return; }
+    const n = await AI_applyDifficulty(items);
+    showToast(`Updated ${n} problem(s)`, "success");
+    renderLogs();
+    refreshCalibration(false);
+  }
 }

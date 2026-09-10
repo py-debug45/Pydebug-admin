@@ -100,7 +100,18 @@
         }
       }
 
+      // 5. Daily digest — auto-build once every ~20h while Guard is ON.
+      if (now - (last.digest || 0) > 20 * 60 * 60 * 1000) {
+        try {
+          await AI_buildDigest();
+          AI_setLastRun("digest");
+        } catch (e) {
+          console.warn("AI digest:", e.message);
+        }
+      }
+
       paintGuardPill(s);
+      try { AI_refreshBell(); } catch (e) {}
     } catch (e) {
       console.warn("AI watch tick:", e.message);
     } finally {
@@ -127,9 +138,98 @@
     } catch (e) {}
   }
 
+  /* ---- Admin bell: floating AI inbox on every page ---- */
+  const AI_BELL_SEEN_KEY = "pydebug_ai_bell_seen_v1";
+
+  function AI_bellItems() {
+    try {
+      if (typeof AI_getLogs !== "function") return [];
+      return AI_getLogs().filter((l) => ["warn", "error", "success"].includes(l.level)).slice(0, 15);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function AI_bellSeen() {
+    try {
+      return Number(localStorage.getItem(AI_BELL_SEEN_KEY) || 0);
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function AI_refreshBell() {
+    const badge = document.getElementById("ai-bell-badge");
+    if (!badge) return;
+    const seen = AI_bellSeen();
+    const unread = AI_bellItems().filter((l) => new Date(l.t).getTime() > seen && l.level !== "success").length;
+    badge.textContent = unread > 9 ? "9+" : String(unread);
+    badge.style.display = unread ? "" : "none";
+  }
+
+  function AI_bellEsc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function AI_renderBellList() {
+    const list = document.getElementById("ai-bell-list");
+    if (!list) return;
+    const items = AI_bellItems();
+    if (!items.length) {
+      list.innerHTML = '<div class="ai-bell__empty">All quiet. Turn the AI ON to get findings here.</div>';
+      return;
+    }
+    const dot = (l) => (l === "error" ? "🔴" : l === "warn" ? "🟡" : "🟢");
+    list.innerHTML = items.map((l) =>
+      `<div class="ai-bell__item"><span>${dot(l.level)}</span><span><strong>${AI_bellEsc(l.action)}</strong> — ${AI_bellEsc(l.detail)}</span></div>`
+    ).join("");
+  }
+
+  async function AI_mountBell() {
+    if (document.getElementById("ai-bell") || typeof AI_getLogs !== "function") return;
+    // Admins only — result cached 5 min per tab to avoid extra queries.
+    try {
+      const cached = Number(sessionStorage.getItem("pydebug_ai_isadmin") || 0);
+      if (Date.now() - cached > 5 * 60 * 1000) {
+        if (!(await quietAdminCheck())) return;
+        sessionStorage.setItem("pydebug_ai_isadmin", String(Date.now()));
+      }
+    } catch (e) {
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.id = "ai-bell";
+    wrap.className = "ai-bell";
+    wrap.innerHTML =
+      '<button class="ai-bell__btn" id="ai-bell-btn" title="AI notifications">🔔<span class="ai-bell__badge" id="ai-bell-badge" style="display:none">0</span></button>' +
+      '<div class="ai-bell__panel" id="ai-bell-panel" style="display:none">' +
+      '<div class="ai-bell__head"><strong>\uD83E\uDD16 AI inbox</strong><button id="ai-bell-read">Mark read</button></div>' +
+      '<div class="ai-bell__list" id="ai-bell-list"></div>' +
+      '<a class="ai-bell__foot" href="ai.html">Open AI Control \u2192</a></div>';
+    document.body.appendChild(wrap);
+    const panel = document.getElementById("ai-bell-panel");
+    document.getElementById("ai-bell-btn").addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = panel.style.display !== "none";
+      panel.style.display = open ? "none" : "";
+      if (!open) AI_renderBellList();
+    });
+    document.addEventListener("click", (ev) => {
+      if (!wrap.contains(ev.target)) panel.style.display = "none";
+    });
+    document.getElementById("ai-bell-read").addEventListener("click", () => {
+      try {
+        localStorage.setItem(AI_BELL_SEEN_KEY, String(Date.now()));
+      } catch (e) {}
+      AI_refreshBell();
+    });
+    AI_refreshBell();
+  }
+
   window.addEventListener("load", () => {
     setTimeout(tick, 5000);       // first pass shortly after page load
-    setInterval(tick, 60000);     // then every minute
+    setInterval(tick, 60000);
+    AI_mountBell();     // then every minute
     try {
       if (typeof AI_getSettings === "function") paintGuardPill(AI_getSettings());
     } catch (e) {}

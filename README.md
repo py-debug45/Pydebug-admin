@@ -105,9 +105,18 @@ every admin page), control UI: `ai.html` + `js/admin-ai.js`.
   submissions/discussions.
 - **Auto notifications** — offender warnings, new-problem broadcasts to
   all users (🔔 bell compatible) and welcome messages for new joiners.
+- **Reports bundle** — 📰 Daily AI Digest (signups, submissions, solve
+  rate, top problem, AI activity + auto-highlights, rebuilt daily while
+  ON), ❤️ Panel Health Score 0–100 (topic gaps, difficulty balance,
+  weak hints, incomplete problems, duplicates, live abuse, unanswered
+  questions, sleeping users — each with a one-click Fix button), 🔔
+  floating admin bell on every page (unread AI findings inbox), and 🎯
+  Difficulty Calibration (real solve rates → suggested easy/medium/hard
+  changes with Apply / Apply-all).
 - **Scheduling** — while the master switch is ON and any admin page is
   open, the watcher runs moderation every minute, duplicate cleanup +
-  welcome hourly, and auto-generation every 6/12/24h (configurable).
+  welcome hourly, digest daily, and auto-generation every 6/12/24h
+  (configurable).
 - **Sync** — toggles persist in `localStorage` instantly and sync
   best-effort to the `ai_settings` / `ai_logs` tables (created by
   `supabase-admin-setup.sql` §11) so every admin device agrees.

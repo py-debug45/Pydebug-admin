@@ -1403,3 +1403,366 @@ function AI_getStats() {
     totalActions: logs.length,
   };
 }
+
+/* ============================================================
+   7. REPORTS — daily digest, health score, difficulty calibration
+   (Reports bundle — still 100% local logic, no API keys)
+   ============================================================ */
+
+const AI_DIGEST_KEY = "pydebug_ai_digest_v1";
+
+// Generic cloud key-value on the ai_settings table (best-effort).
+async function AI_kvSet(key, value) {
+  try {
+    if (typeof sb === "undefined") return false;
+    const { error } = await sb.from("ai_settings").upsert(
+      { key, value, updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
+    return !error;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function AI_kvGet(key) {
+  try {
+    if (typeof sb === "undefined") return null;
+    const { data, error } = await sb.from("ai_settings").select("value").eq("key", key).single();
+    if (error || !data) return null;
+    return data.value;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Exact row count with optional filter fn. Returns null when unreadable.
+async function AI_count(table, apply) {
+  try {
+    let q = sb.from(table).select("*", { count: "exact", head: true });
+    if (apply) q = apply(q);
+    const { count, error } = await q;
+    if (error) return null;
+    return count ?? 0;
+  } catch (e) {
+    return null;
+  }
+}
+
+function AI_solvedOf(row, stCol) {
+  const v = String(row[stCol] ?? "").toLowerCase();
+  return ["solved", "success", "correct", "passed", "true", "1"].includes(v) || row.is_correct === true;
+}
+
+function AI_detectStatusCol(sample) {
+  if (typeof detectCol === "function") return detectCol(sample, ["status", "result", "verdict"]);
+  if (!sample) return "status";
+  for (const c of ["status", "result", "verdict"]) {
+    if (Object.prototype.hasOwnProperty.call(sample, c)) return c;
+  }
+  return "status";
+}
+
+// --- 7a. Daily digest: builds, saves (local + cloud), logs, returns it ---
+async function AI_buildDigest() {
+  const now = Date.now();
+  const d1 = new Date(now - 24 * 3600 * 1000).toISOString();
+  const d2 = new Date(now - 48 * 3600 * 1000).toISOString();
+  const d7 = new Date(now - 7 * 24 * 3600 * 1000).toISOString();
+
+  const [totalUsers, newUsers, prevUsers, totalProblems, newProblems, subs24, subsPrev, comments24] = await Promise.all([
+    AI_count("profiles"),
+    AI_count("profiles", (q) => q.gte("created_at", d1)),
+    AI_count("profiles", (q) => q.gte("created_at", d2).lt("created_at", d1)),
+    AI_count("problems"),
+    AI_count("problems", (q) => q.gte("created_at", d1)),
+    AI_count("submissions", (q) => q.gte("created_at", d1)),
+    AI_count("submissions", (q) => q.gte("created_at", d2).lt("created_at", d1)),
+    AI_count("problem_discussions", (q) => q.gte("created_at", d1)),
+  ]);
+
+  // Solve rate over the last 24h.
+  let solveRate = null;
+  try {
+    const { data: s24 } = await sb.from("submissions").select("*").gte("created_at", d1).order("created_at", { ascending: false }).limit(5000);
+    const rows = s24 || [];
+    if (rows.length) {
+      const st = AI_detectStatusCol(rows[0]);
+      solveRate = Math.round((rows.filter((r) => AI_solvedOf(r, st)).length / rows.length) * 100);
+    }
+  } catch (e) {}
+
+  // Top problem of the week by attempts.
+  let topProblem = null;
+  try {
+    const { data: s7 } = await sb.from("submissions").select("problem_id").gte("created_at", d7).limit(10000);
+    const agg = {};
+    (s7 || []).forEach((r) => { if (r.problem_id) agg[r.problem_id] = (agg[r.problem_id] || 0) + 1; });
+    const top = Object.entries(agg).sort((a, b) => b[1] - a[1])[0];
+    if (top) {
+      const { data: p } = await sb.from("problems").select("id, title").eq("id", top[0]).single();
+      topProblem = { title: (p && p.title) || "Unknown problem", attempts: top[1] };
+    }
+  } catch (e) {}
+
+  // AI's own activity in the last 24h (local log).
+  const logs = AI_getLogs().filter((l) => now - new Date(l.t).getTime() < 24 * 3600 * 1000);
+  const act = (a) => logs.filter((l) => l.action === a).length;
+  const removed24 = act("moderation_removed");
+  const added24 = act("problem_added");
+  const dups24 = act("dup_removed");
+
+  // Abusive comments visible RIGHT NOW (latest 200).
+  let liveFlags = 0;
+  try {
+    const { data: latest } = await sb.from("problem_discussions").select("content").order("created_at", { ascending: false }).limit(200);
+    (latest || []).forEach((c) => { if (AI_scanText(c.content).flagged) liveFlags++; });
+  } catch (e) {}
+
+  // Age of the newest problem.
+  let newestAgeDays = null;
+  try {
+    const { data: np } = await sb.from("problems").select("created_at").order("created_at", { ascending: false }).limit(1);
+    if (np && np[0] && np[0].created_at) {
+      newestAgeDays = Math.floor((now - new Date(np[0].created_at).getTime()) / 86400000);
+    }
+  } catch (e) {}
+
+  let growthPct = null;
+  if (newUsers !== null && prevUsers !== null && prevUsers > 0) {
+    growthPct = Math.round(((newUsers - prevUsers) / prevUsers) * 100);
+  }
+
+  const highlights = [];
+  if (liveFlags > 0) highlights.push(`🚨 ${liveFlags} abusive/spam comment(s) visible right now — the Guard removes them while it is ON.`);
+  if (newUsers !== null) {
+    highlights.push(newUsers === 0
+      ? "📭 No new signups in the last 24h."
+      : `🎉 ${newUsers} new user(s) joined in 24h${growthPct !== null ? ` (${growthPct >= 0 ? "+" : ""}${growthPct}% vs previous day)` : ""}.`);
+  }
+  if (subs24 !== null) {
+    highlights.push(subs24 === 0
+      ? "💤 No submissions in 24h — users may need a nudge (send a broadcast?)."
+      : `⚡ ${subs24} submission(s) in 24h${solveRate !== null ? ` · solve rate ${solveRate}%` : ""}.`);
+  }
+  if (solveRate !== null && (subs24 || 0) > 0) {
+    if (solveRate < 35) highlights.push(`⚠️ Solve rate is low (${solveRate}%) — check difficulty calibration below.`);
+    else if (solveRate >= 85) highlights.push(`🌟 Excellent solve rate (${solveRate}%)!`);
+  }
+  if (removed24 > 0) highlights.push(`🛡️ AI removed ${removed24} abusive comment(s) in 24h.`);
+  if (added24 > 0) highlights.push(`🤖 AI added ${added24} new problem(s) in 24h.`);
+  if (dups24 > 0) highlights.push(`🧹 AI deleted ${dups24} duplicate problem(s) in 24h.`);
+  if (newProblems === 0 && newestAgeDays !== null && newestAgeDays >= 7) {
+    highlights.push(`🏭 No new problems for ${newestAgeDays} days — enable the problem factory.`);
+  }
+  if (topProblem) highlights.push(`🔥 Most attempted (7d): "${topProblem.title}" (${topProblem.attempts} attempts).`);
+  if ((comments24 || 0) > 0) highlights.push(`💬 ${comments24} new discussion comment(s) in 24h.`);
+  if (!highlights.length) highlights.push("✅ All quiet — panel looks healthy.");
+
+  const digest = {
+    generated_at: new Date().toISOString(),
+    stats: {
+      totalUsers, newUsers, prevUsers, growthPct, totalProblems, newProblems,
+      subs24, subsPrev, solveRate, comments24, removed24, added24, dups24,
+      liveFlags, topProblem, newestAgeDays,
+    },
+    highlights,
+  };
+  try { localStorage.setItem(AI_DIGEST_KEY, JSON.stringify(digest)); } catch (e) {}
+  AI_kvSet("digest", digest);
+  AI_log("digest_built", `Digest: ${newUsers ?? "?"} new users, ${subs24 ?? "?"} submissions, solve ${solveRate ?? "?"}%.`, "success");
+  return digest;
+}
+
+async function AI_getDigest() {
+  try {
+    const raw = localStorage.getItem(AI_DIGEST_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return await AI_kvGet("digest");
+}
+
+// --- 7b. Panel health check: score 0-100 + actionable findings ---
+async function AI_healthCheck() {
+  const checks = [];
+  const push = (status, label, detail, fix) => checks.push({ status, label, detail, fix: fix || null });
+
+  let probs = [];
+  try {
+    const PAGE = 1000;
+    let from = 0;
+    for (;;) {
+      const { data, error } = await sb.from("problems")
+        .select("id,title,type,difficulty,topic,hints,starter_code,expected_output,description,problem_number,created_at")
+        .order("created_at", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      (data || []).forEach((r) => probs.push(r));
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+  } catch (e) {
+    return { score: 0, checks: [{ status: "bad", label: "Cannot read problems", detail: String((e && e.message) || e), fix: null }], generated_at: new Date().toISOString() };
+  }
+
+  if (!probs.length) {
+    push("warn", "No problems yet", "Add your first problem, or let the AI factory generate some.", { id: "factory" });
+  }
+
+  // Topic coverage.
+  const byTopic = {};
+  AI_TOPICS.forEach((t) => { byTopic[t] = 0; });
+  probs.forEach((p) => {
+    const t = String(p.topic || "").toLowerCase();
+    if (t in byTopic) byTopic[t]++;
+  });
+  const thin = AI_TOPICS.filter((t) => byTopic[t] < 3);
+  if (probs.length && thin.length === 0) {
+    push("ok", "Topic coverage", `All 12 topics have 3+ problems (${probs.length} total).`);
+  } else if (probs.length) {
+    push("warn", "Thin topics", `${thin.join(", ")} — fewer than 3 problems each.`, { id: "factory" });
+  }
+
+  // Difficulty balance.
+  const diffs = { easy: 0, medium: 0, hard: 0 };
+  probs.forEach((p) => {
+    const d = String(p.difficulty || "").toLowerCase();
+    if (d in diffs) diffs[d]++;
+  });
+  if (probs.length) {
+    const hardShare = Math.round((diffs.hard / probs.length) * 100);
+    const easyShare = Math.round((diffs.easy / probs.length) * 100);
+    if (hardShare < 10) push("warn", "Difficulty balance", `Only ${hardShare}% hard problems (easy ${easyShare}%). Add tougher challenges.`, { id: "factory-hard" });
+    else if (easyShare > 70) push("warn", "Difficulty balance", `${easyShare}% of problems are easy — add medium/hard variety.`, { id: "factory" });
+    else push("ok", "Difficulty balance", `Easy ${diffs.easy} · Medium ${diffs.medium} · Hard ${diffs.hard}.`);
+  }
+
+  // Hints coverage.
+  const weakHints = probs.filter((p) => !(Array.isArray(p.hints) && p.hints.filter((h) => String(h || "").trim()).length >= 3));
+  if (probs.length) {
+    if (weakHints.length) push("warn", "Weak hints", `${weakHints.length} problem(s) have fewer than 3 hints.`, { id: "hints" });
+    else push("ok", "Hints", "Every problem has 3+ hints.");
+  }
+
+  // Missing fields.
+  const missing = probs.filter((p) => !String(p.title || "").trim() || !String(p.starter_code || "").trim() || !String(p.expected_output || "").trim());
+  if (probs.length) {
+    if (missing.length) push("bad", "Incomplete problems", `${missing.length} problem(s) are missing title, code or output.`, { id: "hints" });
+    else push("ok", "Complete fields", "Every problem has title, code and output.");
+  }
+
+  // Duplicates.
+  const seen = {};
+  probs.forEach((r) => {
+    const fp = AI_fingerprint(r.starter_code, r.expected_output);
+    if (!fp) return;
+    (seen[fp] = seen[fp] || []).push(r);
+  });
+  const dupGroups = Object.values(seen).filter((g) => g.length > 1);
+  const dupRows = dupGroups.reduce((s, g) => s + g.length - 1, 0);
+  if (probs.length) {
+    if (dupRows) push("bad", "Duplicates", `${dupRows} duplicate row(s) in ${dupGroups.length} group(s) — oldest copies will be kept.`, { id: "dedup" });
+    else push("ok", "Duplicates", "No duplicate problems found.");
+  }
+
+  // Live flagged comments.
+  try {
+    const { data: latest } = await sb.from("problem_discussions").select("content").order("created_at", { ascending: false }).limit(200);
+    const flags = (latest || []).filter((c) => AI_scanText(c.content).flagged).length;
+    if (flags) push("bad", "Abusive comments live", `${flags} abusive/spam comment(s) are visible right now.`, { id: "moderation" });
+    else push("ok", "Discussions clean", "Latest 200 comments scanned — all clean.");
+  } catch (e) {}
+
+  // Unanswered questions (top-level "?" older than 3 days, no reply).
+  try {
+    const { data: cmts } = await sb.from("problem_discussions").select("id,content,parent_comment_id,created_at").order("created_at", { ascending: false }).limit(500);
+    const rows = cmts || [];
+    const hasChild = new Set(rows.map((r) => r.parent_comment_id).filter(Boolean).map(String));
+    const cutoff = Date.now() - 3 * 86400000;
+    const unans = rows.filter((r) =>
+      !r.parent_comment_id &&
+      String(r.content || "").includes("?") &&
+      new Date(r.created_at).getTime() < cutoff &&
+      !hasChild.has(String(r.id))
+    );
+    if (unans.length) push("warn", "Unanswered questions", `${unans.length} question(s) older than 3 days have no reply.`, { id: "discussions" });
+    else push("ok", "Q&A", "No stale unanswered questions.");
+  } catch (e) {}
+
+  // Inactive users share (skipped when the column is absent).
+  try {
+    const { data: act } = await sb.from("profiles").select("last_active_date").limit(2000);
+    const rows = (act || []).filter((r) => r && r.last_active_date);
+    if (rows.length >= 10) {
+      const cutoff = Date.now() - 14 * 86400000;
+      const inactive = rows.filter((r) => new Date(r.last_active_date).getTime() < cutoff).length;
+      const share = Math.round((inactive / rows.length) * 100);
+      if (share > 60) push("warn", "Sleeping users", `${share}% of users inactive for 14+ days — send a re-engagement broadcast.`, { id: "broadcast" });
+      else push("ok", "User activity", `${100 - share}% of users active in the last 14 days.`);
+    }
+  } catch (e) {}
+
+  let score = 100;
+  checks.forEach((c) => {
+    if (c.status === "bad") score -= 15;
+    else if (c.status === "warn") score -= 6;
+  });
+  score = Math.max(0, score);
+  return { score, checks, generated_at: new Date().toISOString() };
+}
+
+// --- 7c. Difficulty calibration from real solve rates (min 8 attempts) ---
+async function AI_calibration() {
+  const { data: subs, error } = await sb.from("submissions").select("*").order("created_at", { ascending: false }).limit(10000);
+  if (error) throw error;
+  const rows = subs || [];
+  if (!rows.length) return { suggestions: [], judged: 0 };
+  const st = AI_detectStatusCol(rows[0]);
+  const agg = {};
+  rows.forEach((r) => {
+    if (!r.problem_id) return;
+    agg[r.problem_id] = agg[r.problem_id] || { a: 0, s: 0 };
+    agg[r.problem_id].a++;
+    if (AI_solvedOf(r, st)) agg[r.problem_id].s++;
+  });
+  const ids = Object.keys(agg).filter((id) => agg[id].a >= 8);
+  if (!ids.length) return { suggestions: [], judged: 0 };
+  const { data: probs } = await sb.from("problems").select("id,title,difficulty").in("id", ids);
+  const byId = {};
+  (probs || []).forEach((p) => { byId[p.id] = p; });
+  const EASIER = { hard: "medium", medium: "easy" };
+  const HARDER = { easy: "medium", medium: "hard" };
+  const suggestions = [];
+  ids.forEach((id) => {
+    const p = byId[id];
+    if (!p) return;
+    const { a, s } = agg[id];
+    const rate = Math.round((s / a) * 100);
+    const cur = String(p.difficulty || "").toLowerCase();
+    let sug = null, reason = "";
+    if (rate >= 85 && EASIER[cur]) {
+      sug = EASIER[cur];
+      reason = `${rate}% solve rate — too easy for '${cur}'`;
+    } else if (rate <= 25 && HARDER[cur]) {
+      sug = HARDER[cur];
+      reason = `${rate}% solve rate — too hard for '${cur}'`;
+    }
+    if (sug) suggestions.push({ problem_id: id, title: p.title, current: cur, suggested: sug, attempts: a, rate, reason });
+  });
+  suggestions.sort((x, y) => y.attempts - x.attempts);
+  return { suggestions, judged: ids.length };
+}
+
+async function AI_applyDifficulty(items) {
+  let ok = 0;
+  for (const it of items) {
+    const { error } = await sb.from("problems").update({ difficulty: it.suggested }).eq("id", it.problem_id);
+    if (!error) {
+      ok++;
+      AI_log("difficulty_changed", `"${it.title || it.problem_id}" → ${it.suggested} (${it.reason || "calibration"}).`, "success");
+    } else {
+      AI_log("difficulty_error", `Could not update ${it.problem_id}: ${error.message}`, "error");
+    }
+  }
+  return ok;
+}
