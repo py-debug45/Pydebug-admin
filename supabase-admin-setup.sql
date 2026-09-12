@@ -287,3 +287,52 @@ revoke all on table public.admin_panel_security from anon, authenticated;
 -- update public.admin_panel_security
 -- set password_hash = crypt('your new passcode', gen_salt('bf')), updated_at = now()
 -- where id = 1;
+
+-- 13. Live activity: who is on the site RIGHT NOW + who practiced today ----
+-- user_presence: one row per user, rewritten by the user app every 25s
+-- (js/presence-heartbeat.js) while the site is in the foreground, and deleted
+-- the moment the user closes/leaves the page (best-effort). The admin panel
+-- only counts rows whose last_seen_at is within the last 60 seconds, so a
+-- closed app NEVER lingers in the "Live right now" list — even if the
+-- browser was force-killed before the delete could run.
+create table if not exists public.user_presence (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  last_seen_at timestamptz not null default now(),
+  page text
+);
+create index if not exists user_presence_last_seen_idx
+  on public.user_presence (last_seen_at);
+alter table public.user_presence enable row level security;
+
+-- Users may only ever touch their OWN row (upsert heartbeat + self delete).
+drop policy if exists "Users can heartbeat own presence" on user_presence;
+create policy "Users can heartbeat own presence" on user_presence
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Admins read every row (the "Live right now" list on the dashboard)...
+drop policy if exists "Admins can read all presence" on user_presence;
+create policy "Admins can read all presence" on user_presence
+  for select using (is_admin());
+
+-- ...and may purge rows older than 24h (storage hygiene; the admin panel
+-- runs this on load). Nothing recent can ever be deleted through RLS.
+drop policy if exists "Admins can purge stale presence" on user_presence;
+create policy "Admins can purge stale presence" on user_presence
+  for delete using (is_admin() and last_seen_at < now() - interval '24 hours');
+
+-- Publish row changes so the admin dashboard updates INSTANTLY via
+-- Supabase Realtime (postgres_changes) instead of waiting for a poll.
+do $$
+begin
+  if to_regclass('public.user_presence') is not null
+     and exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'user_presence'
+     )
+  then
+    execute 'alter publication supabase_realtime add table public.user_presence';
+  end if;
+end $$;

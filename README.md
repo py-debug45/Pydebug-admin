@@ -61,10 +61,12 @@ guessable from the main user-facing URL.
   `admin_panel_security`. It is requested once per admin visit, shared while
   moving between admin pages in the same tab, and requested again after a
   reload or a new visit.
-- `dashboard.html` — Stats + analytics charts (signups, submissions,
-  difficulty & status donuts) + recent activity feed + top problems +
-  all problems (search / type / difficulty / access filters, duplicate,
-  edit, delete, CSV export). Premium-user count is expiry-aware.
+- `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
+  name, updates in real time + who practiced today by name) + stats +
+  analytics charts (signups, submissions, difficulty & status donuts) +
+  recent activity feed + top problems + all problems (search / type /
+  difficulty / access filters, duplicate, edit, delete, CSV export).
+  Premium-user count is expiry-aware.
 - `submissions.html` — Every user's progress row: filter by status, search
   by user/problem, view saved code in a modal, delete, CSV export
 - `payments.html` — Revenue from the verified `payment_grants` ledger
@@ -86,6 +88,60 @@ guessable from the main user-facing URL.
   ON/OFF switch, per-module toggles, problem-factory settings, manual
   run buttons, problem preview with validation checklist, moderation
   tester and the AI activity log
+
+## 🟢 Live activity — who's on the site RIGHT NOW + who practiced today
+
+The dashboard opens with a **Live activity** section (plus an "Active now"
+stat card):
+
+- **Live right now** — every REAL user currently using the PyDebug site,
+  by name, with the page they're on and "Ns ago". A green pulsing dot shows
+  it's live. This is *exact*: it updates the instant a user joins, and the
+  moment a user **closes the page/app, their name disappears** (within a few
+  seconds — no stale "ghost" users ever linger).
+- **Practiced today** — of *all* users, the ones who opened PyDebug to
+  practice today, by name, with submissions-today count and streak 🔥. The
+  "Practiced today" stat card also shows the share of total users.
+
+### How the "exact / instant" guarantee works
+
+1. The user-facing app writes a tiny heartbeat row into
+   `public.user_presence` every 25s while the site is in the foreground,
+   and deletes it the instant the user closes/leaves the page.
+2. The admin panel reads that table and subscribes to it via **Supabase
+   Realtime**, so every heartbeat/change lands on the dashboard immediately
+   (with a 25s polling fallback + a 5s local expiry tick as safety nets).
+3. A user only counts as **active** while their `last_seen_at` is within the
+   last **60 seconds**. Closing the page stops the heartbeats, so the name
+   drops out on its own — even if the browser is force-killed before the
+   leave-delete can run. Reopening the site puts them back instantly.
+
+### One-time setup for the live list (2 steps)
+
+1. **Re-run `supabase-admin-setup.sql`** in the Supabase SQL editor. It is
+   idempotent; the new section creates `user_presence`, its RLS (users only
+   ever touch their own row; admins read all) and adds the table to the
+   Realtime publication.
+2. **Add the heartbeat to the user-facing PyDebug app:** copy
+   `js/presence-heartbeat.js` into that app's `js/` folder and add ONE script
+   tag on its main pages, after the Supabase client script:
+
+   ```html
+   <script src="js/supabaseClient.js"></script>
+   <script src="js/presence-heartbeat.js"></script>
+   ```
+
+   Then re-deploy the user app. From that moment, its real users populate
+   "Live right now" here. Until that file is live in the user app, the list
+   correctly shows *Nobody is on the site right now* (it never fakes anyone).
+
+> **Privacy / safety:** the heartbeat stores only the user's own id and the
+> page path — RLS prevents any user from reading or touching another user's
+> row. The file is fully fail-safe and never affects the user app's own
+> behaviour. "Active" = the site is in the *foreground*; a backgrounded tab
+> (phone locked, other tab focused) drops out after 60s and reappears
+> instantly on return, which is the intended "really using it right now"
+> semantics.
 
 ## 🤖 Own-AI (built-in, zero API keys)
 
