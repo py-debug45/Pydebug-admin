@@ -341,6 +341,95 @@ td.muted, span.muted { color: var(--text-muted); }
 .top-list .rank { font-family: var(--font-mono); color: var(--accent-amber); width: 24px; flex-shrink: 0; }
 .top-list .meta { margin-left: auto; color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
 
+/* ---------- Live activity (real-time presence + daily practice) ---------- */
+.live-dot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  margin-right: 7px;
+  box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.55);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(63, 185, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+}
+.stat-card--live { border-color: rgba(63, 185, 80, 0.45); }
+.stat-card--live .value { display: flex; align-items: center; gap: 8px; }
+.stat-card--live .value::before {
+  content: "";
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  flex-shrink: 0;
+  animation: live-pulse 1.8s ease-out infinite;
+}
+.stat-card--live .sub { display: flex; align-items: center; gap: 5px; }
+.stat-card--live .sub .live-dot { margin-right: 0; }
+
+.live-cols { margin-top: 4px; }
+.live-card h3 { display: flex; align-items: center; }
+.live-card { border-color: rgba(63, 185, 80, 0.25); }
+.live-hint {
+  margin: -2px 0 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.section-card h3 .count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-family: var(--font-body);
+  margin-left: 4px;
+}
+
+.live-list { list-style: none; padding: 0; margin: 0; max-height: 330px; overflow-y: auto; }
+.live-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.86rem;
+}
+.live-list li:last-child { border-bottom: none; }
+.live-list .empty-row { border-bottom: none; }
+.live-item__dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  flex-shrink: 0;
+  animation: live-pulse 1.8s ease-out infinite;
+}
+.live-item__name {
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-item__page {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-item__meta { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
+.live-item__time { margin-left: auto; color: var(--text-muted); font-size: 0.75rem; white-space: nowrap; }
+.daily-rank { font-family: var(--font-mono); color: var(--accent-amber); width: 26px; flex-shrink: 0; }
+
+@media (max-width: 640px) {
+  .live-item__page { display: none; }
+  .live-item__meta { white-space: normal; }
+}
+
 /* ---------- Problem form ---------- */
 .admin-form { max-width: 720px; }
 .admin-form .field { margin-bottom: 18px; }

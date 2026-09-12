@@ -8,6 +8,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
+  // Live activity first — the "Active now" list and "Practiced today" are
+  // the headline of the dashboard; both are fire-and-forget so they never
+  // block the rest of the page.
+  initLivePresence();
+  loadDailyPractice();
+
   await Promise.all([loadStats(), loadProblems(0)]);
   loadAnalytics();
   loadActivity();
