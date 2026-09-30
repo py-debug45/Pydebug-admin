@@ -202,6 +202,14 @@ table.admin-table tbody tr { transition: background-color .16s ease; }
 .admin-stats-row .stat-card .value--green { color: var(--accent-green); }
 .admin-stats-row .stat-card .sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
 
+.page-intro { color: var(--text-muted); margin: -10px 0 22px; }
+.insight-list { display: grid; gap: 10px; margin-top: 14px; }
+.insight-row { position: relative; display: grid; grid-template-columns: 1fr auto 48px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.insight-row em { color: var(--text-muted); font-style: normal; font-size: .82rem; text-align: right; }
+.insight-row i { grid-column: 1 / -1; display: block; height: 5px; border-radius: 10px; background: linear-gradient(90deg, var(--mint), var(--green)); }
+.insight-item { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.insight-item small { color: var(--text-muted); }
+.insight-item a { color: var(--mint); font-size: .82rem; }
 .admin-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .admin-toolbar input, .admin-toolbar select {
   background: var(--bg-surface);

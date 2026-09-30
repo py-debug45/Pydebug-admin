@@ -157,6 +157,7 @@ async function togglePremium(btn) {
     btn.disabled = false;
     return;
   }
+  await writeAudit(isCurrentlyPremium ? "premium_revoked" : "premium_granted", "profile", id, { lifetime: true });
   showToast(isCurrentlyPremium ? "Premium revoked" : "Premium granted (lifetime)", "success");
   await loadUsers(usersPage);
 }

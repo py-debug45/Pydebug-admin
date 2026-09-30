@@ -18,6 +18,8 @@
     <div class="admin-sidebar__tag">ADMIN PANEL</div>
     <nav>
       <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
+      <a href="insights.html" data-admin-nav="insights.html">◈ Growth insights</a>
+      <a href="audit.html" data-admin-nav="audit.html">◌ Audit log</a>
       <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
       <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
       <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
@@ -37,6 +39,8 @@
       <h1>Dashboard</h1>
       <div class="admin-topbar__actions">
         <span data-ai-guard-pill class="ai-guard-pill ai-guard-pill--off">🤖 AI Guard OFF</span>
+        <a href="https://pydebug.in" target="_blank" rel="noopener" class="btn btn--secondary">Open user panel ↗</a>
+        <button type="button" class="btn btn--secondary" id="refresh-dashboard-btn" title="Refresh dashboard data">↻ Refresh</button>
         <a href="problem-form.html" class="btn btn--primary">+ Add New Problem</a>
       </div>
     </div>
@@ -141,6 +145,7 @@
 <script src="js/admin-common.js"></script>
 <script src="js/admin-charts.js"></script>
 <script src="js/admin-export.js"></script>
+<script src="js/admin-audit.js"></script>
 <script src="js/admin-presence.js"></script>
 <script src="js/admin-dashboard.js"></script>
 </body>
