@@ -403,6 +403,7 @@ async function deleteProblem(id, btn) {
     btn.textContent = "Delete";
     return;
   }
+  await writeAudit("problem_deleted", "problem", id, {});
   showToast("Problem deleted", "success");
   await loadStats();
   await loadProblems(problemsPage);
