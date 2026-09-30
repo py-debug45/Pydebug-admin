@@ -24,7 +24,35 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("admin-filter-difficulty").addEventListener("change", () => loadProblems(0));
   document.getElementById("admin-filter-access").addEventListener("change", () => loadProblems(0));
   document.getElementById("export-problems-btn").addEventListener("click", exportProblems);
+  document.getElementById("refresh-dashboard-btn")?.addEventListener("click", refreshDashboard);
 });
+
+// Keep the admin's view in sync with activity on pydebug.in without forcing a
+// full page reload (which would unnecessarily re-run the panel unlock flow).
+async function refreshDashboard() {
+  const button = document.getElementById("refresh-dashboard-btn");
+  if (!button || button.disabled) return;
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = "↻ Refreshing…";
+  try {
+    await Promise.all([
+      loadStats(),
+      loadProblems(problemsPage),
+      loadAnalytics(),
+      loadActivity(),
+      loadTopProblems(),
+      loadDailyPractice(),
+    ]);
+    showToast("Dashboard refreshed", "success");
+  } catch (error) {
+    console.warn("dashboard refresh:", error);
+    showToast("Some dashboard data could not be refreshed", "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
 
 async function countRows(queryBuilder, fallbackBuilder = null) {
   let { count, error } = await queryBuilder;
