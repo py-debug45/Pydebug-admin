@@ -84,3 +84,33 @@ function bucketByDay(rows, dateKey, days) {
   }
   return out;
 }
+
+// Smooth multi-series line chart for the overview card. Values are real
+// database buckets; the SVG is intentionally dependency-free and responsive.
+function svgLineChart(labels, series, opts = {}) {
+  const W = 760, H = 220, pad = { l: 30, r: 14, t: 18, b: 30 };
+  const count = labels.length;
+  if (!count || !series || !series.length) return `<div class="chart-empty">No data yet</div>`;
+  const max = Math.max(1, ...series.flatMap((s) => s.values || []));
+  const innerW = W - pad.l - pad.r;
+  const innerH = H - pad.t - pad.b;
+  const x = (i) => pad.l + (count === 1 ? innerW / 2 : (i / (count - 1)) * innerW);
+  const y = (v) => pad.t + innerH - ((Number(v) || 0) / max) * innerH;
+  const grid = [0, 0.5, 1].map((ratio) => {
+    const yy = pad.t + innerH * ratio;
+    const value = Math.round(max * (1 - ratio));
+    return `<line x1="${pad.l}" y1="${yy.toFixed(1)}" x2="${W - pad.r}" y2="${yy.toFixed(1)}" stroke="rgba(139,147,167,.16)" stroke-width="1" stroke-dasharray="3 5"/><text x="${pad.l - 8}" y="${(yy + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--text-muted)">${value}</text>`;
+  }).join("");
+  const xLabels = labels.map((label, i) => {
+    if (count > 14 && i % 3 !== 0 && i !== count - 1) return "";
+    return `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${escapeHtml(String(label))}</text>`;
+  }).join("");
+  const content = series.map((s) => {
+    const values = (s.values || []).map((v) => Number(v) || 0);
+    const points = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const fillPoints = `${x(0).toFixed(1)},${(pad.t + innerH).toFixed(1)} ${points} ${x(count - 1).toFixed(1)},${(pad.t + innerH).toFixed(1)}`;
+    const dots = values.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.2" fill="${s.color}" stroke="var(--bg-surface)" stroke-width="2"><title>${escapeHtml(String(labels[i]))}: ${v}</title></circle>`).join("");
+    return `<polygon points="${fillPoints}" fill="${s.color}" opacity=".08"></polygon><polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>${dots}`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg chart-svg--line" role="img" aria-label="${escapeHtml(opts.ariaLabel || "Growth overview chart")}">${grid}${content}${xLabels}</svg>`;
+}

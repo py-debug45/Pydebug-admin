@@ -1661,15 +1661,31 @@ function AI_pyAssignSplit(line) {
 function AI_codeShapeOK(code) {
   const live = AI_pyPrep(String(code || "")).filter((l) => l.text);
   let depth = 0;
+  const stack = [];
   for (const l of live) {
-    if (/['"]/.test(l.code)) return false;
-    for (const ch of l.code) {
-      if (ch === "(" || ch === "[" || ch === "{") depth++;
-      else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    let quote = null;
+    let escaped = false;
+    for (let i = 0; i < l.code.length; i++) {
+      const ch = l.code[i];
+      if (quote) {
+        if (escaped) { escaped = false; continue; }
+        if (ch === "\\") { escaped = true; continue; }
+        if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === "#") break;
+      if (ch === "'" || ch === '"') { quote = ch; continue; }
+      if (ch === "(" || ch === "[" || ch === "{") { stack.push(ch); depth++; }
+      else if (ch === ")" || ch === "]" || ch === "}") {
+        const expected = { ")": "(", "]": "[", "}": "{" }[ch];
+        if (stack.pop() !== expected) return false;
+        depth--;
+      }
       if (depth < 0) return false;
     }
+    if (quote) return false;
   }
-  return depth === 0;
+  return depth === 0 && stack.length === 0;
 }
 
 function AI_detectPythonError(code) {
@@ -2398,6 +2414,80 @@ function AI_detectPythonError(code) {
   }
 
   return { error: null, detail: "no error detected", line: 0 };
+}
+
+/* -------------------------------------------------------------------------
+   Local code diagnostic lab — a private, deterministic second pair of eyes.
+   It never sends code off-device and never executes untrusted code.
+   ------------------------------------------------------------------------- */
+function AI_diagnoseCode(code) {
+  const src = String(code || "");
+  const diagnostics = [];
+  const add = (severity, message, line, detail) => diagnostics.push({ severity, message, line: line || 0, detail: detail || "" });
+  if (!src.trim()) return { ok: false, diagnostics: [{ severity: "info", message: "Paste some Python code to inspect it.", line: 0 }] };
+
+  try {
+    const detected = AI_detectPythonError(src);
+    if (detected.error) {
+      add("error", `${detected.error}: ${detected.detail}`, detected.line, "This is the first likely runtime or syntax failure found by the local checker.");
+    }
+  } catch (e) {
+    add("info", "The local Python checker could not read this snippet.", 0, String(e.message || e));
+  }
+
+  const lines = src.split(/\r?\n/);
+  const literalLengths = {};
+  const lineOf = (re) => {
+    const index = lines.findIndex((line) => re.test(line));
+    return index < 0 ? 0 : index + 1;
+  };
+  // These are high-signal mistakes that can still produce valid Python.
+  lines.forEach((raw, index) => {
+    const line = raw.trim();
+    const number = index + 1;
+    if (!line || line.startsWith("#")) return;
+    const literal = line.match(/^([A-Za-z_]\w*)\s*=\s*\[([^\]]*)\]/);
+    if (literal) literalLengths[literal[1]] = literal[2].trim() ? literal[2].split(",").length : 0;
+    if (/\b[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w*\.sort\s*\(/.test(line)) {
+      add("warning", "list.sort() changes the list and returns None.", number, "Use sorted(items) when you need a new list value.");
+    }
+    if (/\s*=\s*[^=].*\.(append|extend|insert|remove|reverse)\s*\(/.test(line)) {
+      add("warning", "This list method mutates in place and returns None.", number, "Do the mutation on its own line, then use the list.");
+    }
+    const indexUse = line.match(/\b([A-Za-z_]\w*)\s*\[\s*(-?\d+)\s*\]/);
+    if (indexUse && literalLengths[indexUse[1]] !== undefined) {
+      const index = Number(indexUse[2]);
+      const length = literalLengths[indexUse[1]];
+      if (index >= length || index < -length) add("error", `Index ${index} is outside ${indexUse[1]} (length ${length}).`, number, "Valid indexes run from 0 to length - 1, or -1 backwards.");
+    }
+    if (/\bis\s+(None|True|False|[0-9]+|["'])/.test(line)) {
+      add("warning", "Use == for value comparison here; is checks object identity.", number, "Keep is for None, True or False identity checks.");
+    }
+    if (/except\s*:\s*$/.test(line)) {
+      add("tip", "Bare except catches every error, including unexpected system exits.", number, "Prefer a specific exception such as except ValueError:");
+    }
+    if (/\bfor\s+\w+\s+in\s+range\s*\(\s*1\s*,\s*len\s*\(/.test(line)) {
+      add("tip", "Check the range start: beginning at 1 skips the first item.", number, "This may be intentional, but it is a common off-by-one mistake.");
+    }
+    if (/\bprint\s*\([^)]*\)\s*#?\s*$/.test(line) && /\bdebug\b/i.test(line)) {
+      add("tip", "Debug print left in the snippet.", number, "Remove it or make the learner-facing output explicit.");
+    }
+  });
+
+  // A balanced snippet is a useful, independent check even when the runtime
+  // detector has no opinion about the code yet.
+  try {
+    if (!AI_codeShapeOK(src)) add("error", "Unbalanced brackets or an unclosed string.", lineOf(/[([{][^\n]*$/), "Check every (), [] and {} pair and close quoted strings.");
+  } catch (e) {}
+
+  // De-duplicate identical messages so the report stays calm and useful.
+  const unique = [];
+  const seen = new Set();
+  diagnostics.forEach((item) => {
+    const key = `${item.severity}|${item.message}|${item.line}`;
+    if (!seen.has(key)) { seen.add(key); unique.push(item); }
+  });
+  return { ok: !unique.some((item) => item.severity === "error"), diagnostics: unique };
 }
 
 /* ============================================================
