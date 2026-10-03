@@ -104,6 +104,7 @@ function bindControls() {
   });
 
   // Action buttons
+  document.getElementById("ai-btn-diagnose")?.addEventListener("click", diagnoseCodeNow);
   document.getElementById("ai-btn-scan").addEventListener("click", runModerationNow);
   document.getElementById("ai-btn-generate").addEventListener("click", generateNow);
   document.getElementById("ai-btn-preview").addEventListener("click", previewNow);
@@ -130,6 +131,22 @@ function setBusy(btnId, busy, idleText) {
     btn.disabled = false;
     btn.textContent = btn.dataset.idle || idleText || btn.textContent;
   }
+}
+
+function diagnoseCodeNow() {
+  const input = document.getElementById("ai-code-input");
+  const result = document.getElementById("ai-diagnose-result");
+  if (!input || !result || typeof AI_diagnoseCode !== "function") return;
+  const report = AI_diagnoseCode(input.value);
+  if (!report.diagnostics.length) {
+    result.innerHTML = `<div class="ai-diagnose-ok"><span>✓</span><div><strong>No high-signal issues found</strong><small>The snippet passed the local structural checks. Still test the intended output before publishing.</small></div></div>`;
+    return;
+  }
+  result.innerHTML = `<div class="ai-diagnose-list">${report.diagnostics.map((item) => `
+    <div class="ai-diagnose-item ai-diagnose-item--${item.severity}">
+      <span class="ai-diagnose-item__badge">${item.severity === "error" ? "!" : item.severity === "warning" ? "i" : "•"}</span>
+      <div><strong>${escapeHtml(item.message)}${item.line ? ` <em>line ${item.line}</em>` : ""}</strong><small>${escapeHtml(item.detail || "Review this line before shipping.")}</small></div>
+    </div>`).join("")}</div>`;
 }
 
 async function runModerationNow() {

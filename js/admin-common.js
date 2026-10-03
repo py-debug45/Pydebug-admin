@@ -323,10 +323,32 @@ function detectCol(sample, candidates) {
 
 function markAdminActiveNav() {
   const page = window.location.pathname.split("/").pop() || "dashboard.html";
-  document.querySelectorAll("[data-admin-nav]").forEach((link) => {
-    if (link.getAttribute("data-admin-nav") === page) link.classList.add("active");
+  const links = document.querySelectorAll(".admin-sidebar nav a");
+  links.forEach((link) => {
+    const target = link.getAttribute("data-admin-nav") || (link.getAttribute("href") || "").split("#")[0];
+    link.classList.toggle("active", target === page);
+    if (target) link.dataset.adminNav = target;
   });
 }
+
+// Older admin pages intentionally keep their HTML compact. Add the two
+// strategic workspace links here so every page has the same navigation depth.
+function ensureAdminNavigation() {
+  const nav = document.querySelector(".admin-sidebar nav");
+  if (!nav) return;
+  const has = (page) => !!nav.querySelector(`a[href="${page}"]`);
+  const make = (page, label) => {
+    const link = document.createElement("a");
+    link.href = page;
+    link.dataset.adminNav = page;
+    link.textContent = label;
+    return link;
+  };
+  const dashboard = nav.querySelector('a[href="dashboard.html"]');
+  if (!has("insights.html")) nav.insertBefore(make("insights.html", "◈  Growth insights"), dashboard ? dashboard.nextSibling : nav.firstChild);
+  if (!has("audit.html")) nav.insertBefore(make("audit.html", "◌  Audit log"), nav.querySelector('a[href="submissions.html"]') || null);
+}
+
 
 // Renders Prev/Next pagination controls. `page` is 0-based, `total` is the
 // full (filtered) row count. Hidden entirely when everything fits on one page.
@@ -358,6 +380,7 @@ function renderPagination(container, page, total, onPageChange) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  ensureAdminNavigation();
   injectAdminMobileNavigation();
   markAdminActiveNav();
   document.querySelectorAll("[data-admin-logout]").forEach((btn) =>

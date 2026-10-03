@@ -3,10 +3,41 @@
 let dashboardProblems = [];
 let problemsPage = 0;
 let problemsTotal = 0;
+let analyticsDays = 14;
+let analyticsRequest = 0;
+
+const SOLVED_STATUSES = ["solved", "success", "correct", "passed", "true", "1", "succeeded", "captured", "paid", "completed"];
+function isSolvedSubmission(row, statusColumn) {
+  return row && (row.is_correct === true || SOLVED_STATUSES.includes(String(row[statusColumn] ?? "").toLowerCase()));
+}
+
+function setTrend(id, current, previous, suffix = "") {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (previous === null || previous === undefined) {
+    el.textContent = "live comparison unavailable";
+    el.className = "sub trend trend--neutral";
+    return;
+  }
+  const delta = Number(current || 0) - Number(previous || 0);
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const displayDelta = suffix === "₹" ? `${sign}₹${Math.abs(Math.round(delta)).toLocaleString("en-IN")}` : `${sign}${Math.abs(delta).toLocaleString("en-IN")}${suffix}`;
+  el.textContent = `${displayDelta} vs previous period`;
+  el.className = `sub trend ${delta > 0 ? "trend--up" : delta < 0 ? "trend--down" : "trend--neutral"}`;
+}
+
+function updateSyncStamp() {
+  const el = document.getElementById("dashboard-last-sync");
+  if (el) el.textContent = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   const admin = await requireAdmin();
   if (!admin) return;
+
+  const name = admin.display_name || admin.full_name || admin.email || "admin";
+  const greeting = document.getElementById("dashboard-admin-greeting");
+  if (greeting) greeting.textContent = name.split(" ")[0];
 
   // Live activity first — the "Active now" list and "Practiced today" are
   // the headline of the dashboard; both are fire-and-forget so they never
@@ -18,6 +49,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadAnalytics();
   loadActivity();
   loadTopProblems();
+  loadAIBrief();
+
+  document.querySelectorAll("#analytics-range [data-days]").forEach((button) => {
+    button.addEventListener("click", () => {
+      analyticsDays = Number(button.dataset.days) || 14;
+      document.querySelectorAll("#analytics-range [data-days]").forEach((b) => b.classList.toggle("is-active", b === button));
+      loadAnalytics();
+    });
+  });
 
   document.getElementById("admin-search").addEventListener("input", debounce(() => loadProblems(0), 300));
   document.getElementById("admin-filter-type").addEventListener("change", () => loadProblems(0));
@@ -43,7 +83,9 @@ async function refreshDashboard() {
       loadActivity(),
       loadTopProblems(),
       loadDailyPractice(),
+      loadAIBrief(),
     ]);
+    updateSyncStamp();
     showToast("Dashboard refreshed", "success");
   } catch (error) {
     console.warn("dashboard refresh:", error);
@@ -111,12 +153,21 @@ async function loadStats() {
     if (error) throw error;
     const rows = data || [];
     const total = rows.reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
-    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const previousMonthAgo = now - 60 * 24 * 60 * 60 * 1000;
     const monthTotal = rows
       .filter((g) => new Date(g.created_at).getTime() >= monthAgo)
       .reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
+    const previousMonthTotal = rows
+      .filter((g) => {
+        const t = new Date(g.created_at).getTime();
+        return t >= previousMonthAgo && t < monthAgo;
+      })
+      .reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
     document.getElementById("stat-revenue").textContent = fmtINR(total / 100);
     document.getElementById("stat-month-revenue").textContent = fmtINR(monthTotal / 100);
+    setTrend("stat-month-revenue-trend", monthTotal / 100, previousMonthTotal, "₹");
   } catch (e) {
     console.warn("loadStats revenue:", e.message);
     document.getElementById("stat-revenue").textContent = "₹—";
@@ -129,75 +180,93 @@ async function loadStats() {
     document.getElementById("stat-submissions").textContent = (totalSubs ?? 0).toLocaleString("en-IN");
     const { data: sample } = await sb.from("submissions").select("*").order("created_at", { ascending: false }).limit(1000);
     const stCol = detectCol((sample || [])[0], ["status", "result", "verdict"]);
-    const solved = (sample || []).filter((s) =>
-      ["solved", "success", "correct", "passed", "true", "1"].includes(String(s[stCol] ?? "").toLowerCase()) || s.is_correct === true
-    ).length;
+    const solved = (sample || []).filter((s) => isSolvedSubmission(s, stCol)).length;
     document.getElementById("stat-solve-rate").textContent = sample && sample.length ? Math.round((solved / sample.length) * 100) + "%" : "—";
   } catch (e) {
     console.warn("loadStats submissions:", e.message);
   }
 
-  // New users in last 7 days.
+  // New users in last 7 days, with a real previous-period comparison.
   try {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { count: newUsers } = await sb.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", weekAgo);
-    document.getElementById("stat-new-users").textContent = newUsers ?? 0;
+    const now = Date.now();
+    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const twoWeeksAgo = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const [{ count: newUsers, error: currentError }, { count: previousUsers, error: previousError }] = await Promise.all([
+      sb.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      sb.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", twoWeeksAgo).lt("created_at", weekAgo),
+    ]);
+    document.getElementById("stat-new-users").textContent = currentError ? "—" : (newUsers ?? 0).toLocaleString("en-IN");
+    setTrend("stat-new-users-trend", newUsers ?? 0, previousError ? null : (previousUsers ?? 0));
   } catch (e) {
     console.warn("loadStats new users:", e.message);
   }
+  updateSyncStamp();
 }
 
 async function loadAnalytics() {
-  // Signups chart.
+  const requestId = ++analyticsRequest;
+  const days = analyticsDays;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   try {
-    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await sb.from("profiles").select("created_at").gte("created_at", twoWeeksAgo).limit(10000);
-    const buckets = bucketByDay(data || [], "created_at", 14);
-    document.getElementById("chart-signups").innerHTML =
-      svgBarChart(buckets.map((b) => b.label), buckets.map((b) => b.value), { color: CHART_COLORS.mint });
-  } catch (e) {
-    document.getElementById("chart-signups").innerHTML = `<div class="chart-empty">Unavailable</div>`;
-  }
+    const [profilesResult, submissionsResult, problemsResult] = await Promise.all([
+      sb.from("profiles").select("created_at").gte("created_at", since).limit(10000),
+      sb.from("submissions").select("*").gte("created_at", since).limit(10000),
+      sb.from("problems").select("difficulty").limit(5000),
+    ]);
+    if (requestId !== analyticsRequest) return;
 
-  // Submissions chart + status donut.
-  try {
-    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await sb.from("submissions").select("*").gte("created_at", twoWeeksAgo).limit(10000);
-    const rows = data || [];
-    const buckets = bucketByDay(rows, "created_at", 14);
-    document.getElementById("chart-submissions").innerHTML =
-      svgBarChart(buckets.map((b) => b.label), buckets.map((b) => b.value), { color: CHART_COLORS.amber });
+    const signupRows = profilesResult.data || [];
+    const submissionRows = submissionsResult.data || [];
+    const signupBuckets = bucketByDay(signupRows, "created_at", days);
+    const submissionBuckets = bucketByDay(submissionRows, "created_at", days);
+    const labels = signupBuckets.map((b) => b.label);
+    const signupValues = signupBuckets.map((b) => b.value);
+    const submissionValues = submissionBuckets.map((b) => b.value);
 
-    const stCol = detectCol(rows[0], ["status", "result", "verdict"]);
+    document.getElementById("chart-signups").innerHTML = profilesResult.error
+      ? `<div class="chart-empty">Unavailable — check profiles access</div>`
+      : svgBarChart(labels, signupValues, { color: CHART_COLORS.mint });
+    document.getElementById("chart-submissions").innerHTML = submissionsResult.error
+      ? `<div class="chart-empty">Unavailable — check submissions access</div>`
+      : svgBarChart(labels, submissionValues, { color: CHART_COLORS.amber });
+    document.getElementById("chart-overview").innerHTML = (profilesResult.error || submissionsResult.error)
+      ? `<div class="chart-empty">Analytics needs a readable profiles and submissions table.</div>`
+      : svgLineChart(labels, [
+        { name: "New learners", values: signupValues, color: CHART_COLORS.mint },
+        { name: "Submissions", values: submissionValues, color: CHART_COLORS.amber },
+      ], { ariaLabel: `New learners and submissions over the last ${days} days` });
+    const summary = document.getElementById("chart-overview-summary");
+    if (summary) summary.textContent = `${signupValues.reduce((a, b) => a + b, 0).toLocaleString("en-IN")} learners · ${submissionValues.reduce((a, b) => a + b, 0).toLocaleString("en-IN")} attempts`;
+
+    const stCol = detectCol(submissionRows[0], ["status", "result", "verdict"]);
     let solved = 0, attempted = 0;
-    rows.forEach((s) => {
-      const ok = ["solved", "success", "correct", "passed", "true", "1"].includes(String(s[stCol] ?? "").toLowerCase()) || s.is_correct === true;
-      ok ? solved++ : attempted++;
-    });
-    document.getElementById("chart-status").innerHTML = svgDonut([
-      { label: "Solved", value: solved, color: CHART_COLORS.green },
-      { label: "Attempted", value: attempted, color: CHART_COLORS.amber },
-    ]);
-  } catch (e) {
-    document.getElementById("chart-submissions").innerHTML = `<div class="chart-empty">Run supabase-admin-setup.sql to enable</div>`;
-    document.getElementById("chart-status").innerHTML = `<div class="chart-empty">Run supabase-admin-setup.sql to enable</div>`;
-  }
+    submissionRows.forEach((row) => isSolvedSubmission(row, stCol) ? solved++ : attempted++);
+    document.getElementById("chart-status").innerHTML = submissionsResult.error
+      ? `<div class="chart-empty">Unavailable</div>`
+      : svgDonut([
+        { label: "Solved", value: solved, color: CHART_COLORS.green },
+        { label: "Attempted", value: attempted, color: CHART_COLORS.amber },
+      ]);
 
-  // Difficulty donut.
-  try {
-    const { data } = await sb.from("problems").select("difficulty").limit(5000);
     const counts = { easy: 0, medium: 0, hard: 0 };
-    (data || []).forEach((p) => {
-      const d = String(p.difficulty || "").toLowerCase();
-      if (counts[d] !== undefined) counts[d]++;
+    (problemsResult.data || []).forEach((problem) => {
+      const difficulty = String(problem.difficulty || "").toLowerCase();
+      if (counts[difficulty] !== undefined) counts[difficulty]++;
     });
-    document.getElementById("chart-difficulty").innerHTML = svgDonut([
-      { label: "Easy", value: counts.easy, color: CHART_COLORS.green },
-      { label: "Medium", value: counts.medium, color: CHART_COLORS.amber },
-      { label: "Hard", value: counts.hard, color: CHART_COLORS.red },
-    ]);
+    document.getElementById("chart-difficulty").innerHTML = problemsResult.error
+      ? `<div class="chart-empty">Unavailable</div>`
+      : svgDonut([
+        { label: "Easy", value: counts.easy, color: CHART_COLORS.green },
+        { label: "Medium", value: counts.medium, color: CHART_COLORS.amber },
+        { label: "Hard", value: counts.hard, color: CHART_COLORS.red },
+      ]);
   } catch (e) {
-    document.getElementById("chart-difficulty").innerHTML = `<div class="chart-empty">Unavailable</div>`;
+    if (requestId !== analyticsRequest) return;
+    ["chart-overview", "chart-signups", "chart-submissions", "chart-status", "chart-difficulty"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<div class="chart-empty">Analytics unavailable right now.</div>`;
+    });
+    console.warn("loadAnalytics:", e.message);
   }
 }
 
@@ -282,6 +351,38 @@ async function loadTopProblems() {
     ).join("");
   } catch (e) {
     list.innerHTML = `<li class="empty-row">Run supabase-admin-setup.sql to enable.</li>`;
+  }
+}
+
+async function loadAIBrief() {
+  const scoreEl = document.getElementById("dashboard-ai-score");
+  const stateEl = document.getElementById("dashboard-ai-state");
+  const metaEl = document.getElementById("dashboard-ai-meta");
+  const list = document.getElementById("dashboard-ai-checks");
+  if (!scoreEl || !list) return;
+  try {
+    const settings = typeof AI_getSettings === "function" ? AI_getSettings() : { master: false };
+    const pill = document.querySelector("[data-ai-guard-pill]");
+    if (pill) {
+      pill.textContent = settings.master ? "🤖 AI Guard ON" : "🤖 AI Guard OFF";
+      pill.classList.toggle("ai-guard-pill--on", !!settings.master);
+      pill.classList.toggle("ai-guard-pill--off", !settings.master);
+    }
+    if (typeof AI_healthCheck !== "function") throw new Error("AI quality engine unavailable");
+    const health = await AI_healthCheck();
+    scoreEl.textContent = String(health.score);
+    scoreEl.dataset.score = health.score;
+    stateEl.textContent = health.score >= 90 ? "Content looks sharp" : health.score >= 70 ? "A few fixes worth reviewing" : "Attention needed";
+    metaEl.textContent = `${health.checks.length} checks · ${settings.master ? "AI Guard is watching" : "AI Guard is paused"}`;
+    const findings = health.checks.filter((check) => check.status !== "ok").slice(0, 3);
+    list.innerHTML = findings.length
+      ? findings.map((check) => `<li><span class="ai-brief-list__icon ai-brief-list__icon--${check.status}">${check.status === "bad" ? "!" : "•"}</span><span><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(check.detail)}</small></span></li>`).join("")
+      : `<li class="ai-brief-good"><span>✓</span><span><strong>No small issues found</strong><small>Problems, hints and discussions passed the local checks.</small></span></li>`;
+  } catch (error) {
+    scoreEl.textContent = "—";
+    stateEl.textContent = "Quality scan paused";
+    metaEl.textContent = "Open AI Control to run a full check";
+    list.innerHTML = `<li class="ai-brief-good"><span>i</span><span><strong>AI is ready without an API key</strong><small>${escapeHtml(error.message || "Run the quality report from AI Control.")}</small></span></li>`;
   }
 }
 

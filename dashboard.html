@@ -35,31 +35,48 @@
   </aside>
 
   <main class="admin-main">
-    <div class="admin-topbar">
-      <h1>Dashboard</h1>
+    <div class="admin-topbar dashboard-topbar">
+      <div class="topbar-heading">
+        <div class="admin-eyebrow">PYDEBUG / COMMAND CENTER</div>
+        <h1>Good morning, <span id="dashboard-admin-greeting">admin</span></h1>
+        <p>One calm view of your learning brand — learners, revenue, content and quality.</p>
+      </div>
       <div class="admin-topbar__actions">
         <span data-ai-guard-pill class="ai-guard-pill ai-guard-pill--off">🤖 AI Guard OFF</span>
-        <a href="https://pydebug.in" target="_blank" rel="noopener" class="btn btn--secondary">Open user panel ↗</a>
+        <a href="https://pydebug.in" target="_blank" rel="noopener" class="btn btn--secondary">View user panel <span aria-hidden="true">↗</span></a>
         <button type="button" class="btn btn--secondary" id="refresh-dashboard-btn" title="Refresh dashboard data">↻ Refresh</button>
-        <a href="problem-form.html" class="btn btn--primary">+ Add New Problem</a>
+        <a href="problem-form.html" class="btn btn--primary">+ Add problem</a>
       </div>
     </div>
 
-    <div class="admin-stats-row">
-      <div class="stat-card"><div class="value" id="stat-total-users">0</div><div class="label">Total users</div></div>
-      <div class="stat-card"><div class="value" id="stat-premium-users">0</div><div class="label">Premium users</div></div>
-      <div class="stat-card"><div class="value" id="stat-total-problems">0</div><div class="label">Total problems</div></div>
-      <div class="stat-card"><div class="value" id="stat-premium-problems">0</div><div class="label">Premium problems</div></div>
-      <div class="stat-card"><div class="value value--green" id="stat-revenue">₹0</div><div class="label">Total revenue</div><div class="sub">successful payments</div></div>
+    <section class="dashboard-hero" aria-label="Dashboard overview">
+      <div class="dashboard-hero__copy">
+        <span class="live-status"><span class="live-dot"></span> Live data connected</span>
+        <h2>Your product, in focus.</h2>
+        <p>Track the moments that matter: who is learning, what they solve, and where PyDebug can feel even sharper.</p>
+      </div>
+      <div class="dashboard-hero__meta">
+        <div><span>Last synced</span><strong id="dashboard-last-sync">Waiting for data…</strong></div>
+        <div><span>Data sources</span><strong><i class="data-source-dot"></i> Supabase live</strong></div>
+      </div>
+    </section>
+
+    <div class="admin-section-title dashboard-section-heading">Business snapshot <span class="section-note">real-time database metrics</span></div>
+    <div class="admin-stats-row dashboard-kpis">
+      <div class="stat-card stat-card--accent"><div class="kpi-icon">⌁</div><div class="value" id="stat-total-users">0</div><div class="label">Total learners</div><div class="sub">all registered profiles</div></div>
+      <div class="stat-card"><div class="kpi-icon kpi-icon--mint">✦</div><div class="value" id="stat-premium-users">0</div><div class="label">Active premium</div><div class="sub">paid access in force</div></div>
+      <div class="stat-card"><div class="kpi-icon kpi-icon--blue">▦</div><div class="value" id="stat-total-problems">0</div><div class="label">Problem library</div><div class="sub">free + premium</div></div>
+      <div class="stat-card"><div class="kpi-icon kpi-icon--purple">◆</div><div class="value" id="stat-premium-problems">0</div><div class="label">Premium content</div><div class="sub">deeper practice</div></div>
+      <div class="stat-card stat-card--revenue"><div class="kpi-icon kpi-icon--green">₹</div><div class="value value--green" id="stat-revenue">₹0</div><div class="label">Lifetime revenue</div><div class="sub">verified payments only</div></div>
     </div>
 
-    <div class="admin-stats-row">
-      <div class="stat-card stat-card--live"><div class="value value--green" id="stat-active-now">0</div><div class="label">Active now</div><div class="sub"><span class="live-dot"></span>live · names below</div></div>
+    <div class="admin-stats-row dashboard-secondary-kpis">
+      <div class="stat-card stat-card--live"><div class="value value--green" id="stat-active-now">0</div><div class="label">Active right now</div><div class="sub"><span class="live-dot"></span> live users on site</div></div>
       <div class="stat-card"><div class="value value--mint" id="stat-daily-practice">—</div><div class="label">Practiced today</div><div class="sub" id="stat-daily-sub">since midnight</div></div>
-      <div class="stat-card"><div class="value value--mint" id="stat-submissions">—</div><div class="label">Total submissions</div></div>
-      <div class="stat-card"><div class="value value--green" id="stat-solve-rate">—</div><div class="label">Solve rate</div></div>
-      <div class="stat-card"><div class="value value--mint" id="stat-new-users">—</div><div class="label">New users (7 days)</div></div>
-      <div class="stat-card"><div class="value" id="stat-month-revenue">—</div><div class="label">Revenue (30 days)</div></div>
+      <div class="stat-card"><div class="value value--mint" id="stat-submissions">—</div><div class="label">Total submissions</div><div class="sub">all learner attempts</div></div>
+      <div class="stat-card"><div class="value value--green" id="stat-solve-rate">—</div><div class="label">Solve rate</div><div class="sub">from recorded attempts</div></div>
+      <div class="stat-card"><div class="value value--mint" id="stat-new-users">—</div><div class="label">New learners · 7 days</div><div class="sub" id="stat-new-users-trend">vs previous 7 days</div></div>
+      <div class="stat-card"><div class="value" id="stat-month-revenue">—</div><div class="label">Revenue · 30 days</div><div class="sub" id="stat-month-revenue-trend">vs previous 30 days</div></div>
     </div>
 
     <div class="admin-section-title">Live activity <span class="pill-count" id="live-updated"></span></div>
@@ -76,26 +93,42 @@
       </div>
     </div>
 
-    <div class="admin-section-title">Analytics</div>
-    <div class="admin-charts-grid">
-      <div class="chart-card"><h3>New users — last 14 days</h3><div id="chart-signups"><div class="chart-empty">Loading...</div></div></div>
-      <div class="chart-card"><h3>Submissions — last 14 days</h3><div id="chart-submissions"><div class="chart-empty">Loading...</div></div></div>
-      <div class="chart-card"><h3>Problems by difficulty</h3><div id="chart-difficulty"><div class="chart-empty">Loading...</div></div></div>
-      <div class="chart-card"><h3>Submissions by status</h3><div id="chart-status"><div class="chart-empty">Loading...</div></div></div>
+    <div class="admin-section-title analytics-title">Analytics <span class="section-note">measure momentum, not vanity</span><div class="range-switch" id="analytics-range" role="group" aria-label="Analytics range"><button type="button" data-days="7">7D</button><button type="button" class="is-active" data-days="14">14D</button><button type="button" data-days="30">30D</button></div></div>
+    <div class="admin-charts-grid dashboard-charts-grid">
+      <div class="chart-card chart-card--wide">
+        <div class="chart-card__head"><div><h3>Growth overview</h3><p>New learners and learner activity</p></div><strong id="chart-overview-summary">Loading…</strong></div>
+        <div id="chart-overview"><div class="chart-empty">Loading live analytics…</div></div>
+        <div class="chart-key"><span><i class="chart-key__dot chart-key__dot--mint"></i>New learners</span><span><i class="chart-key__dot chart-key__dot--amber"></i>Submissions</span></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card__head"><div><h3>New learners</h3><p>Daily signups</p></div><span class="chart-live-label">LIVE</span></div>
+        <div id="chart-signups"><div class="chart-empty">Loading...</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card__head"><div><h3>Submissions</h3><p>Daily practice attempts</p></div><span class="chart-live-label chart-live-label--amber">ACTIVITY</span></div>
+        <div id="chart-submissions"><div class="chart-empty">Loading...</div></div>
+      </div>
+      <div class="chart-card"><div class="chart-card__head"><div><h3>Content mix</h3><p>Difficulty across the library</p></div></div><div id="chart-difficulty"><div class="chart-empty">Loading...</div></div></div>
+      <div class="chart-card"><div class="chart-card__head"><div><h3>Attempt outcomes</h3><p>Recorded submission status</p></div></div><div id="chart-status"><div class="chart-empty">Loading...</div></div></div>
     </div>
 
-    <div class="admin-cols">
-      <div class="section-card">
-        <h3>Recent activity</h3>
+    <div class="admin-cols dashboard-bottom-grid">
+      <div class="section-card activity-card">
+        <div class="section-card__head"><div><h3>Recent activity</h3><p>What is happening across PyDebug</p></div><a href="submissions.html" class="text-link">View all <span>→</span></a></div>
         <ul class="activity-feed" id="activity-feed"><li class="empty-row">Loading...</li></ul>
       </div>
-      <div class="section-card">
-        <h3>Top problems by attempts</h3>
+      <div class="section-card ai-command-card">
+        <div class="section-card__head"><div><h3>AI quality copilot</h3><p>Rule-based, private and API-key free</p></div><a href="ai.html" class="text-link">Open AI <span>→</span></a></div>
+        <div class="ai-brief-score"><div class="ai-brief-score__ring" id="dashboard-ai-score">—</div><div><strong id="dashboard-ai-state">Checking quality…</strong><span id="dashboard-ai-meta">Scanning tiny content and code issues</span></div></div>
+        <ul class="ai-brief-list" id="dashboard-ai-checks"><li class="empty-row">Running local checks…</li></ul>
+      </div>
+      <div class="section-card top-problems-card">
+        <div class="section-card__head"><div><h3>Top problems</h3><p>Most attempted in the latest data</p></div><a href="#problems" class="text-link">Manage <span>→</span></a></div>
         <ul class="top-list" id="top-problems"><li class="empty-row">Loading...</li></ul>
       </div>
     </div>
 
-    <div class="admin-section-title">All problems <span class="count" id="problems-count"></span></div>
+    <div class="admin-section-title" id="problems">All problems <span class="count" id="problems-count"></span><span class="section-note">content operations</span></div>
 
     <div class="admin-toolbar">
       <input type="text" id="admin-search" placeholder="Search problems by title...">

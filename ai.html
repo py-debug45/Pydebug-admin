@@ -277,6 +277,16 @@
     <!-- Preview -->
     <div class="section-card" id="ai-preview" style="display:none"></div>
 
+    <!-- Local code diagnostic lab -->
+    <div class="section-card ai-diagnostic-card">
+      <div class="section-card__head"><div><h3>🧠 Code diagnostic lab</h3><p>Find small Python mistakes privately — no API key, no code leaves this browser.</p></div><span class="ai-local-badge">LOCAL ENGINE</span></div>
+      <div class="field" style="margin-top:14px">
+        <textarea id="ai-code-input" class="ai-code-input" placeholder="Paste a Python snippet here…\n\nitems = [3, 1, 2]\nordered = items.sort()\nprint(ordered)"></textarea>
+      </div>
+      <div class="ai-actions"><button class="btn btn--primary btn--sm" id="ai-btn-diagnose">🔎 Diagnose code</button><span class="muted ai-diagnostic-note">Static checks only — it never executes untrusted code.</span></div>
+      <div id="ai-diagnose-result" class="ai-diagnose-result" aria-live="polite"></div>
+    </div>
+
     <!-- Moderation tester -->
     <div class="section-card">
       <h3>🧪 Test the moderation filter</h3>

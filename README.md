@@ -62,9 +62,11 @@ guessable from the main user-facing URL.
   moving between admin pages in the same tab, and requested again after a
   reload or a new visit.
 - `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
-  name, updates in real time + who practiced today by name) + stats +
-  analytics charts (signups, submissions, difficulty & status donuts) +
-  recent activity feed + top problems + all problems (search / type /
+  name, updates in real time + who practiced today by name) + a polished
+  brand command center with real KPI comparisons (new learners and revenue
+  versus the previous period), range-aware SVG growth charts (7 / 14 / 30
+  days), signups, submissions, difficulty & status donuts, recent activity,
+  a live AI quality brief, top problems + all problems (search / type /
   difficulty / access filters, duplicate, edit, delete, CSV export).
   Premium-user count is expiry-aware.
 - `submissions.html` — Every user's progress row: filter by status, search
@@ -86,8 +88,9 @@ guessable from the main user-facing URL.
   achievements grid, recent submissions
 - `ai.html` — 🤖 **Own-AI Control Center** (no API key needed): master
   ON/OFF switch, per-module toggles, problem-factory settings, manual
-  run buttons, problem preview with validation checklist, moderation
-  tester and the AI activity log
+  run buttons, problem preview with validation checklist, moderation tester,
+  private code diagnostic lab for common Python mistakes, and the AI activity
+  log
 
 ## 🟢 Live activity — who's on the site RIGHT NOW + who practiced today
 
