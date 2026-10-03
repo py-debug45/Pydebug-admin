@@ -4,7 +4,7 @@
 // Table: notifications(id, user_id, type, title, message, link, is_read,
 // created_at). The setup SQL creates it if it doesn't exist yet.
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
@@ -45,10 +45,8 @@ async function loadRecent() {
     (users || []).forEach((u) => { emailById[u.id] = u.email; });
   }
 
-  tbody.innerHTML = "";
-  rows.forEach((n) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+  tbody.innerHTML = rows.map((n) => {
+    return `<tr>
       <td class="muted" title="${escapeHtml(fmtDateTime(n.created_at))}">${escapeHtml(timeAgo(n.created_at))}</td>
       <td>${escapeHtml(emailById[n.user_id] || "—")}</td>
       <td>${escapeHtml(n.title || "")}</td>
@@ -57,13 +55,16 @@ async function loadRecent() {
       <td class="row-actions">
         <button class="btn btn--danger btn--sm" data-del-notif="${n.id}">Delete</button>
       </td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join("");
 
-  tbody.querySelectorAll("[data-del-notif]").forEach((btn) =>
-    btn.addEventListener("click", () => deleteNotification(btn.dataset.delNotif, btn))
-  );
+  if (tbody.dataset.bound !== "1") {
+    tbody.dataset.bound = "1";
+    tbody.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-del-notif]");
+      if (button) deleteNotification(button.dataset.delNotif, button);
+    });
+  }
 }
 
 async function deleteNotification(id, btn) {

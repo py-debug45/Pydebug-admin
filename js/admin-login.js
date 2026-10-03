@@ -1,6 +1,6 @@
 // admin-login.js
 
-document.addEventListener("DOMContentLoaded", () => {
+onAdminReady(() => {
   if (qs("denied")) {
     showToast("That account doesn't have admin access.", "error");
   }

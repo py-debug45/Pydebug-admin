@@ -1,6 +1,16 @@
 // admin-icons.js — tiny dependency-free SVG icon set for the admin app.
 // Icons stay inline (no icon font or third-party asset request), so the panel
 // renders quickly and remains crisp on high-density mobile screens.
+//
+// Performance note (this file used to be the panel's worst jank source):
+// the legacy-emoji replacer rebuilt a ~60-token RegExp *for every text node*
+// and re-walked the DOM synchronously on *every* mutation — rendering a
+// 50-row table meant hundreds of regex compilations plus a full tree walk per
+// inserted row, on the main thread, while the user was scrolling.
+// Now: the regex is compiled once, nodes without any legacy glyph bail out on
+// a single cheap test, mutations are batched into one idle/animation-frame
+// pass, and the observer is paused while we rewrite nodes so our own changes
+// cannot feed back into it.
 (function () {
   "use strict";
 
@@ -59,6 +69,18 @@
     "↻": "refresh", "✕": "close", "←": "arrowLeft", "→": "arrowRight",
   };
 
+  // Compiled ONCE. Longest tokens first so "👁️" wins over "👁".
+  const TOKEN_RE = new RegExp(
+    Object.keys(aliases)
+      .sort((a, b) => b.length - a.length)
+      .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|"),
+    "gu"
+  );
+  // Cheap pre-filter: only strings containing a non-ASCII char can match.
+  const NON_ASCII_RE = /[^\x00-\x7F]/;
+  const SKIP_TAGS = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1, svg: 1, SVG: 1 };
+
   function adminIcon(name, className) {
     const body = paths[name] || paths.info;
     const cls = className ? `svg-icon ${className}` : "svg-icon";
@@ -69,51 +91,101 @@
     return adminIcon(aliases[token] || "info");
   }
 
-  // Convert legacy emoji glyphs used by older admin copy and AI-generated
-  // status messages into the same inline SVGs. This also covers content that
-  // arrives later through innerHTML (tables, toasts, and the AI activity feed).
   function replaceTextNode(node) {
-    if (!node.nodeValue || !node.nodeValue.trim()) return;
-    if (node.parentElement && ["SCRIPT", "STYLE", "SVG"].includes(node.parentElement.tagName)) return;
-    const tokens = Object.keys(aliases).sort((a, b) => b.length - a.length);
-    const re = new RegExp(tokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gu");
-    if (!re.test(node.nodeValue)) return;
-    re.lastIndex = 0;
+    const value = node.nodeValue;
+    if (!value || !NON_ASCII_RE.test(value)) return;
+    const parent = node.parentElement;
+    if (!parent || SKIP_TAGS[parent.tagName] || parent.closest("svg")) return;
+
+    TOKEN_RE.lastIndex = 0;
+    if (!TOKEN_RE.test(value)) return;
+    TOKEN_RE.lastIndex = 0;
+
     const fragment = document.createDocumentFragment();
     let last = 0;
     let match;
-    while ((match = re.exec(node.nodeValue))) {
-      if (match.index > last) fragment.appendChild(document.createTextNode(node.nodeValue.slice(last, match.index)));
+    while ((match = TOKEN_RE.exec(value))) {
+      if (match.index > last) fragment.appendChild(document.createTextNode(value.slice(last, match.index)));
       const holder = document.createElement("span");
       holder.className = "svg-icon-holder";
       holder.innerHTML = iconForToken(match[0]);
       fragment.appendChild(holder);
       last = match.index + match[0].length;
     }
-    if (last < node.nodeValue.length) fragment.appendChild(document.createTextNode(node.nodeValue.slice(last)));
+    if (last < value.length) fragment.appendChild(document.createTextNode(value.slice(last)));
     node.parentNode.replaceChild(fragment, node);
   }
 
-  function replaceLegacyIcons(root) {
+  function walk(root) {
     if (!root) return;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    if (root.nodeType === Node.TEXT_NODE) { replaceTextNode(root); return; }
+    if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+    // Skip whole subtrees that cannot contain a legacy glyph — one string
+    // test instead of one tree walk + N regex runs.
+    if (root.textContent && !NON_ASCII_RE.test(root.textContent)) return;
+    if (root.tagName && SKIP_TAGS[root.tagName]) return;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return node.nodeValue && NON_ASCII_RE.test(node.nodeValue)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    });
     const nodes = [];
     let node;
     while ((node = walker.nextNode())) nodes.push(node);
     nodes.forEach(replaceTextNode);
   }
 
-  window.adminIcon = adminIcon;
-  window.replaceLegacyAdminIcons = replaceLegacyIcons;
+  let observer = null;
+  let pending = [];
+  let scheduled = false;
+  const schedule = window.requestIdleCallback
+    ? (fn) => window.requestIdleCallback(fn, { timeout: 250 })
+    : (fn) => window.requestAnimationFrame(fn);
 
-  document.addEventListener("DOMContentLoaded", () => {
-    replaceLegacyIcons(document.body);
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => mutation.addedNodes.forEach((added) => {
-        if (added.nodeType === Node.TEXT_NODE) replaceTextNode(added);
-        else if (added.nodeType === Node.ELEMENT_NODE) replaceLegacyIcons(added);
-      }));
+  function flush() {
+    scheduled = false;
+    const batch = pending;
+    pending = [];
+    if (!batch.length) return;
+    // Pause the observer: our own replacements must not re-queue work.
+    if (observer) observer.disconnect();
+    try {
+      batch.forEach(walk);
+    } finally {
+      if (observer) observer.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  function queue(node) {
+    pending.push(node);
+    if (scheduled) return;
+    scheduled = true;
+    schedule(flush);
+  }
+
+  function start() {
+    walk(document.body);
+    observer = new MutationObserver((mutations) => {
+      for (let i = 0; i < mutations.length; i++) {
+        const added = mutations[i].addedNodes;
+        for (let j = 0; j < added.length; j++) {
+          const node = added[j];
+          if (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE) queue(node);
+        }
+      }
     });
     observer.observe(document.body, { childList: true, subtree: true });
-  });
+  }
+
+  window.adminIcon = adminIcon;
+  window.replaceLegacyAdminIcons = (root) => walk(root || document.body);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
 })();

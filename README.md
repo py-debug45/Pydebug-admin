@@ -3,6 +3,51 @@
 Standalone admin panel for PyDebug. Deploy this as its **own** Netlify site
 (separate from the user-facing app), connected to the **same Supabase project**.
 
+## ⚡ Speed, mobile menu & charts — what changed
+
+**1. The mobile menu button works again.**
+`css/admin.css` declared the drawer twice: the `@media (max-width: 800px)`
+block set `z-index: 1101`, but a later plain `.admin-sidebar { … z-index: 10 }`
+rule (same specificity, so it wins) dropped the open drawer *behind* its own
+backdrop — tapping ☰ dimmed the screen and showed nothing. All responsive
+rules now live in **one** block at the end of the file, and the drawer is a
+proper controller: tap to open **and** close, backdrop tap, nav-link tap and
+`Esc` all close it, the page behind it stops scrolling, `aria-expanded` is
+kept in sync, and switching back to desktop width can't leave it stuck.
+
+**2. The panel is no longer slow.**
+- The five AI automation files (~250 KB) were downloaded **one after another**
+  and `requireAdmin()` *awaited all of them* before any page could show data.
+  They now download in parallel, in the background, and only `ai.html` waits.
+- `js/admin-icons.js` rebuilt a 60-token regular expression **for every text
+  node** and re-walked the DOM on **every** mutation. It now compiles once,
+  skips nodes with a single cheap test, batches work into one idle pass, and
+  pauses its own observer while it edits.
+- The dashboard pulled `submissions.select("*")` up to 10 000 rows at a time —
+  every column, including stored code. It now probes the table shape once and
+  asks only for the 4–5 columns it actually reads.
+- Tables were built with one `createElement` **per row** plus 2–3 click
+  listeners per row. Now: one DOM write and one delegated listener per table.
+- Background tabs stop polling presence, pulse animations moved off
+  `box-shadow` (repaint) onto transform/opacity, heavy blurs and the full-page
+  gradient are dropped on phones, and `prefers-reduced-motion` is respected.
+
+**3. Real charts.** `js/admin-charts.js` is a proper little chart engine now:
+pixel-accurate sizing via `ResizeObserver` (labels stay legible on a phone
+instead of being shrunk by viewBox scaling), smooth monotone-cubic lines with
+gradient areas, hover/touch tooltips with a crosshair and per-series values,
+rounded gradient bars with today highlighted, and donuts with hover emphasis,
+a centre read-out and percentages in the legend. Still zero dependencies.
+
+**4. Nothing can block the scripts any more.** The Supabase SDK was a single
+blocking `<script>` from `cdn.jsdelivr.net`; if an ad blocker, DNS filter,
+office firewall or a slow CDN got in the way, `supabase is not defined` killed
+every script after it and the admin got a blank page. The SDK is now served
+from this repo (`js/vendor/supabase.min.js`), every script tag is `defer`red,
+`js/admin-boot.js` falls back to the CDN if the local file is ever missing,
+and pages start through `onAdminReady()` so they only run once the client
+really exists — with a readable banner instead of a silent blank screen.
+
 ## 1. Run the SQL setup in Supabase (SQL Editor) — required
 
 Open **`supabase-admin-setup.sql`** from this repo, paste it into

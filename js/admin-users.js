@@ -5,7 +5,7 @@ let cachedUsers = [];
 let usersPage = 0;
 let usersTotal = 0;
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
@@ -86,11 +86,12 @@ async function loadUsers(page = 0) {
     return;
   }
 
-  cachedUsers.forEach((u) => {
-    const tr = document.createElement("tr");
+  // Single DOM write + one delegated listener (was: a createElement and a
+  // click listener per row, 50 of each on every filter keystroke).
+  tbody.innerHTML = cachedUsers.map((u) => {
     const premium = isPremiumUser(u);
     const id = encodeURIComponent(u.id);
-    tr.innerHTML = `
+    return `<tr>
       <td>${escapeHtml(u.display_name || u.full_name || "-")}</td>
       <td>${escapeHtml(u.email || "-")}</td>
       <td>${(u.xp ?? 0).toLocaleString("en-IN")}</td>
@@ -105,13 +106,16 @@ async function loadUsers(page = 0) {
           ${premium ? "Revoke" : "Grant"}
         </button>
       </td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join("");
 
-  tbody.querySelectorAll("[data-toggle-premium]").forEach((btn) => {
-    btn.addEventListener("click", () => togglePremium(btn));
-  });
+  if (tbody.dataset.bound !== "1") {
+    tbody.dataset.bound = "1";
+    tbody.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-toggle-premium]");
+      if (button) togglePremium(button);
+    });
+  }
 
   renderPagination(document.getElementById("users-pagination"), usersPage, usersTotal, (p) => loadUsers(p));
 }

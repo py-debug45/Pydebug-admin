@@ -6,7 +6,7 @@ let hintValues = [];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 

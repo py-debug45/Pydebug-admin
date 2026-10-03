@@ -11,7 +11,7 @@ let payUserMap = {};
 const PAY_PAGE_SIZE = 100;
 let payVisibleCount = PAY_PAGE_SIZE;
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
@@ -42,11 +42,16 @@ async function loadGrants() {
   const tbody = document.getElementById("payments-tbody");
   tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Loading payments...</td></tr>`;
 
-  const { data, error } = await sb
-    .from("payment_grants")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(1000);
+  // Ask only for the columns this page reads. Older databases may not have
+  // every column, so fall back to "*" when Postgres says "undefined column".
+  const GRANT_COLS = "id, user_id, plan_key, order_id, payment_id, amount_inr, created_at, expires_at";
+  const query = (cols) =>
+    sb.from("payment_grants").select(cols).order("created_at", { ascending: false }).limit(1000);
+
+  let { data, error } = await query(GRANT_COLS);
+  if (error && (error.code === "42703" || /column .* does not exist/i.test(error.message || ""))) {
+    ({ data, error } = await query("*"));
+  }
 
   if (error) {
     tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Could not load payments.</td></tr>`;
@@ -130,20 +135,18 @@ function renderPayments() {
     return;
   }
 
-  filteredGrants.slice(0, payVisibleCount).forEach((g) => {
+  tbody.innerHTML = filteredGrants.slice(0, payVisibleCount).map((g) => {
     const u = payUserMap[g.user_id] || {};
     const expired = g.expires_at && new Date(g.expires_at) < new Date();
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    return `<tr>
       <td class="muted" title="${escapeHtml(fmtDateTime(g.created_at))}">${escapeHtml(timeAgo(g.created_at))}</td>
       <td>${escapeHtml(displayNameOf(u))}<div class="muted" style="font-size:0.75rem">${escapeHtml(u.email || "")}</div></td>
       <td><span class="tag tag--premium">${escapeHtml(planLabel(g.plan_key))}</span></td>
       <td><strong>${escapeHtml(fmtINR(planAmountPaise(g.plan_key) / 100))}</strong></td>
       <td class="muted" title="${escapeHtml(fmtDateTime(g.expires_at))}">${expired ? "Expired" : escapeHtml(timeAgo(g.expires_at)).replace(" ago", " left")}</td>
       <td class="mono muted" title="Order: ${escapeHtml(g.order_id || "")}">${escapeHtml((g.payment_id || "").slice(0, 14))}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join("");
 
   document.getElementById("payments-load-more").style.display =
     filteredGrants.length > payVisibleCount ? "" : "none";

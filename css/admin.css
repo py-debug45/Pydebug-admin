@@ -621,44 +621,14 @@ td.comment-excerpt {
   .admin-cols { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 800px) {
-  .admin-shell { flex-direction: column; }
-  .admin-sidebar {
-    position: fixed; inset: 0 auto 0 0; width: min(286px, 84vw); height: 100dvh;
-    transform: translateX(-105%); transition: transform .24s ease;
-    z-index: 1101; padding: 22px 14px; align-items: stretch;
-    box-shadow: 18px 0 40px rgba(0,0,0,.34);
-  }
-  .admin-sidebar.is-open { transform: translateX(0); }
-  .admin-sidebar__tag { display: block; }
-  .admin-sidebar nav { display: flex; flex-direction: column; gap: 2px; overflow: visible; }
-  .admin-sidebar nav a { white-space: normal; }
-  .admin-sidebar__account { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border-subtle); margin-left: 0; }
-  .admin-sidebar__account span { display: block; }
-  .admin-mobile-menu {
-    position: fixed; top: 13px; left: 13px; z-index: 1100; width: 42px; height: 42px;
-    display: grid; place-items: center; color: var(--text-primary); background: rgba(19, 23, 34, .92);
-    border: 1px solid var(--border-subtle); border-radius: 12px; cursor: pointer;
-    box-shadow: 0 8px 22px rgba(0,0,0,.18); backdrop-filter: blur(10px);
-  }
-  .admin-mobile-menu .svg-icon { width: 20px; height: 20px; }
-  .admin-sidebar-backdrop {
-    display: block; position: fixed; inset: 0; z-index: 1100; background: rgba(4, 6, 10, .64);
-    opacity: 0; pointer-events: none; transition: opacity .24s ease;
-  }
-  .admin-sidebar-backdrop.is-open { opacity: 1; pointer-events: auto; }
-  .admin-main { padding: 74px 18px 24px; }
-  .admin-topbar { padding-left: 52px; }
-  .admin-topbar h1 { font-size: 1.35rem; }
-  .detail-head__badges { margin-left: 0; }
-  .admin-password-card { padding: 27px 20px 20px; border-radius: 22px; }
-}
+/* NOTE: the mobile drawer / hamburger rules used to live here, in the middle
+   of the file. Later plain `.admin-sidebar { … }` rules (the brand-refresh
+   block further down) have the SAME specificity, so they silently overrode
+   this block's `z-index` — the open drawer ended up *behind* its own
+   backdrop and the menu button looked dead on phones. All responsive rules
+   now live in ONE authoritative block at the very end of this file. */
 
 @media (max-width: 480px) {
-  .admin-main { padding-left: 14px; padding-right: 14px; }
-  .admin-topbar { padding-left: 51px; }
-  .admin-topbar__actions { width: 100%; }
-  .admin-topbar__actions .btn { flex: 1; justify-content: center; }
   .admin-toolbar { flex-direction: column; }
   .admin-toolbar input, .admin-toolbar select, .admin-toolbar button { width: 100%; }
   .admin-stats-row { gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1066,34 +1036,6 @@ table.admin-table tbody tr:hover { background: rgba(79, 209, 197, .035); }
   .dashboard-bottom-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ai-command-card { grid-column: span 2; }
 }
-@media (max-width: 800px) {
-  .admin-sidebar { width: 270px; }
-  .admin-main { max-width: none; padding: 76px 18px 36px; }
-  .dashboard-topbar { align-items: flex-start; }
-  .dashboard-hero { align-items: flex-start; flex-direction: column; padding: 21px; }
-  .dashboard-hero__meta { width: 100%; grid-template-columns: 1fr 1fr; padding: 14px 0 0; border-top: 1px solid var(--admin-line); border-left: 0; }
-  .dashboard-charts-grid { grid-template-columns: 1fr; }
-  .chart-card--wide { grid-column: span 1; }
-  .dashboard-bottom-grid { grid-template-columns: 1fr; }
-  .ai-command-card { grid-column: span 1; }
-}
-@media (max-width: 560px) {
-  .admin-main { padding-right: 13px; padding-left: 13px; }
-  .admin-topbar__actions { width: 100%; }
-  .admin-topbar__actions .btn { flex: 1; justify-content: center; }
-  .admin-topbar__actions .ai-guard-pill { width: 100%; text-align: center; }
-  .dashboard-kpis, .dashboard-secondary-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-  .dashboard-kpis .stat-card, .dashboard-secondary-kpis .stat-card { min-height: 112px; padding: 14px 13px; }
-  .dashboard-kpis .stat-card .value { font-size: 1.5rem; }
-  .dashboard-secondary-kpis .stat-card .value { font-size: 1.2rem; }
-  .dashboard-hero__meta { gap: 9px; }
-  .analytics-title { flex-wrap: wrap; }
-  .analytics-title .range-switch { order: 3; width: 100%; margin: 4px 0 0; }
-  .range-switch button { flex: 1; }
-  .chart-card--wide { min-height: 270px; }
-  .chart-key { justify-content: flex-start; }
-  .section-card { padding: 16px; }
-}
 
 /* Local code diagnostic lab */
 .ai-diagnostic-card { border-color: rgba(79, 209, 197, .22); }
@@ -1116,3 +1058,283 @@ table.admin-table tbody tr:hover { background: rgba(79, 209, 197, .035); }
 .ai-diagnose-item small, .ai-diagnose-ok small { margin-top: 3px; color: #7f8ca0; font-size: .7rem; line-height: 1.45; }
 .ai-diagnose-ok { border-color: rgba(63, 185, 80, .25); background: rgba(63, 185, 80, .06); }
 .ai-diagnose-ok > span { color: #75dda0; font-size: 1rem; font-weight: 800; }
+
+/* ========================================================================
+   Charts — "PyChart" engine (js/admin-charts.js)
+   Real, interactive, pixel-sized SVG charts: gradients, hover tooltips,
+   crosshair, animated entrance. No chart library, nothing to download.
+   ======================================================================== */
+.pychart {
+  position: relative;
+  width: 100%;
+  margin-top: 6px;
+  touch-action: pan-y;
+}
+.pychart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  -webkit-tap-highlight-color: transparent;
+}
+.pychart text { font-family: var(--font-body); fill: #74819a; }
+.pychart__axis { fill: #6c7890; font-size: 10.5px; }
+.pychart__axis--strong { fill: #93a0b6; font-weight: 650; }
+.pychart__grid { stroke: rgba(148, 163, 184, .13); stroke-width: 1; }
+.pychart__baseline { stroke: rgba(148, 163, 184, .22); stroke-width: 1; }
+.pychart__hit { fill: transparent; cursor: crosshair; }
+.pychart__crosshair { stroke: rgba(148, 163, 184, .38); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0; }
+.pychart.is-hot .pychart__crosshair { opacity: 1; }
+.pychart__marker { opacity: 0; pointer-events: none; }
+.pychart.is-hot .pychart__marker { opacity: 1; }
+.pychart__bar { cursor: pointer; transition: opacity .15s ease; }
+.pychart__bar-hit { fill: transparent; cursor: pointer; }
+.pychart.is-hot .pychart__bar { opacity: .45; }
+.pychart.is-hot .pychart__bar.is-active { opacity: 1; }
+.pychart__seg { transition: opacity .15s ease, stroke-width .15s ease; cursor: pointer; }
+.pychart.is-hot .pychart__seg { opacity: .42; }
+.pychart.is-hot .pychart__seg.is-active { opacity: 1; stroke-width: 20; }
+.pychart__center-value { fill: var(--text-primary); font-weight: 800; }
+.pychart__center-label { fill: #6f7b91; font-size: 10px; letter-spacing: .06em; }
+.pychart__last-dot { filter: drop-shadow(0 0 5px currentColor); }
+
+/* Entrance animation — transform/opacity only, so it stays on the compositor */
+.pychart__line { stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.pychart--animate .pychart__line { animation: pychart-draw .85s cubic-bezier(.4, .1, .2, 1) both; }
+.pychart--animate .pychart__area { animation: pychart-fade .7s ease-out .15s both; }
+.pychart__bar-group { transform-box: fill-box; transform-origin: center bottom; }
+.pychart--animate .pychart__bar-group { animation: pychart-rise .5s cubic-bezier(.2, .8, .3, 1) both; }
+.pychart--animate .pychart__seg { animation: pychart-fade .5s ease-out both; }
+@keyframes pychart-draw { from { stroke-dashoffset: var(--pychart-len, 1200); } to { stroke-dashoffset: 0; } }
+@keyframes pychart-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pychart-rise { from { transform: scaleY(.015); } to { transform: scaleY(1); } }
+
+.pychart-tip {
+  position: fixed;
+  z-index: 9998;
+  min-width: 112px;
+  max-width: 230px;
+  padding: 9px 11px;
+  border: 1px solid var(--admin-line-strong, rgba(148, 163, 184, .23));
+  border-radius: 11px;
+  background: rgba(13, 18, 28, .97);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+  color: #dbe3f0;
+  font: 500 .74rem/1.45 var(--font-body);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(0, 4px, 0);
+  transition: opacity .12s ease, transform .12s ease;
+}
+.pychart-tip.is-visible { opacity: 1; transform: translate3d(0, 0, 0); }
+.pychart-tip__title { display: block; margin-bottom: 5px; color: #f0f4fb; font-weight: 700; font-size: .76rem; }
+.pychart-tip__row { display: flex; align-items: center; gap: 7px; }
+.pychart-tip__row + .pychart-tip__row { margin-top: 3px; }
+.pychart-tip__dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+.pychart-tip__val { margin-left: auto; color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.chart-legend { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.chart-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--admin-line, rgba(148, 163, 184, .14));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .02);
+  font-size: .72rem;
+  color: #9fabc0;
+}
+.chart-legend__item strong { color: #e4eaf4; font-variant-numeric: tabular-nums; }
+.chart-legend__item em { font-style: normal; color: #6f7b91; font-size: .68rem; }
+.chart-legend__dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 9px; }
+.donut-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.donut-wrap .pychart { flex: 0 0 152px; width: 152px; margin-top: 0; }
+.donut-legend { flex: 1 1 130px; min-width: 120px; }
+
+/* ========================================================================
+   Smoothness pass
+   The panel felt heavy on phones because of stacked blurs, big shadows and
+   box-shadow keyframes (every frame repainted). These rules keep the look
+   but move the work onto the compositor and drop it entirely where it is
+   not visible anyway.
+   ======================================================================== */
+.admin-shell, .admin-main { min-width: 0; }
+.admin-main > * { min-width: 0; }
+button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+.btn, button, .range-switch button, .admin-mobile-menu { touch-action: manipulation; }
+.admin-table-wrap { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.live-list { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+
+/* Cheap pulse: animate opacity/transform on a ring instead of box-shadow. */
+.live-dot, .live-item__dot { position: relative; animation: none; box-shadow: none; }
+.live-dot::after, .live-item__dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(63, 185, 80, .5);
+  animation: live-ring 2s ease-out infinite;
+  will-change: transform, opacity;
+}
+@keyframes live-ring {
+  0% { transform: scale(.5); opacity: .9; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+/* Only the first few rows need to visibly pulse — 25 pulsing rings is jank. */
+.live-list li:nth-child(n + 7) .live-item__dot::after { animation: none; opacity: 0; }
+.stat-card--live .value::before { animation: live-soft 2s ease-in-out infinite; box-shadow: none; }
+@keyframes live-soft { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Long pages: let the browser skip layout/paint for cards that are far
+   below the fold until they scroll into view. */
+.dashboard-bottom-grid .section-card,
+.admin-table-wrap { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+
+@media (hover: none) {
+  /* Touch devices get no hover state, so these transitions only ever cost
+     paint work when a tap "sticks". */
+  .stat-card:hover, .btn:hover, .admin-sidebar nav a:hover { transform: none; }
+  .chart-card, .section-card, .stat-card { box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html, body { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* ========================================================================
+   Responsive — SINGLE source of truth (keep this block last)
+   ======================================================================== */
+@media (max-width: 860px) {
+  body.admin-protected {
+    /* The full-page radial gradient is the most expensive thing to repaint
+       while scrolling on a phone. Flat background instead. */
+    background: var(--admin-panel);
+  }
+
+  .admin-shell { display: block; }
+
+  /* ---- Off-canvas drawer ---- */
+  .admin-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(290px, 84vw);
+    height: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding: calc(18px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    align-items: stretch;
+    background: #10151f;
+    border-right: 1px solid var(--admin-line);
+    box-shadow: 18px 0 44px rgba(0, 0, 0, .45);
+    transform: translate3d(-102%, 0, 0);
+    /* visibility is delayed until the slide-out finishes, so the drawer
+       still animates closed but never steals taps/focus when hidden. */
+    transition: transform .26s cubic-bezier(.33, 1, .68, 1), visibility 0s linear .26s;
+    /* MUST stay above .admin-sidebar-backdrop — this is the line that was
+       being overridden before, which made the menu button look broken. */
+    z-index: 1201;
+    visibility: hidden;
+  }
+  .admin-sidebar.is-open {
+    transform: translate3d(0, 0, 0);
+    visibility: visible;
+    transition: transform .26s cubic-bezier(.33, 1, .68, 1), visibility 0s;
+  }
+  /* Keyboard users can still reach the drawer links while it animates. */
+  .admin-sidebar:focus-within { visibility: visible; }
+  .admin-sidebar__tag { display: block; padding-left: 10px; margin-bottom: 18px; }
+  .admin-sidebar nav { display: flex; flex-direction: column; gap: 3px; overflow: visible; }
+  .admin-sidebar nav a { white-space: normal; min-height: 46px; font-size: .92rem; }
+  .admin-sidebar nav a:hover { transform: none; }
+  .admin-sidebar__account { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--admin-line); margin-left: 0; }
+  .admin-sidebar__account span { display: block; }
+
+  .admin-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    background: rgba(4, 6, 10, .62);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .26s ease;
+  }
+  .admin-sidebar-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+  /* ---- Hamburger ---- */
+  .admin-mobile-menu {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    left: 12px;
+    z-index: 1202;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--text-primary);
+    background: #171d2a;
+    border: 1px solid var(--admin-line-strong);
+    border-radius: 13px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease;
+  }
+  .admin-mobile-menu:active { background: #202839; }
+  .admin-mobile-menu .svg-icon { width: 21px; height: 21px; pointer-events: none; }
+  .admin-mobile-menu[aria-expanded="true"] { color: var(--accent-mint); border-color: rgba(79, 209, 197, .45); }
+  body.admin-nav-open { overflow: hidden; }
+
+  /* ---- Page body ---- */
+  .admin-main {
+    max-width: none;
+    padding: 68px 16px calc(40px + env(safe-area-inset-bottom));
+  }
+  .admin-topbar { padding-left: 50px; margin-bottom: 20px; align-items: flex-start; }
+  .admin-topbar h1 { font-size: 1.32rem; }
+  .topbar-heading h1 { font-size: 1.45rem; }
+  .admin-cols, .detail-grid { grid-template-columns: 1fr; }
+  .dashboard-topbar { align-items: flex-start; }
+  .dashboard-hero { align-items: flex-start; flex-direction: column; gap: 18px; padding: 20px; }
+  .dashboard-hero__meta { width: 100%; grid-template-columns: 1fr 1fr; padding: 14px 0 0; border-top: 1px solid var(--admin-line); border-left: 0; }
+  .dashboard-charts-grid { grid-template-columns: 1fr; }
+  .chart-card--wide { grid-column: span 1; }
+  .dashboard-bottom-grid { grid-template-columns: 1fr; }
+  .ai-command-card { grid-column: span 1; }
+  .detail-head__badges { margin-left: 0; }
+  .admin-password-card { padding: 27px 20px 20px; border-radius: 22px; }
+  .ai-bell { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 560px) {
+  .admin-main { padding-right: 13px; padding-left: 13px; }
+  .admin-topbar__actions { width: 100%; }
+  .admin-topbar__actions .btn { flex: 1 1 128px; justify-content: center; }
+  .admin-topbar__actions .ai-guard-pill { width: 100%; text-align: center; }
+  .dashboard-kpis, .dashboard-secondary-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .dashboard-kpis .stat-card, .dashboard-secondary-kpis .stat-card { min-height: 108px; padding: 14px 13px; }
+  .dashboard-kpis .stat-card .value { font-size: 1.45rem; }
+  .dashboard-secondary-kpis .stat-card .value { font-size: 1.18rem; }
+  .stat-card::after { display: none; }
+  .dashboard-hero__meta { gap: 9px; }
+  .analytics-title { flex-wrap: wrap; }
+  .analytics-title .range-switch { order: 3; width: 100%; margin: 4px 0 0; }
+  .range-switch button { flex: 1; min-height: 34px; }
+  .chart-card { min-height: 0; padding: 16px 14px 13px; }
+  .chart-card--wide { min-height: 0; }
+  .chart-key { justify-content: flex-start; }
+  .section-card { padding: 16px; }
+  .donut-wrap { gap: 10px; }
+  .donut-wrap .pychart { flex: 0 0 128px; width: 128px; }
+  .admin-section-title { margin: 26px 0 12px; }
+  table.admin-table { font-size: .83rem; }
+  table.admin-table th, table.admin-table td { padding: 10px 12px; }
+  .row-actions { gap: 6px; }
+}

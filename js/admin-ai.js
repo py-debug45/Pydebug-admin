@@ -1,8 +1,17 @@
 // admin-ai.js — controller for ai.html (AI Control Center).
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
+
+  // The automation bundle is loaded in the background now (so every other
+  // admin page paints immediately). This is the one page that cannot work
+  // without it, so wait for it here.
+  if (typeof whenAdminAIReady === "function") await whenAdminAIReady();
+  if (typeof AI_pullSettings !== "function") {
+    showToast("AI engine files could not be loaded — check js/ai-*.js are deployed.", "error");
+    return;
+  }
 
   const settings = await AI_pullSettings();
   renderAll(settings);
