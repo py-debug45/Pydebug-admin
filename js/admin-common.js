@@ -25,6 +25,7 @@ function getPanelUnlockState() {
 }
 
 let adminPanelUnlocked = getPanelUnlockState();
+let resolveUnlock = null;
 
 async function requirePanelPassword() {
   if (adminPanelUnlocked) {
@@ -119,20 +120,13 @@ async function requirePanelPassword() {
     document.body.classList.remove("admin-panel-locked");
     overlay.classList.add("is-unlocked");
     window.setTimeout(() => overlay.remove(), 240);
+    if (resolveUnlock) { const done = resolveUnlock; resolveUnlock = null; done(true); }
   });
 
   window.setTimeout(() => input.focus(), 80);
-  return new Promise((resolve) => {
-    const check = window.setInterval(() => {
-      if (adminPanelUnlocked) {
-        window.clearInterval(check);
-        resolve(true);
-      } else if (!document.body.contains(overlay)) {
-        window.clearInterval(check);
-        resolve(false);
-      }
-    }, 50);
-  });
+  // Resolve straight from the submit handler. (This used to be a 50ms
+  // setInterval poll that kept running for the whole unlock screen.)
+  return new Promise((resolve) => { resolveUnlock = resolve; });
 }
 
 const ADMIN_AI_FILES = [
@@ -144,41 +138,117 @@ const ADMIN_AI_FILES = [
 ];
 let adminAILoadPromise = null;
 
-// AI automation is intentionally loaded only after the admin has unlocked the
-// panel. This keeps the first paint and the password screen light; it also
-// means a public visitor never downloads the large automation bundle.
+// AI automation is loaded only after the admin has unlocked the panel, and
+// the five files are fetched IN PARALLEL (script.async = false keeps them
+// executing in order). The old version chained them with
+// `promise.then(next)`, so the ~250 KB bundle downloaded one file at a time
+// and every page waited for all five before it rendered any data — that was
+// the single biggest cause of the panel feeling slow.
 function loadAdminAI() {
   if (adminAILoadPromise) return adminAILoadPromise;
-  adminAILoadPromise = ADMIN_AI_FILES.reduce((chain, src) => chain.then(() => new Promise((resolve, reject) => {
+  adminAILoadPromise = Promise.all(ADMIN_AI_FILES.map((src) => new Promise((resolve) => {
     if (document.querySelector(`script[data-admin-ai="${src}"]`)) {
       resolve();
       return;
     }
     const script = document.createElement("script");
     script.src = src;
+    script.async = false; // download in parallel, execute in document order
     script.dataset.adminAi = src;
     script.onload = resolve;
-    script.onerror = () => reject(new Error(`Could not load ${src}`));
-    document.body.appendChild(script);
-  })), Promise.resolve());
+    script.onerror = () => {
+      console.warn(`[admin] AI module unavailable: ${src}`);
+      resolve(); // never let one optional module block the page
+    };
+    document.head.appendChild(script);
+  })));
   return adminAILoadPromise;
 }
 
+// Pages that need an AI helper (e.g. the dashboard's ✨ variations button)
+// await this instead of the whole page waiting for the bundle up front.
+function whenAdminAIReady() {
+  return adminAILoadPromise || loadAdminAI();
+}
+
+/* ---------------------------------------------------------------------
+   Mobile navigation drawer
+   The old version only ever ADDED .is-open (no toggle, no Esc, no state),
+   and the CSS it relied on was being overridden, so on phones the button
+   looked completely dead. This is a small, self-contained controller.
+   --------------------------------------------------------------------- */
+const AdminNav = (() => {
+  let sidebar = null;
+  let button = null;
+  let backdrop = null;
+  let open = false;
+
+  function setOpen(next) {
+    if (!sidebar || !backdrop || !button || next === open) return;
+    open = next;
+    sidebar.classList.toggle("is-open", open);
+    backdrop.classList.toggle("is-open", open);
+    document.body.classList.toggle("admin-nav-open", open);
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    button.setAttribute("aria-label", open ? "Close admin navigation" : "Open admin navigation");
+    button.innerHTML = window.adminIcon ? adminIcon(open ? "close" : "menu") : (open ? "✕" : "☰");
+    if (open) {
+      const first = sidebar.querySelector("nav a");
+      if (first) window.setTimeout(() => first.focus({ preventScroll: true }), 180);
+    } else {
+      button.focus({ preventScroll: true });
+    }
+  }
+
+  function mount() {
+    sidebar = document.querySelector(".admin-sidebar");
+    if (!sidebar || document.querySelector(".admin-mobile-menu")) return;
+
+    button = document.createElement("button");
+    button.className = "admin-mobile-menu";
+    button.type = "button";
+    button.setAttribute("aria-label", "Open admin navigation");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", "admin-sidebar");
+    button.innerHTML = window.adminIcon ? adminIcon("menu") : "☰";
+
+    backdrop = document.createElement("div");
+    backdrop.className = "admin-sidebar-backdrop";
+    backdrop.hidden = false;
+
+    if (!sidebar.id) sidebar.id = "admin-sidebar";
+    document.body.append(button, backdrop);
+
+    // `click` fires for taps, keyboard Enter/Space and mouse alike.
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      setOpen(!open);
+    });
+    backdrop.addEventListener("click", () => setOpen(false));
+
+    // One delegated listener for every nav link (now and any added later).
+    sidebar.addEventListener("click", (event) => {
+      if (event.target.closest("nav a")) setOpen(false);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && open) setOpen(false);
+    });
+
+    // Returning to desktop width must not leave a stuck scroll lock.
+    if (typeof window.matchMedia === "function") {
+      const desktop = window.matchMedia("(min-width: 861px)");
+      const onChange = (event) => { if (event.matches) setOpen(false); };
+      if (desktop.addEventListener) desktop.addEventListener("change", onChange);
+      else if (desktop.addListener) desktop.addListener(onChange);
+    }
+  }
+
+  return { mount, close: () => setOpen(false), isOpen: () => open };
+})();
+
 function injectAdminMobileNavigation() {
-  const sidebar = document.querySelector(".admin-sidebar");
-  if (!sidebar || document.querySelector(".admin-mobile-menu")) return;
-  const menu = document.createElement("button");
-  menu.className = "admin-mobile-menu";
-  menu.type = "button";
-  menu.setAttribute("aria-label", "Open admin navigation");
-  menu.innerHTML = window.adminIcon ? adminIcon("menu") : "☰";
-  const backdrop = document.createElement("div");
-  backdrop.className = "admin-sidebar-backdrop";
-  document.body.append(menu, backdrop);
-  const close = () => { sidebar.classList.remove("is-open"); backdrop.classList.remove("is-open"); };
-  menu.addEventListener("click", () => { sidebar.classList.add("is-open"); backdrop.classList.add("is-open"); });
-  backdrop.addEventListener("click", close);
-  sidebar.querySelectorAll("nav a").forEach((link) => link.addEventListener("click", close));
+  AdminNav.mount();
 }
 
 // Redirects to admin login unless the logged-in user has is_admin = true on
@@ -186,6 +256,10 @@ function injectAdminMobileNavigation() {
 // the Supabase RLS policies (is_admin() function) that block writes at the
 // database level even if someone bypasses this check.
 async function requireAdmin() {
+  if (typeof sb === "undefined" || !sb) {
+    console.error("[admin] Supabase client unavailable — cannot verify admin access.");
+    return null;
+  }
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
     window.location.href = "index.html";
@@ -224,14 +298,17 @@ async function requireAdmin() {
   document.body.classList.add("admin-panel-locked");
   const unlocked = await requirePanelPassword();
   if (!unlocked) return null;
-  // Always finish loading the AI bundle on every admin page, irrespective of
-  // the master switch. The switch controls what the AI does, not whether its
-  // feature set is available; awaiting it also prevents page actions (such as
-  // AI variations) racing the script load.
-  try {
-    await loadAdminAI();
-  } catch (error) {
-    console.warn("Admin automation bundle:", error.message);
+
+  // The AI bundle is still loaded on every admin page (the master switch
+  // controls what it DOES, not whether it is available) — but it is now
+  // kicked off in the background instead of being awaited here. Page data
+  // no longer queues behind ~250 KB of optional automation code; anything
+  // that genuinely needs it awaits whenAdminAIReady().
+  const startAI = () => loadAdminAI();
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(startAI, { timeout: 1500 });
+  } else {
+    window.setTimeout(startAI, 200);
   }
   return profile;
 }
@@ -379,7 +456,9 @@ function renderPagination(container, page, total, onPageChange) {
   container.append(prev, info, next);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+// Navigation is pure DOM work: mount it as soon as the markup exists so the
+// menu button is usable even if Supabase is still connecting.
+function bootAdminChrome() {
   ensureAdminNavigation();
   injectAdminMobileNavigation();
   markAdminActiveNav();
@@ -389,4 +468,10 @@ document.addEventListener("DOMContentLoaded", () => {
       logoutAdmin();
     })
   );
-});
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootAdminChrome, { once: true });
+} else {
+  bootAdminChrome();
+}

@@ -11,7 +11,7 @@ let problemMap = {};
 const PAGE_SIZE = 100;
 let visibleCount = PAGE_SIZE;
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
@@ -129,11 +129,10 @@ function renderSubmissions() {
     return;
   }
 
-  filteredSubmissions.slice(0, visibleCount).forEach((s) => {
+  tbody.innerHTML = filteredSubmissions.slice(0, visibleCount).map((s) => {
     const u = userMap[s.user_id] || {};
     const p = problemMap[s.problem_id] || {};
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    return `<tr>
       <td class="muted" title="${escapeHtml(fmtDateTime(s.created_at))}">${escapeHtml(timeAgo(s.created_at))}</td>
       <td>${escapeHtml(displayNameOf(u))}</td>
       <td>${escapeHtml(p.title || "—")}</td>
@@ -143,16 +142,18 @@ function renderSubmissions() {
         <button class="btn btn--secondary btn--sm" data-view-sub="${s.id}">View</button>
         <button class="btn btn--danger btn--sm" data-del-sub="${s.id}">Delete</button>
       </td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join("");
 
-  tbody.querySelectorAll("[data-view-sub]").forEach((btn) =>
-    btn.addEventListener("click", () => openSubmissionModal(btn.dataset.viewSub))
-  );
-  tbody.querySelectorAll("[data-del-sub]").forEach((btn) =>
-    btn.addEventListener("click", () => deleteSubmission(btn.dataset.delSub, btn))
-  );
+  if (tbody.dataset.bound !== "1") {
+    tbody.dataset.bound = "1";
+    tbody.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-view-sub], button[data-del-sub]");
+      if (!button) return;
+      if (button.dataset.viewSub) openSubmissionModal(button.dataset.viewSub);
+      else deleteSubmission(button.dataset.delSub, button);
+    });
+  }
 
   document.getElementById("submissions-load-more").style.display =
     filteredSubmissions.length > visibleCount ? "" : "none";

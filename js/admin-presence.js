@@ -97,6 +97,8 @@ async function loadLiveUsers() {
   renderLiveList();
 }
 
+let lastLiveSignature = "";
+
 function renderLiveList() {
   const countEl = document.getElementById("live-count");
   const statEl = document.getElementById("stat-active-now");
@@ -104,6 +106,19 @@ function renderLiveList() {
   if (!listEl) return;
 
   const items = [...presenceLive.values()].sort((a, b) => b.lastSeen - a.lastSeen);
+
+  // Heartbeats arrive every few seconds but the *names on screen* rarely
+  // change. Skip the innerHTML rewrite (and the icon/observer work it
+  // triggers) when the visible set is identical — only the "Ns ago" labels
+  // need updating, and the 5s tick already does that.
+  const signature = items.map((u) => u.userId + ":" + (u.page || "")).join("|");
+  if (signature === lastLiveSignature && listEl.childElementCount) {
+    if (statEl) statEl.textContent = String(items.length);
+    if (countEl) countEl.textContent = String(items.length);
+    tickPresenceTimes();
+    return;
+  }
+  lastLiveSignature = signature;
   if (statEl) statEl.textContent = String(items.length);
   if (countEl) countEl.textContent = String(items.length);
 
@@ -145,9 +160,12 @@ function tickPresenceTimes() {
   });
   if (changed) { renderLiveList(); return; }
 
-  document.querySelectorAll("[data-last-seen]").forEach((el) => {
-    el.textContent = presenceSecondsAgo(Number(el.dataset.lastSeen));
-  });
+  const listEl = document.getElementById("live-list");
+  if (listEl) {
+    listEl.querySelectorAll("[data-last-seen]").forEach((el) => {
+      el.textContent = presenceSecondsAgo(Number(el.dataset.lastSeen));
+    });
+  }
   const upd = document.getElementById("live-updated");
   if (upd) upd.textContent = lastPresenceRefresh ? "updated " + presenceSecondsAgo(lastPresenceRefresh) : "";
 }
@@ -185,8 +203,11 @@ function initLivePresence() {
 
   refreshLive();
   purgeStalePresence();
-  setInterval(tickPresenceTimes, PRESENCE_TICK_MS);
-  setInterval(refreshLive, PRESENCE_POLL_MS);
+  // Both timers idle out while the tab is in the background: a hidden admin
+  // tab used to keep querying Supabase every 25s and repainting every 5s,
+  // which drains phones and makes the tab sluggish when you come back.
+  setInterval(() => { if (!document.hidden) tickPresenceTimes(); }, PRESENCE_TICK_MS);
+  setInterval(() => { if (!document.hidden) refreshLive(); }, PRESENCE_POLL_MS);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") refreshLive();
   });

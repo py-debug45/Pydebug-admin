@@ -11,7 +11,7 @@ let discProblemMap = {};
 const DISC_PAGE_SIZE = 100;
 let discVisibleCount = DISC_PAGE_SIZE;
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
@@ -118,9 +118,10 @@ function applyDiscussionFilters() {
   renderComments();
 }
 
+let aiBadgeRepaintQueued = false;
+
 function renderComments() {
   const tbody = document.getElementById("discussions-tbody");
-  tbody.innerHTML = "";
 
   if (!filteredComments.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-row">No comments found.</td></tr>`;
@@ -128,11 +129,12 @@ function renderComments() {
     return;
   }
 
-  filteredComments.slice(0, discVisibleCount).forEach((c) => {
+  // One string, one DOM write, one delegated listener — the old version
+  // created 100 rows and 200 listeners one at a time on every filter key.
+  tbody.innerHTML = filteredComments.slice(0, discVisibleCount).map((c) => {
     const u = discUserMap[c.user_id] || {};
     const p = discProblemMap[c.problem_id] || {};
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    return `<tr>
       <td class="muted" title="${escapeHtml(fmtDateTime(c.created_at))}">${escapeHtml(timeAgo(c.created_at))}</td>
       <td>${escapeHtml(p.title || "—")}</td>
       <td>${escapeHtml(displayNameOf(u))}</td>
@@ -143,16 +145,27 @@ function renderComments() {
         <button class="btn btn--secondary btn--sm" data-view-comment="${c.id}">View</button>
         <button class="btn btn--danger btn--sm" data-del-comment="${c.id}">Delete</button>
       </td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join("");
 
-  tbody.querySelectorAll("[data-view-comment]").forEach((btn) =>
-    btn.addEventListener("click", () => openCommentModal(btn.dataset.viewComment))
-  );
-  tbody.querySelectorAll("[data-del-comment]").forEach((btn) =>
-    btn.addEventListener("click", () => deleteComment(btn.dataset.delComment, btn))
-  );
+  if (tbody.dataset.bound !== "1") {
+    tbody.dataset.bound = "1";
+    tbody.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-view-comment], button[data-del-comment]");
+      if (!button) return;
+      if (button.dataset.viewComment) openCommentModal(button.dataset.viewComment);
+      else deleteComment(button.dataset.delComment, button);
+    });
+  }
+
+  // The abuse badges come from the background-loaded AI bundle: repaint once
+  // it is ready instead of making the table wait for it.
+  if (!aiBadgeRepaintQueued && typeof AI_badgeFor !== "function" && typeof whenAdminAIReady === "function") {
+    aiBadgeRepaintQueued = true;
+    whenAdminAIReady().then(() => {
+      if (typeof AI_badgeFor === "function") renderComments();
+    });
+  }
 
   document.getElementById("discussions-load-more").style.display =
     filteredComments.length > discVisibleCount ? "" : "none";

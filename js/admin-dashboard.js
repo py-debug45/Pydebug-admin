@@ -11,6 +11,48 @@ function isSolvedSubmission(row, statusColumn) {
   return row && (row.is_correct === true || SOLVED_STATUSES.includes(String(row[statusColumn] ?? "").toLowerCase()));
 }
 
+/* ---------------------------------------------------------------------
+   Query weight
+   The dashboard used to pull `submissions.select("*")` with limits of
+   1 000 / 2 000 / 10 000 rows — every column of every row, including the
+   stored code blobs. On a real database that is megabytes of JSON per page
+   load, parsed on the main thread, which is exactly what made the panel
+   feel stuck. We probe the table shape ONCE and then ask only for the four
+   or five columns the dashboard actually reads.
+   --------------------------------------------------------------------- */
+let submissionShape = null;
+
+async function getSubmissionShape() {
+  if (submissionShape) return submissionShape;
+  let sample = null;
+  try {
+    const { data } = await sb.from("submissions").select("*").limit(1);
+    sample = (data || [])[0] || null;
+  } catch (e) { /* fall through to the safe default */ }
+  const statusCol = detectCol(sample, ["status", "result", "verdict"]);
+  const has = (col) => !!sample && Object.prototype.hasOwnProperty.call(sample, col);
+  const cols = ["created_at", "user_id", "problem_id", statusCol];
+  if (has("is_correct")) cols.push("is_correct");
+  submissionShape = {
+    statusCol,
+    // No sample row (empty table) → keep "*" so we never guess wrong.
+    cols: sample ? [...new Set(cols)].join(", ") : "*",
+  };
+  return submissionShape;
+}
+
+// Runs `build(columns)`; if the narrow column list is rejected by PostgREST
+// (42703 undefined_column / 42P10), retries once with "*".
+async function selectSubmissions(build) {
+  const shape = await getSubmissionShape();
+  let result = await build(shape.cols);
+  if (result.error && shape.cols !== "*") {
+    submissionShape = { statusCol: shape.statusCol, cols: "*" };
+    result = await build("*");
+  }
+  return { ...result, statusCol: shape.statusCol };
+}
+
 function setTrend(id, current, previous, suffix = "") {
   const el = document.getElementById(id);
   if (!el) return;
@@ -31,7 +73,7 @@ function updateSyncStamp() {
   if (el) el.textContent = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   const admin = await requireAdmin();
   if (!admin) return;
 
@@ -45,11 +87,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   initLivePresence();
   loadDailyPractice();
 
+  // Above-the-fold data first, then the heavier sections once the browser
+  // is idle. Previously everything fired at once and the main thread spent
+  // several seconds parsing JSON before the page would even scroll.
   await Promise.all([loadStats(), loadProblems(0)]);
   loadAnalytics();
-  loadActivity();
-  loadTopProblems();
-  loadAIBrief();
+  const later = () => { loadActivity(); loadTopProblems(); loadAIBrief(); };
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(later, { timeout: 1200 });
+  else window.setTimeout(later, 120);
 
   document.querySelectorAll("#analytics-range [data-days]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -178,10 +223,12 @@ async function loadStats() {
   try {
     const { count: totalSubs } = await sb.from("submissions").select("*", { count: "exact", head: true });
     document.getElementById("stat-submissions").textContent = (totalSubs ?? 0).toLocaleString("en-IN");
-    const { data: sample } = await sb.from("submissions").select("*").order("created_at", { ascending: false }).limit(1000);
-    const stCol = detectCol((sample || [])[0], ["status", "result", "verdict"]);
-    const solved = (sample || []).filter((s) => isSolvedSubmission(s, stCol)).length;
-    document.getElementById("stat-solve-rate").textContent = sample && sample.length ? Math.round((solved / sample.length) * 100) + "%" : "—";
+    const { data: sample, statusCol } = await selectSubmissions((cols) =>
+      sb.from("submissions").select(cols).order("created_at", { ascending: false }).limit(500)
+    );
+    const rows = sample || [];
+    const solved = rows.filter((s) => isSolvedSubmission(s, statusCol)).length;
+    document.getElementById("stat-solve-rate").textContent = rows.length ? Math.round((solved / rows.length) * 100) + "%" : "—";
   } catch (e) {
     console.warn("loadStats submissions:", e.message);
   }
@@ -203,14 +250,66 @@ async function loadStats() {
   updateSyncStamp();
 }
 
+// Painted analytics are cached per range, so flipping 7D / 14D / 30D is
+// instant (the fresh numbers then replace them when the query returns).
+const analyticsCache = new Map();
+
+function paintAnalytics(view, days) {
+  const { labels, signupValues, submissionValues, difficulty, outcomes, errors } = view;
+
+  document.getElementById("chart-signups").innerHTML = errors.profiles
+    ? `<div class="chart-empty">Unavailable — check profiles access</div>`
+    : svgBarChart(labels, signupValues, { color: CHART_COLORS.mint, name: "New learners" });
+
+  document.getElementById("chart-submissions").innerHTML = errors.submissions
+    ? `<div class="chart-empty">Unavailable — check submissions access</div>`
+    : svgBarChart(labels, submissionValues, { color: CHART_COLORS.amber, name: "Submissions" });
+
+  document.getElementById("chart-overview").innerHTML = (errors.profiles || errors.submissions)
+    ? `<div class="chart-empty">Analytics needs a readable profiles and submissions table.</div>`
+    : svgLineChart(labels, [
+      { name: "New learners", values: signupValues, color: CHART_COLORS.mint },
+      { name: "Submissions", values: submissionValues, color: CHART_COLORS.amber },
+    ], { ariaLabel: `New learners and submissions over the last ${days} days` });
+
+  const summary = document.getElementById("chart-overview-summary");
+  if (summary) {
+    const learners = signupValues.reduce((a, b) => a + b, 0);
+    const attempts = submissionValues.reduce((a, b) => a + b, 0);
+    const busiest = submissionValues.indexOf(Math.max(...submissionValues));
+    summary.textContent = attempts
+      ? `${learners.toLocaleString("en-IN")} learners · ${attempts.toLocaleString("en-IN")} attempts · peak ${labels[busiest]}`
+      : `${learners.toLocaleString("en-IN")} learners · ${attempts.toLocaleString("en-IN")} attempts`;
+  }
+
+  document.getElementById("chart-status").innerHTML = errors.submissions
+    ? `<div class="chart-empty">Unavailable</div>`
+    : svgDonut([
+      { label: "Solved", value: outcomes.solved, color: CHART_COLORS.green },
+      { label: "Attempted", value: outcomes.attempted, color: CHART_COLORS.amber },
+    ], { centerLabel: "attempts" });
+
+  document.getElementById("chart-difficulty").innerHTML = errors.problems
+    ? `<div class="chart-empty">Unavailable</div>`
+    : svgDonut([
+      { label: "Easy", value: difficulty.easy, color: CHART_COLORS.green },
+      { label: "Medium", value: difficulty.medium, color: CHART_COLORS.amber },
+      { label: "Hard", value: difficulty.hard, color: CHART_COLORS.red },
+    ], { centerLabel: "problems" });
+}
+
 async function loadAnalytics() {
   const requestId = ++analyticsRequest;
   const days = analyticsDays;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const cached = analyticsCache.get(days);
+  if (cached) paintAnalytics(cached, days);
+
   try {
     const [profilesResult, submissionsResult, problemsResult] = await Promise.all([
       sb.from("profiles").select("created_at").gte("created_at", since).limit(10000),
-      sb.from("submissions").select("*").gte("created_at", since).limit(10000),
+      selectSubmissions((cols) => sb.from("submissions").select(cols).gte("created_at", since).limit(10000)),
       sb.from("problems").select("difficulty").limit(5000),
     ]);
     if (requestId !== analyticsRequest) return;
@@ -219,49 +318,33 @@ async function loadAnalytics() {
     const submissionRows = submissionsResult.data || [];
     const signupBuckets = bucketByDay(signupRows, "created_at", days);
     const submissionBuckets = bucketByDay(submissionRows, "created_at", days);
-    const labels = signupBuckets.map((b) => b.label);
-    const signupValues = signupBuckets.map((b) => b.value);
-    const submissionValues = submissionBuckets.map((b) => b.value);
 
-    document.getElementById("chart-signups").innerHTML = profilesResult.error
-      ? `<div class="chart-empty">Unavailable — check profiles access</div>`
-      : svgBarChart(labels, signupValues, { color: CHART_COLORS.mint });
-    document.getElementById("chart-submissions").innerHTML = submissionsResult.error
-      ? `<div class="chart-empty">Unavailable — check submissions access</div>`
-      : svgBarChart(labels, submissionValues, { color: CHART_COLORS.amber });
-    document.getElementById("chart-overview").innerHTML = (profilesResult.error || submissionsResult.error)
-      ? `<div class="chart-empty">Analytics needs a readable profiles and submissions table.</div>`
-      : svgLineChart(labels, [
-        { name: "New learners", values: signupValues, color: CHART_COLORS.mint },
-        { name: "Submissions", values: submissionValues, color: CHART_COLORS.amber },
-      ], { ariaLabel: `New learners and submissions over the last ${days} days` });
-    const summary = document.getElementById("chart-overview-summary");
-    if (summary) summary.textContent = `${signupValues.reduce((a, b) => a + b, 0).toLocaleString("en-IN")} learners · ${submissionValues.reduce((a, b) => a + b, 0).toLocaleString("en-IN")} attempts`;
-
-    const stCol = detectCol(submissionRows[0], ["status", "result", "verdict"]);
+    const statusCol = submissionsResult.statusCol;
     let solved = 0, attempted = 0;
-    submissionRows.forEach((row) => isSolvedSubmission(row, stCol) ? solved++ : attempted++);
-    document.getElementById("chart-status").innerHTML = submissionsResult.error
-      ? `<div class="chart-empty">Unavailable</div>`
-      : svgDonut([
-        { label: "Solved", value: solved, color: CHART_COLORS.green },
-        { label: "Attempted", value: attempted, color: CHART_COLORS.amber },
-      ]);
+    submissionRows.forEach((row) => (isSolvedSubmission(row, statusCol) ? solved++ : attempted++));
 
-    const counts = { easy: 0, medium: 0, hard: 0 };
+    const difficulty = { easy: 0, medium: 0, hard: 0 };
     (problemsResult.data || []).forEach((problem) => {
-      const difficulty = String(problem.difficulty || "").toLowerCase();
-      if (counts[difficulty] !== undefined) counts[difficulty]++;
+      const key = String(problem.difficulty || "").toLowerCase();
+      if (difficulty[key] !== undefined) difficulty[key]++;
     });
-    document.getElementById("chart-difficulty").innerHTML = problemsResult.error
-      ? `<div class="chart-empty">Unavailable</div>`
-      : svgDonut([
-        { label: "Easy", value: counts.easy, color: CHART_COLORS.green },
-        { label: "Medium", value: counts.medium, color: CHART_COLORS.amber },
-        { label: "Hard", value: counts.hard, color: CHART_COLORS.red },
-      ]);
+
+    const view = {
+      labels: signupBuckets.map((b) => b.label),
+      signupValues: signupBuckets.map((b) => b.value),
+      submissionValues: submissionBuckets.map((b) => b.value),
+      outcomes: { solved, attempted },
+      difficulty,
+      errors: {
+        profiles: !!profilesResult.error,
+        submissions: !!submissionsResult.error,
+        problems: !!problemsResult.error,
+      },
+    };
+    analyticsCache.set(days, view);
+    paintAnalytics(view, days);
   } catch (e) {
-    if (requestId !== analyticsRequest) return;
+    if (requestId !== analyticsRequest || cached) return;
     ["chart-overview", "chart-signups", "chart-submissions", "chart-status", "chart-difficulty"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = `<div class="chart-empty">Analytics unavailable right now.</div>`;
@@ -275,9 +358,10 @@ async function loadActivity() {
   const items = [];
 
   try {
-    const { data: subs } = await sb.from("submissions").select("*").order("created_at", { ascending: false }).limit(8);
+    const { data: subs, statusCol: stCol } = await selectSubmissions((cols) =>
+      sb.from("submissions").select(cols).order("created_at", { ascending: false }).limit(8)
+    );
     const rows = subs || [];
-    const stCol = detectCol(rows[0], ["status", "result", "verdict"]);
     const userIds = [...new Set(rows.map((s) => s.user_id).filter(Boolean))];
     const problemIds = [...new Set(rows.map((s) => s.problem_id).filter(Boolean))];
     let users = {}, problems = {};
@@ -327,13 +411,14 @@ async function loadActivity() {
 async function loadTopProblems() {
   const list = document.getElementById("top-problems");
   try {
-    const { data } = await sb.from("submissions").select("*").order("created_at", { ascending: false }).limit(2000);
+    const { data, statusCol: stCol } = await selectSubmissions((cols) =>
+      sb.from("submissions").select(cols).order("created_at", { ascending: false }).limit(1200)
+    );
     const rows = data || [];
     if (!rows.length) {
       list.innerHTML = `<li class="empty-row">No submissions yet.</li>`;
       return;
     }
-    const stCol = detectCol(rows[0], ["status", "result", "verdict"]);
     const agg = {};
     rows.forEach((s) => {
       if (!s.problem_id) return;
@@ -361,6 +446,9 @@ async function loadAIBrief() {
   const list = document.getElementById("dashboard-ai-checks");
   if (!scoreEl || !list) return;
   try {
+    // The AI bundle now loads in the background, so wait for it here
+    // instead of making the whole page wait for it up front.
+    if (typeof whenAdminAIReady === "function") await whenAdminAIReady();
     const settings = typeof AI_getSettings === "function" ? AI_getSettings() : { master: false };
     const pill = document.querySelector("[data-ai-guard-pill]");
     if (pill) {
@@ -441,12 +529,14 @@ async function loadProblems(page = 0) {
     return;
   }
 
-  dashboardProblems.forEach((p) => {
+  // One string + one DOM write for the whole page of rows. The old loop did
+  // 50 × (createElement + innerHTML + appendChild), i.e. 50 separate layout
+  // invalidations and 150 individual click listeners per render.
+  tbody.innerHTML = dashboardProblems.map((p) => {
     const safeType = p.type === "bug" ? "bug" : "question";
     const safeDiff = ["easy", "medium", "hard"].includes(p.difficulty) ? p.difficulty : "medium";
     const id = encodeURIComponent(p.id);
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    return `<tr>
       <td class="mono muted">${p.problem_number ?? "—"}</td>
       <td>${escapeHtml(p.title)}</td>
       <td><span class="tag tag--${safeType}">${safeType === "bug" ? "Bug" : "Question"}</span></td>
@@ -459,21 +549,25 @@ async function loadProblems(page = 0) {
         <button class="btn btn--secondary btn--sm" data-vary-id="${id}" title="AI: create 3 fresh variations of this problem">✨</button>
         <button class="btn btn--danger btn--sm" data-delete-id="${id}">Delete</button>
       </td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join("");
 
-  tbody.querySelectorAll("[data-delete-id]").forEach((btn) => {
-    btn.addEventListener("click", () => deleteProblem(btn.dataset.deleteId, btn));
-  });
-  tbody.querySelectorAll("[data-duplicate-id]").forEach((btn) => {
-    btn.addEventListener("click", () => duplicateProblem(btn.dataset.duplicateId, btn));
-  });
-  tbody.querySelectorAll("[data-vary-id]").forEach((btn) => {
-    btn.addEventListener("click", () => varyProblem(btn.dataset.varyId, btn));
-  });
-
+  bindProblemRowActions(tbody);
   renderPagination(document.getElementById("problems-pagination"), problemsPage, problemsTotal, (p) => loadProblems(p));
+}
+
+// A single delegated listener survives every re-render, so row actions keep
+// working without re-attaching handlers each time the table reloads.
+function bindProblemRowActions(tbody) {
+  if (!tbody || tbody.dataset.bound === "1") return;
+  tbody.dataset.bound = "1";
+  tbody.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-delete-id], button[data-duplicate-id], button[data-vary-id]");
+    if (!button) return;
+    if (button.dataset.deleteId) deleteProblem(button.dataset.deleteId, button);
+    else if (button.dataset.duplicateId) duplicateProblem(button.dataset.duplicateId, button);
+    else if (button.dataset.varyId) varyProblem(button.dataset.varyId, button);
+  });
 }
 
 async function exportProblems() {
@@ -543,6 +637,11 @@ async function duplicateProblem(id, btn) {
 // AI Variations: spawns 3 fresh verified problems modelled on this one
 // (same topic/type/difficulty, new values, never duplicates).
 async function varyProblem(id, btn) {
+  if (typeof AI_generateVariations !== "function" && typeof whenAdminAIReady === "function") {
+    btn.disabled = true;
+    await whenAdminAIReady();
+    btn.disabled = false;
+  }
   if (typeof AI_generateVariations !== "function") {
     showToast("AI engine not loaded — reload the page.", "error");
     return;

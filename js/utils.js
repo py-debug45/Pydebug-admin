@@ -129,6 +129,9 @@ function bindPasswordToggles() {
 async function fillSidebarAccount() {
   const nameEl = document.getElementById("sidebar-name");
   if (!nameEl) return; // this page has no sidebar account block
+  // The Supabase client may not exist yet (or at all, if the SDK was blocked).
+  // Never let that throw — it would kill everything after it on the page.
+  if (typeof sb === "undefined" || !sb || !sb.auth) return;
 
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return;
@@ -170,7 +173,7 @@ function bindMobileDrawer() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+onAdminReady(() => {
   markActiveNav();
   bindLogoutButtons();
   bindPasswordToggles();

@@ -1,0 +1,10 @@
+# Local sandbox preview harness (mock Supabase + static server) — never deployed
+.preview/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+node_modules/

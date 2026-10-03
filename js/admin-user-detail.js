@@ -29,7 +29,7 @@ let currentAdmin = null;
 let detailUserId = null;
 let detailProfile = null;
 
-document.addEventListener("DOMContentLoaded", async () => {
+onAdminReady(async () => {
   currentAdmin = await requireAdmin();
   if (!currentAdmin) return;
 
