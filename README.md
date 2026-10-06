@@ -1,276 +1,172 @@
-# PyDebug — Admin App
+# PyDebug Admin
 
-Standalone admin panel for PyDebug. Deploy this as its **own** Netlify site
-(separate from the user-facing app), connected to the **same Supabase project**.
+Production admin console for **PyDebug** (`admin.pydebug.in`). This is a separate Vercel project that talks to the same Supabase project as `pydebug.in`.
 
-## ⚡ Speed, mobile menu & charts — what changed
+The previous browser-side Supabase admin client has been removed. Database access now happens only in Vercel serverless functions with the service-role key; no Supabase URL/key or privileged credential is shipped to the browser.
 
-**1. The mobile menu button works again.**
-`css/admin.css` declared the drawer twice: the `@media (max-width: 800px)`
-block set `z-index: 1101`, but a later plain `.admin-sidebar { … z-index: 10 }`
-rule (same specificity, so it wins) dropped the open drawer *behind* its own
-backdrop — tapping ☰ dimmed the screen and showed nothing. All responsive
-rules now live in **one** block at the end of the file, and the drawer is a
-proper controller: tap to open **and** close, backdrop tap, nav-link tap and
-`Esc` all close it, the page behind it stops scrolling, `aria-expanded` is
-kept in sync, and switching back to desktop width can't leave it stuck.
+## What is included
 
-**2. The panel is no longer slow.**
-- The five AI automation files (~250 KB) were downloaded **one after another**
-  and `requireAdmin()` *awaited all of them* before any page could show data.
-  They now download in parallel, in the background, and only `ai.html` waits.
-- `js/admin-icons.js` rebuilt a 60-token regular expression **for every text
-  node** and re-walked the DOM on **every** mutation. It now compiles once,
-  skips nodes with a single cheap test, batches work into one idle pass, and
-  pauses its own observer while it edits.
-- The dashboard pulled `submissions.select("*")` up to 10 000 rows at a time —
-  every column, including stored code. It now probes the table shape once and
-  asks only for the 4–5 columns it actually reads.
-- Tables were built with one `createElement` **per row** plus 2–3 click
-  listeners per row. Now: one DOM write and one delegated listener per table.
-- Background tabs stop polling presence, pulse animations moved off
-  `box-shadow` (repaint) onto transform/opacity, heavy blurs and the full-page
-  gradient are dropped on phones, and `prefers-reduced-motion` is respected.
+### Security and platform
 
-**3. Real charts.** `js/admin-charts.js` is a proper little chart engine now:
-pixel-accurate sizing via `ResizeObserver` (labels stay legible on a phone
-instead of being shrunk by viewBox scaling), smooth monotone-cubic lines with
-gradient areas, hover/touch tooltips with a crosshair and per-series values,
-rounded gradient bars with today highlighted, and donuts with hover emphasis,
-a centre read-out and percentages in the legend. Still zero dependencies.
+- Plain HTML/CSS/JavaScript frontend; no framework or build step
+- Four public CommonJS API functions:
+  - `api/auth.js` — password login, bootstrap, TOTP, session, logout
+  - `api/read.js` — all paginated reads
+  - `api/write.js` — all admin mutations
+  - `api/jobs.js` — broadcasts, exports, reconciliation, email tests and rebuild dispatches
+- Dependency-free PostgREST client in `api/_db.js` using global `fetch` and a 15-second timeout
+- 8-hour HMAC-signed `HttpOnly; Secure; SameSite=Strict` session cookie
+- Same-origin checks and a per-session CSRF token on mutations
+- Login rate limit: 5 attempts per IP per 15 minutes through Upstash, fail-open with a server warning if Redis is unavailable
+- Dependency-free RFC 6238 TOTP; encrypted-at-rest TOTP secrets; mandatory for `superadmin` and `finance`
+- Server-side RBAC on every endpoint
+- Append-only audit log with old/new values, actor role, reason and IP
+- Masked emails for roles without reveal access; explicit email reveal is audited
+- Strict CSP, HSTS, frame denial and `noindex/noarchive` headers
+- No ads or analytics
 
-**4. Nothing can block the scripts any more.** The Supabase SDK was a single
-blocking `<script>` from `cdn.jsdelivr.net`; if an ad blocker, DNS filter,
-office firewall or a slow CDN got in the way, `supabase is not defined` killed
-every script after it and the admin got a blank page. The SDK is now served
-from this repo (`js/vendor/supabase.min.js`), every script tag is `defer`red,
-`js/admin-boot.js` falls back to the CDN if the local file is ever missing,
-and pages start through `onAdminReady()` so they only run once the client
-really exists — with a readable banner instead of a silent blank screen.
+### Admin modules
 
-## 1. Run the SQL setup in Supabase (SQL Editor) — required
+- Dashboard KPIs, 30-day signup/solve/revenue charts, cron/push alerts and recent events
+- Users list with search, segmentation, pagination and CSV export
+- User 360° view: account state, premium, progress, streak, referrals, battles, achievements, notifications and audit
+- Audited premium grants/revokes, suspension, warn/mute, XP changes, progress reset, streak repair and Auth user deletion
+- Payments ledger, plan reporting, manual entitlement grant and Razorpay CSV reconciliation
+- Problems CMS with drafts, publish/archive, duplicate, hints, preview, access control and notification opt-out flag
+- Referral funnel, top referrers, fraud invalidation and reward revocation
+- Battle completion/pool health and stuck-session cleanup
+- Discussion feed and flag moderation
+- Segmented push announcement composer and delivery logs
+- Lifecycle email log and Resend test sends
+- Growth retention cohorts, revenue/ARPU/plan mix, content difficulty, engagement and churn reports with CSV export
+- App settings and admin team/role management
+- Filterable audit viewer and CSV export
 
-Open **`supabase-admin-setup.sql`** from this repo, paste it into
-Supabase → **SQL Editor**, and run it. It's idempotent, so it's safe to
-re-run after pulling new admin-panel upgrades.
+## 1. Run the Supabase migration
 
-What it does (assuming the user-panel tables already exist):
+In the **same Supabase project used by PyDebug**, open SQL Editor and run:
 
-- Adds the DB-backed admin panel password verifier and seeds the initial
-  bcrypt password `imtiyaj khan 9329` (change it later with the SQL comment at
-  the bottom of the setup file)
-- Adds `profiles.is_admin` + an `is_admin()` helper for RLS checks
-- Backfills columns the user app expects (`problem_number`,
-  `submissions.code`, `display_name`, `monthly_xp`, …) and numbers any
-  un-numbered problems
-- Creates the `notifications` table if it doesn't exist yet
-- Lets admins manage `problems`, read/update `profiles`, read
-  `payment_grants` (the real payment ledger), read/delete `submissions`,
-  moderate `problem_discussions` (+ likes), read `user_achievements`,
-  manage `notifications`, and read hint/playground support tables
+```text
+db/migrations/0001_admin.sql
+```
 
-If you already added the `prevent_self_premium_grant` trigger from the user
-app's setup (blocking users from self-granting premium), this still works
-fine alongside it — that trigger explicitly allows changes when `is_admin()`
-is true, so admin-panel premium grants/revokes keep working.
+The migration is idempotent and also upgrades the legacy admin audit table in place. It creates:
 
-## 2. Make your account the admin
+- `admin_users`
+- `admin_audit_log`
+- `app_settings`
+- `discussion_flags`
+- profile/problem admin columns and indexes
+- `admin_problem_stats` view
 
-1. Sign up for a normal account through the **user-facing app** (not this admin app) once.
-2. In Supabase → **Table Editor → profiles**, find your row and set `is_admin` to `true`.
-3. That's the only account that can log into this admin app.
+It also removes any old audit foreign key so deleting a user can never remove or rewrite historical audit records. Legacy browser-admin RLS policies and the old shared panel-password verifier are removed. If a legacy `profiles.is_admin` column exists, its values are cleared and a trigger permanently forces it false; the new `admin_users` roles become the only admin authorization source.
 
-## 3. Keys — already filled in
+### Existing new-problem trigger
 
-`js/supabaseClient.js` already has your Supabase URL + anon key (same project
-as the user app). Nothing else to configure — this app makes no payment or
-ads calls, so there are no other secrets involved.
+The editor writes `problems.admin_skip_notification = true` when **Notify users on publish** is off. Because the name/body of the existing notification trigger is project-specific, the migration does not overwrite it. Update that existing trigger function so it exits without broadcasting when the flag is true. Its trigger function should include this guard before notification work:
 
-## 4. Deploy
+```sql
+if new.admin_skip_notification then
+  return new;
+end if;
+```
 
-This is plain static HTML/CSS/JS with no serverless functions, so a simple
-Netlify deploy works:
-- Connect a **private** GitHub repo to Netlify (Import from Git), or
-- Drag-and-drop this folder directly into Netlify — both work fine here,
-  since (unlike the user app) there's no `netlify/functions` folder that
-  drag-and-drop would fail to deploy.
+Until that guard is added, an old insert-only trigger may still notify on inserts even when the toggle is off.
 
-Give it its own subdomain, e.g. `pydebug-admin.netlify.app`, so it's not
-guessable from the main user-facing URL.
+## 2. Configure Vercel environment variables
 
-## What's included
+Set these in the **admin project only**. Never put values in this repository or browser files.
 
-- `index.html` — Admin login (only `is_admin = true` accounts get in)
-- Every protected page adds a second DB-backed mobile-style lock. The default
-  panel password is `imtiyaj khan 9329`; it is stored as a bcrypt hash in
-  `admin_panel_security`. It is requested once per admin visit, shared while
-  moving between admin pages in the same tab, and requested again after a
-  reload or a new visit.
-- `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
-  name, updates in real time + who practiced today by name) + a polished
-  brand command center with real KPI comparisons (new learners and revenue
-  versus the previous period), range-aware SVG growth charts (7 / 14 / 30
-  days), signups, submissions, difficulty & status donuts, recent activity,
-  a live AI quality brief, top problems + all problems (search / type /
-  difficulty / access filters, duplicate, edit, delete, CSV export).
-  Premium-user count is expiry-aware.
-- `submissions.html` — Every user's progress row: filter by status, search
-  by user/problem, view saved code in a modal, delete, CSV export
-- `payments.html` — Revenue from the verified `payment_grants` ledger
-  (total / 30-day / by-plan donuts) + full grant log with plan filter,
-  search and CSV export
-- `discussions.html` — Moderate problem comments: search, filter
-  (solutions/replies), view full text, delete spam, CSV export
-- `notifications.html` — Broadcast announcements to All / Free / Premium
-  users' 🔔 bell + review recent notifications
-- `problem-form.html` — Add or edit a problem (12 fixed topics,
-  auto-suggested problem number, dynamic hints)
-- `users.html` — All users with plan/role filters, sorting (newest / most
-  XP), quick Grant/Revoke Premium, CSV export — click through to…
-- `user-detail.html` — Per-user overview: display-name edit, XP adjust
-  (total + monthly), streak freezes, premium grant with expiry
-  (lifetime / 1mo / 3mo / 1yr), make/remove admin, reset progress,
-  achievements grid, recent submissions
-- `ai.html` — 🤖 **Own-AI Control Center** (no API key needed): master
-  ON/OFF switch, per-module toggles, problem-factory settings, manual
-  run buttons, problem preview with validation checklist, moderation tester,
-  private code diagnostic lab for common Python mistakes, and the AI activity
-  log
+```text
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_SESSION_SECRET=
+ADMIN_ALLOWED_EMAILS=
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+GITHUB_DISPATCH_TOKEN=
+RESEND_API_KEY=
+```
 
-## 🟢 Live activity — who's on the site RIGHT NOW + who practiced today
+Optional for the rebuild button:
 
-The dashboard opens with a **Live activity** section (plus an "Active now"
-stat card):
+```text
+GITHUB_DISPATCH_REPO=owner/main-pydebug-repo
+```
 
-- **Live right now** — every REAL user currently using the PyDebug site,
-  by name, with the page they're on and "Ns ago". A green pulsing dot shows
-  it's live. This is *exact*: it updates the instant a user joins, and the
-  moment a user **closes the page/app, their name disappears** (within a few
-  seconds — no stale "ghost" users ever linger).
-- **Practiced today** — of *all* users, the ones who opened PyDebug to
-  practice today, by name, with submissions-today count and streak 🔥. The
-  "Practiced today" stat card also shows the share of total users.
+Requirements:
 
-### How the "exact / instant" guarantee works
+- `ADMIN_SESSION_SECRET` must be a cryptographically random string of at least 32 characters. It also derives the TOTP encryption key. Before rotating it, reset affected encrypted TOTP values in SQL (`update admin_users set totp_enabled=false, totp_secret_encrypted=null;`) so admins can enroll again.
+- `ADMIN_ALLOWED_EMAILS` is a comma-separated bootstrap allowlist. It is used **only when `admin_users` has zero rows**.
+- `SUPABASE_ANON_KEY` is used server-side only for the password grant.
+- `SUPABASE_SERVICE_ROLE_KEY` is used server-side only for PostgREST/Auth admin access.
+- `RESEND_API_KEY` and GitHub variables are optional until those actions are used.
 
-1. The user-facing app writes a tiny heartbeat row into
-   `public.user_presence` every 25s while the site is in the foreground,
-   and deletes it the instant the user closes/leaves the page.
-2. The admin panel reads that table and subscribes to it via **Supabase
-   Realtime**, so every heartbeat/change lands on the dashboard immediately
-   (with a 25s polling fallback + a 5s local expiry tick as safety nets).
-3. A user only counts as **active** while their `last_seen_at` is within the
-   last **60 seconds**. Closing the page stops the heartbeats, so the name
-   drops out on its own — even if the browser is force-killed before the
-   leave-delete can run. Reopening the site puts them back instantly.
+A safe way to generate a session secret locally is:
 
-### One-time setup for the live list (2 steps)
+```bash
+openssl rand -base64 48
+```
 
-1. **Re-run `supabase-admin-setup.sql`** in the Supabase SQL editor. It is
-   idempotent; the new section creates `user_presence`, its RLS (users only
-   ever touch their own row; admins read all) and adds the table to the
-   Realtime publication.
-2. **Add the heartbeat to the user-facing PyDebug app:** copy
-   `js/presence-heartbeat.js` into that app's `js/` folder and add ONE script
-   tag on its main pages, after the Supabase client script:
+## 3. First login
 
-   ```html
-   <script src="js/supabaseClient.js"></script>
-   <script src="js/presence-heartbeat.js"></script>
-   ```
+1. Ensure your email already has a Supabase Auth account in the PyDebug project.
+2. Add that exact email to `ADMIN_ALLOWED_EMAILS`.
+3. Deploy and open `/login.html`.
+4. Sign in with the Supabase Auth email/password.
+5. If `admin_users` is empty, the account is inserted as `superadmin`.
+6. Scan/copy the displayed TOTP secret into an authenticator and verify a code.
 
-   Then re-deploy the user app. From that moment, its real users populate
-   "Live right now" here. Until that file is live in the user app, the list
-   correctly shows *Nobody is on the site right now* (it never fakes anyone).
+After the first admin exists, the bootstrap allowlist cannot create further admins. Add the rest from **Settings → Admin team**.
 
-> **Privacy / safety:** the heartbeat stores only the user's own id and the
-> page path — RLS prevents any user from reading or touching another user's
-> row. The file is fully fail-safe and never affects the user app's own
-> behaviour. "Active" = the site is in the *foreground*; a backgrounded tab
-> (phone locked, other tab focused) drops out after 60s and reappears
-> instantly on return, which is the intended "really using it right now"
-> semantics.
+## 4. Local checks
 
-## 🤖 Own-AI (built-in, zero API keys)
+No runtime install is required. Run the built-in Node test suite:
 
-This panel ships its own AI engine — pure in-browser JavaScript, no OpenAI /
-Gemini / external calls at all, so there is nothing to pay for and no key to
-leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (loaded on every protected admin page
-after the panel password is passed), control UI: `ai.html` + `js/admin-ai.js`.
+```bash
+npm test
+npm run check
+```
 
-- **Discussion moderation** — scans English comments for abuse/gaali
-  (incl. leetspeak like `sh1t`, `f*ck`, `fuuuck`, spaced-out `f u c k`),
-  spam and promo links; auto-deletes the comment and sends a ⚠️ warning
-  notification to the offender. Abusive rows also get a ⚠️ badge on the
-  Discussions page.
-- **Problem factory** — generates Fix-the-Bug + Predict-Output problems
-  with ALL fields filled + exactly 3 hints. EVERY Fix-the-Bug snippet is
-  verified to RAISE a real Python error when run (SyntaxError,
-  IndentationError, NameError, TypeError, ValueError, IndexError,
-  KeyError, ZeroDivisionError, AttributeError, RecursionError,
-  ModuleNotFoundError, FileNotFoundError, StopIteration, AssertionError,
-  UnboundLocalError, NotImplementedError…) — proven by a built-in static
-  detector before insert, never a silent wrong answer — and every
-  Predict-Output expected output is COMPUTED from the same values in the
-  code, never guessed. Use "👁️ Preview" to inspect buggy code + fixed
-  reference code + the validation checklist before inserting.
-- **⭐ Premium mix** — optionally marks a configurable share of factory
-  problems as Premium (default 25% ≈ 2–3 of every 10, hardest first);
-  gap-filler honors it too, and broadcasts mention the Premium count.
-- **🧹 Bug error guard** — auto-deletes Fix-the-Bug problems (AI-made OR
-  admin-added) whose code runs WITHOUT raising any Python error; hourly
-  while ON, plus a manual "Delete error-free bugs now" button (dry-run +
-  confirm), a ❤️ health-check entry and a 🔎 quality-report `no-error`
-  flag for review.
-- **Duplicate guard** — fingerprints every problem (code + output); new
-  problems that already exist are skipped, and "🧹 Remove duplicates"
-  deletes existing dupes (keeping the oldest), including their
-  submissions/discussions.
-- **Auto notifications** — offender warnings, new-problem broadcasts to
-  all users (🔔 bell compatible) and welcome messages for new joiners.
-- **Reports bundle** — 📰 Daily AI Digest (signups, submissions, solve
-  rate, top problem, AI activity + auto-highlights, rebuilt daily while
-  ON), ❤️ Panel Health Score 0–100 (topic gaps, difficulty balance,
-  weak hints, incomplete problems, duplicates, live abuse, unanswered
-  questions, sleeping users — each with a one-click Fix button), 🔔
-  floating admin bell on every page (unread AI findings inbox), and 🎯
-  Difficulty Calibration (real solve rates → suggested easy/medium/hard
-  changes with Apply / Apply-all).
-- **Scheduling** — while the master switch is ON and any admin page is
-  open, the watcher runs moderation every minute, duplicate cleanup +
-  welcome hourly, digest daily, and auto-generation every 6/12/24h
-  (configurable).
-- **Growth bundle** (`js/ai-growth.js`) — ⏰ premium expiry/expired
-  reminders (weekly cooldown), 🥺 win-back pings for 7+ day inactive
-  users with XP personalization, 💡 stuck-user encouragement after 5+
-  failed attempts, 🚀 leaderboard Top-10/climb alerts from daily
-  snapshots. Each with ON/OFF toggle + Run-now + daily auto-run.
-- **Content bundle** (`js/ai-content.js`) — 🧩 gap filler (emptiest
-  topic × difficulty cells first), ✨ one-click Variations on every
-  dashboard problem row, 🔎 quality report (weak titles/descriptions/
-  hints, dup numbers, bad topics) with Edit links, 💡 one-click hint
-  repair from a 12-topic hint bank, 📥 bulk import (JSON/CSV) with
-  AI validation (fields + duplicates) before insert.
-- **Safety+ bundle** (`js/ai-safety.js`) — 🇮🇳 Hindi/Hinglish abuse
-  filter (Roman + Devanagari + phrases, toggleable, merged into the
-  main scanner), 🤖 FAQ auto-helper (answers 24h+ unanswered questions
-  as the admin, max 10/run), 🕵️ copy-paste detector (identical code by
-  3+ users — report only, never auto-punishes).
-- **Sync** — toggles persist in `localStorage` instantly and sync
-  best-effort to the `ai_settings` / `ai_logs` tables (created by
-  `supabase-admin-setup.sql` §11) so every admin device agrees.
+Tests cover:
 
-Shared helpers: `js/admin-common.js` (auth gate + formatting + plan prices),
-`js/admin-charts.js` (dependency-free SVG charts), `js/admin-export.js`
-(CSV downloads).
+- valid, tampered and expired sessions
+- TOTP generation/verification and encrypted secret storage
+- role gates, including a `content_editor` rejected from the payments read endpoint with 403
+- old/new audit values, reason enforcement, secret redaction and audit-write failure behavior
 
-## Keep in sync with the user panel
+The real APIs need Vercel/local environment variables and a migrated Supabase project. Do not use production service-role credentials in a shared local environment.
 
-- **Plan prices** (`js/admin-common.js` → `PYDEBUG_PLANS`) must match the
-  user repo's `api/_plans.js`, otherwise revenue numbers will be wrong.
-- **Badge list** (`js/admin-user-detail.js` → `PYDEBUG_BADGES`) mirrors the
-  user repo's `js/achievements.js`.
-- **After adding problems**, the user app's live grid picks them up
-  automatically (it reads the DB), but the prerendered SEO pages under
-  `problems/*.html` need the user repo's `scripts/prerender-problems.mjs`
-  re-run to include the new content.
+## 5. Deploy
+
+1. Import this private repository as a new Vercel project.
+2. Add all required environment variables.
+3. Deploy with no framework preset/build command.
+4. Attach `admin.pydebug.in` to the project.
+5. Point the DNS record to Vercel as instructed by the Vercel domain screen.
+
+`vercel.json` configures the four functions and security headers. Static admin HTML is deliberately `no-store`; versioned JS/CSS may be revalidated.
+
+## Roles
+
+| Role | Main access |
+|---|---|
+| `superadmin` | Full platform, settings and team administration |
+| `content_editor` | Problems CMS; own audit entries |
+| `support` | Users/support actions, payment reads, test notifications/email; own audit |
+| `finance` | Payment and reconciliation operations, premium grants, reports; own audit |
+| `moderator` | User warn/mute, referrals and discussion moderation; own audit |
+| `analyst` | Read-only analytics, reports and full audit; masked emails |
+
+The browser hides inaccessible navigation for usability, but the API role checks are the actual security boundary.
+
+## Operational notes
+
+- List APIs default to 50 rows and cap client-requested pages at 200 rows.
+- CSV export jobs are explicitly bounded to 5,000 rows (audit exports to 500 summary rows); on-screen audit details retain old/new diffs.
+- A push broadcast inserts a `push_announcements` row. The existing PyDebug push worker remains responsible for delivery.
+- Manual premium grants update entitlement fields but do **not** create fake Razorpay payment rows.
+- Resend tests use `PyDebug <noreply@pydebug.in>`; verify that sender/domain in Resend before production use.
+- User suspension only becomes an end-user enforcement boundary if the main product checks `profiles.status` during authenticated actions.
+- If an administrative change succeeds but its audit insert fails, the API returns `audit_write_failed` and tells operators to stop further changes and investigate.

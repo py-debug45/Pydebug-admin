@@ -1,10 +1,18 @@
-# Local sandbox preview harness (mock Supabase + static server) — never deployed
-.preview/
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
 
-# OS / editor noise
+# Dependencies / coverage / editor noise
+node_modules/
+coverage/
 .DS_Store
 Thumbs.db
 *.swp
 .idea/
 .vscode/
-node_modules/
+
+# Local preview files
+.preview/
+.vercel/
