@@ -63,6 +63,24 @@ test("every generated problem is complete, typed and within one batch unique", (
   }
 });
 
+test("premium mix selects a deterministic, proportional subset", () => {
+  const modes = { none: 0, quarter: 3, third: 3, half: 5 };
+  for (const [mode, expected] of Object.entries(modes)) {
+    const problems = ai.generateProblems({ seed: 4242, count: 10, type: "any", difficulty: "any", premium: mode });
+    const premium = problems.filter((problem) => problem.is_premium).length;
+    assert.equal(premium, expected, `${mode} of 10 should mark ${expected} premium`);
+  }
+  for (let seed = 1; seed <= 10; seed += 1) {
+    const a = ai.generateProblems({ seed, count: 6, premium: "quarter" });
+    const b = ai.generateProblems({ seed, count: 6, premium: "quarter" });
+    assert.deepEqual(a, b, "premium selection must be deterministic per seed");
+    const small = ai.generateProblems({ seed, count: 1, premium: "half" });
+    assert.equal(small[0].is_premium, true, "half of 1 must still pick the only problem");
+    const none = ai.generateProblems({ seed, count: 5, premium: "nonsense" });
+    assert.ok(none.every((problem) => problem.is_premium === false), "unknown mode falls back to all free");
+  }
+});
+
 test("filters restrict generation and invalid combinations are rejected", () => {
   const bugs = ai.generateProblems({ seed: 5, count: 8, type: "bug", difficulty: "easy" });
   assert.ok(bugs.length > 0);
@@ -115,7 +133,7 @@ test("publish inserts only problems that are not already in the library", async 
   const db = require("../api/_db");
   const originalList = db.list;
   const originalInsert = db.insert;
-  const previewData = await aiApi._internals.preview(admin, { type: "any", difficulty: "any", count: 6, seed: 31415 });
+  const previewData = await aiApi._internals.preview(admin, { type: "any", difficulty: "any", premium: "third", count: 6, seed: 31415 });
   // Pretend the library already contains the second generated problem.
   const existing = [previewData.problems[1]];
   const insertedProblems = [];
@@ -135,13 +153,17 @@ test("publish inserts only problems that are not already in the library", async 
     };
     const result = await aiApi._internals.publish(
       admin,
-      { seed: previewData.seed, signature: previewData.signature, count: 6, type: "any", difficulty: "any", status: "draft", skip: [3] },
+      { seed: previewData.seed, signature: previewData.signature, count: 6, type: "any", difficulty: "any", premium: "third", status: "draft", skip: [3] },
       "AI studio weekly batch",
       "127.0.0.1",
     );
     assert.equal(result.inserted_count, 4);
     assert.equal(result.skipped_count, 2);
     assert.deepEqual(result.skipped.map((row) => row.reason).sort(), ["duplicate", "excluded_by_admin"]);
+    const expectedPremium = previewData.problems.filter((problem) => problem.is_premium === true);
+    const premiumRows = insertedProblems.filter((row) => row.is_premium === true);
+    assert.equal(premiumRows.length + result.skipped.filter((row) => row.is_premium).length, expectedPremium.length, "premium marks must survive into inserts and skips");
+    assert.ok(result.premium_count === premiumRows.length);
     assert.ok(insertedProblems.every((row) => row.status === "draft" && row.created_by === admin.admin_id));
     assert.ok(insertedProblems.every((row) => row.admin_skip_notification === true));
     assert.equal(auditRows.length, 4);

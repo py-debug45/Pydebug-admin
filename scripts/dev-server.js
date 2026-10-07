@@ -48,8 +48,8 @@ const now = Date.now();
 const iso = (msAgo) => new Date(now - msAgo).toISOString();
 const DAY = 86400000;
 
-const ROOT_ADMIN_ID = "00000000-0000-4000-8000-root000000001";
-const DEV_ADMIN_ID = "00000000-0000-4000-8000-dev00000000001";
+const ROOT_ADMIN_ID = "00000000-0000-4000-8000-00000000a001";
+const DEV_ADMIN_ID = "00000000-0000-4000-8000-00000000a002";
 
 const users = [
   ["Aarav Sharma", "aarav@example.com", 25, 12, 1240, "active"],
@@ -61,7 +61,7 @@ const users = [
   ["Dev Joshi", "dev@example.com", 18, 9, 870, "muted"],
   ["Ananya Ray", "ananya@example.com", 44, 30, 3120, "active"],
 ].map(([name, email, streakDays, joinedDays, xp, status], index) => ({
-  id: `00000000-0000-4000-8000-user${String(index).padStart(4, "0")}`,
+  id: `00000000-0000-4000-8000-0000000b${String(index).padStart(4, "0")}`,
   full_name: name,
   email,
   display_name: name.split(" ")[0],
@@ -86,12 +86,11 @@ const users = [
 
 // Seed problems from the local AI engine itself so shapes always stay in sync.
 // Fixed seed 4242: reusing it in the AI studio shows duplicate-blocking live.
-const seededAi = ai.generateProblems({ seed: 4242, count: 4, type: "any", difficulty: "any" });
+const seededAi = ai.generateProblems({ seed: 4242, count: 4, type: "any", difficulty: "any", premium: "quarter" });
 const seededAi2 = ai.generateProblems({ seed: 909, count: 3, type: "bug", difficulty: "easy" });
 const problems = [...seededAi, ...seededAi2].map((problem, index) => ({
-  id: `00000000-0000-4000-8000-prob${String(index).padStart(4, "0")}`,
+  id: `00000000-0000-4000-8000-0000000c${String(index).padStart(4, "0")}`,
   ...problem,
-  is_premium: index % 4 === 0,
   status: index < 5 ? "published" : "draft",
   created_by: DEV_ADMIN_ID,
   admin_skip_notification: true,
@@ -99,10 +98,78 @@ const problems = [...seededAi, ...seededAi2].map((problem, index) => ({
   updated_at: iso(index * DAY),
 }));
 
+const battles = [
+  { id: crypto.randomUUID(), challenger_id: users[0].id, opponent_id: users[1].id, difficulty: "easy", winner_id: users[0].id, finished_at: iso(2 * DAY), created_at: iso(3 * DAY) },
+  { id: crypto.randomUUID(), challenger_id: users[2].id, opponent_id: users[3].id, difficulty: "medium", winner_id: users[3].id, finished_at: iso(4 * DAY), created_at: iso(5 * DAY) },
+  { id: crypto.randomUUID(), challenger_id: users[4].id, opponent_id: users[5].id, difficulty: "hard", winner_id: null, finished_at: null, created_at: iso(6 * 3600000) },
+];
+
+const notifications = users.slice(0, 4).flatMap((user, index) => [
+  { id: crypto.randomUUID(), user_id: user.id, type: "streak_reminder", title: "Keep your streak alive", message: "Practice today to keep your streak going.", link: null, is_read: index % 2 === 0, created_at: iso(index * DAY + 3600000) },
+  { id: crypto.randomUUID(), user_id: user.id, type: "new_problem", title: "A new bug hunt landed", message: "Try the newest debugging challenge.", link: "/practice", is_read: false, created_at: iso(index * DAY + 7200000) },
+]);
+
+const userAchievements = users.slice(0, 5).map((user, index) => ({
+  user_id: user.id,
+  achievement_id: ["first_solve", "streak_7", "bug_hunter", "night_owl", "speed_runner"][index],
+  unlocked_at: iso((index + 1) * DAY),
+}));
+
+const referrals = [
+  { id: crypto.randomUUID(), referrer_id: users[0].id, referred_id: users[5].id, status: "qualified", created_at: iso(9 * DAY) },
+  { id: crypto.randomUUID(), referrer_id: users[4].id, referred_id: users[6].id, status: "pending", created_at: iso(12 * DAY) },
+  { id: crypto.randomUUID(), referrer_id: users[7].id, referred_id: users[2].id, status: "converted", created_at: iso(20 * DAY) },
+];
+
+const referralAccountSignals = [
+  { id: crypto.randomUUID(), user_id: users[6].id, signal_type: "many_signups_same_ip", evidence: { ip: "203.0.113.9", signups: 6 }, invalidated_at: null, created_at: iso(5 * DAY) },
+  { id: crypto.randomUUID(), user_id: users[3].id, signal_type: "referral_churn", evidence: { referred: 4, retained: 0 }, invalidated_at: iso(2 * DAY), created_at: iso(8 * DAY) },
+];
+
+const discussions = problems.slice(0, 3).map((problem, index) => ({
+  id: crypto.randomUUID(),
+  problem_id: problem.id,
+  user_id: users[index].id,
+  author_id: users[index].id,
+  content: [
+    "The hint about negative indexes finally made this click for me.",
+    "Is the expected output here really what Python prints? It surprised me.",
+    "Fixed it by converting to int first — classic type mix-up.",
+  ][index],
+  is_hidden: false,
+  created_at: iso((index + 1) * DAY),
+}));
+
+const discussionFlags = [
+  { id: crypto.randomUUID(), discussion_id: discussions[0].id, reporter_id: users[1].id, reason: "Spoiler in the first line", resolved_by: null, resolved_at: null, resolution: null, created_at: iso(1 * DAY) },
+  { id: crypto.randomUUID(), discussion_id: discussions[1].id, reporter_id: users[2].id, reason: "Off-topic rant", resolved_by: ROOT_ADMIN_ID, resolved_at: iso(2 * DAY), resolution: "hidden", created_at: iso(3 * DAY) },
+];
+
+const paymentGrants = [
+  { id: crypto.randomUUID(), user_id: users[3].id, payment_id: null, plan_key: "manual", days: 14, reason_logged: "Goodwill credit after support ticket", created_at: iso(6 * DAY) },
+  { id: crypto.randomUUID(), user_id: users[5].id, payment_id: null, plan_key: "referral_reward", days: 7, reason_logged: "Referral qualified", created_at: iso(11 * DAY) },
+];
+
+const pushAnnouncements = [
+  { id: crypto.randomUUID(), title: "Weekend bug hunt", body: "Double XP on all bug hunt problems this weekend.", url: "/practice", segment: "all", created_by: ROOT_ADMIN_ID, created_at: iso(4 * DAY) },
+  { id: crypto.randomUUID(), title: "New hard problems", body: "Five new hard problems just landed.", url: "/practice", segment: "premium", created_by: ROOT_ADMIN_ID, created_at: iso(9 * DAY) },
+];
+
+const pushBroadcastLog = pushAnnouncements.map((row, index) => ({
+  id: crypto.randomUUID(), announcement_id: row.id, status: "sent", delivered: 400 - index * 37, failed: 2 + index, created_at: row.created_at,
+}));
+
+const lifecycleEmailLog = [
+  { id: crypto.randomUUID(), event: "welcome", email: users[0].email, status: "sent", error: null, created_at: iso(12 * DAY) },
+  { id: crypto.randomUUID(), event: "streak_lost", email: users[3].email, status: "sent", error: null, created_at: iso(5 * DAY) },
+  { id: crypto.randomUUID(), event: "premium_expiry", email: users[0].email, status: "bounced", error: "mailbox unavailable", created_at: iso(2 * DAY) },
+  { id: crypto.randomUUID(), event: "reengage", email: users[6].email, status: "failed", error: "no verified address", created_at: iso(1 * DAY) },
+];
+
 const payments = Array.from({ length: 12 }, (_, index) => {
   const plan = ["monthly", "sixmonth", "yearly"][index % 3];
   return {
-    id: `00000000-0000-4000-8000-paym${String(index).padStart(4, "0")}`,
+    id: `00000000-0000-4000-8000-0000000d${String(index).padStart(4, "0")}`,
     user_id: users[index % users.length].id,
     plan,
     amount_paise: plan === "monthly" ? 9900 : plan === "sixmonth" ? 49900 : 89900,
@@ -143,18 +210,26 @@ const tables = new Map(Object.entries({
     { key: "maintenance_mode", value: false, updated_at: iso(3 * DAY) },
     { key: "daily_challenge_enabled", value: true, updated_at: iso(5 * DAY) },
   ],
-  battles: [],
+  battles,
+  notifications,
+  user_achievements: userAchievements,
+  referrals,
+  referral_account_signals: referralAccountSignals,
+  problem_discussions: discussions,
+  discussion_flags: discussionFlags,
+  payment_grants: paymentGrants,
+  push_announcements: pushAnnouncements,
+  push_broadcast_log: pushBroadcastLog,
+  lifecycle_email_log: lifecycleEmailLog,
   push_subscriptions: users.slice(0, 4).map((user, index) => ({
     id: crypto.randomUUID(), user_id: user.id, endpoint: `https://dev-push/${index}`, created_at: iso(index * DAY),
   })),
-  push_event_log: [],
-  push_announcements: [],
+  push_event_log: [
+    { id: crypto.randomUUID(), event: "push_delivered", status: "success", error: null, created_at: iso(1 * 3600000) },
+    { id: crypto.randomUUID(), event: "push_failed", status: "failure", error: "410 endpoint gone", created_at: iso(2 * 3600000) },
+  ],
   streak_reminder_log: [{ created_at: iso(2 * 3600000) }],
-  notifications: [],
-  discussion_flags: [],
-  referral_signals: [],
   hint_unlocks: [],
-  user_achievements: [],
 }));
 
 const authByEmail = new Map([
@@ -189,11 +264,20 @@ function matchesOp(stored, op, raw) {
     return String(stored ?? "").toLowerCase().includes(pattern);
   }
   if (op === "eq") return looseEquals(stored, value);
-  if (op === "gte" || op === "lte") {
+  if (op === "neq") return !looseEquals(stored, value);
+  if (["gte", "lte", "gt", "lt"].includes(op)) {
     const a = typeof stored === "number" ? stored : Date.parse(stored) || stored;
     const b = typeof value === "number" ? value : Date.parse(value) || value;
-    if (typeof a === "number" && typeof b === "number") return op === "gte" ? a >= b : a <= b;
-    return op === "gte" ? String(a) >= String(b) : String(a) <= String(b);
+    if (typeof a === "number" && typeof b === "number") {
+      if (op === "gte") return a >= b;
+      if (op === "lte") return a <= b;
+      if (op === "gt") return a > b;
+      return a < b;
+    }
+    if (op === "gte") return String(a) >= String(b);
+    if (op === "lte") return String(a) <= String(b);
+    if (op === "gt") return String(a) > String(b);
+    return String(a) < String(b);
   }
   return true; // unknown op: permissive
 }
@@ -209,13 +293,14 @@ function applyFilters(allRows, params) {
   const clauses = [];
   for (const [key, rawValue] of params.entries()) {
     if (["select", "order", "limit", "offset", "or", "on_conflict"].includes(key)) continue;
-    const match = String(rawValue).match(/^([a-z]+)\.(.*)$/i);
+    // Supports plain ops (eq.value) and negations (not.is.null).
+    const match = String(rawValue).match(/^(not\.)?([a-z]+)\.(.*)$/i);
     if (!match) continue;
-    clauses.push({ key, op: match[1].toLowerCase(), raw: match[2] });
+    clauses.push({ key, negate: Boolean(match[1]), op: match[2].toLowerCase(), raw: match[3] });
   }
   const orRaw = params.get("or");
   return allRows.filter((row) => {
-    const every = clauses.every(({ key, op, raw }) => matchesOp(row[key], op, raw));
+    const every = clauses.every(({ key, negate, op, raw }) => !!matchesOp(row[key], op, raw) !== negate);
     if (!every) return false;
     if (!orRaw) return true;
     const inner = orRaw.replace(/^\(/, "").replace(/\)$/, "");
@@ -224,9 +309,9 @@ function applyFilters(allRows, params) {
       if (separator < 0) return true;
       const key = clause.slice(0, separator).trim();
       const rest = clause.slice(separator + 1);
-      const opMatch = rest.match(/^([a-z]+)\.(.*)$/i);
+      const opMatch = rest.match(/^(not\.)?([a-z]+)\.(.*)$/i);
       if (!opMatch) return true;
-      return matchesOp(row[key], opMatch[1].toLowerCase(), opMatch[2]);
+      return !!matchesOp(row[key], opMatch[2].toLowerCase(), opMatch[3]) !== Boolean(opMatch[1]);
     });
   });
 }

@@ -32,6 +32,8 @@ The previous browser-side Supabase admin client has been removed. Database acces
 - AI problem studio (`/ai.html`): generates practice problems **on the server with no AI API key and no external calls**
   - Bug-hunt problems whose code really raises a Python exception (`IndexError`, `ValueError`, `TypeError`, `KeyError`, `ZeroDivisionError`, `AttributeError`, `NameError`, `StopIteration`, …); `battle_error` and `expected_output` carry the true exception line
   - Output-prediction problems that run cleanly; `expected_output` is the program's real stdout (mirrored with exact Python 3 semantics and cross-checked against a real CPython interpreter)
+  - Selectable premium mix: all free, ≈1 in 4, ≈1 in 3 or half — chosen deterministically from the seed, so preview and publish always agree and exactly that many generated problems are inserted as premium-only
+  - Type and difficulty selects: bug hunt, output prediction or mixed; easy, medium, hard or mixed — only what you choose is generated
   - Seeded previews: "Add to library" re-generates the exact previewed batch and verifies a signature first
   - Duplicate-free publishing: normalized titles and starter code are compared with up to 5,000 existing problems, so the same problem is never added twice
   - Every publish is audit-logged as `problems / ai_create` and honours the notification opt-out flag
@@ -144,7 +146,7 @@ Tests cover:
 - TOTP generation/verification and encrypted secret storage
 - role gates, including a `content_editor` rejected from the payments read endpoint with 403
 - old/new audit values, reason enforcement, secret redaction and audit-write failure behavior
-- the local AI engine: seeded determinism, complete problem shapes, duplicate-key protection, publish-flow deduplication and real-Python behaviour for both bug and output problems (auto-skipped when `python3` is absent)
+- the local AI engine: seeded determinism, complete problem shapes, premium-mix proportions, duplicate-key protection, publish-flow deduplication and real-Python behaviour for both bug and output problems (auto-skipped when `python3` is absent)
 
 The real APIs need Vercel/local environment variables and a migrated Supabase project. Do not use production service-role credentials in a shared local environment.
 
@@ -153,8 +155,14 @@ The real APIs need Vercel/local environment variables and a migrated Supabase pr
 To click through the whole panel — including the AI studio — without Vercel or Supabase:
 
 ```bash
-PYDEBUG_ADMIN_DEV=1 npm run dev
+PYDEBUG_ADMIN_DEV=1 npm run dev     # panel on :3000, in-memory mock on :3001
+npm run smoke                        # 50-check API smoke test against it
 ```
+
+`npm run smoke` logs in as both demo accounts (completing the superadmin's
+real TOTP enrollment), exercises every read endpoint, all CSV export jobs, a
+representative set of writes, RBAC rejections, CSRF rejection and the full AI
+preview/publish/duplicate-blocking flow.
 
 This serves the static admin UI on `http://localhost:3000` and wires `/api/*` to the **real** serverless handlers, backed by a tiny in-memory PostgREST-compatible mock on the loopback interface. Demo accounts (any password): `dev@pydebug.local` (content editor, straight in) and `root@pydebug.local` (superadmin, real TOTP enrollment on first login). All data resets on restart; the script refuses to start unless `PYDEBUG_ADMIN_DEV=1` is set and is never deployed to Vercel.
 

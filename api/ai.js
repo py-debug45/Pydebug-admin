@@ -57,9 +57,10 @@ async function existingProblemKeys() {
 async function preview(admin, payload) {
   assertCan(admin, "problems", "create");
   const filters = ai.parseFilters(payload);
+  const premium = ai.parsePremiumMode(payload.premium);
   const count = intInRange(payload.count, 5, 1, ai.MAX_BATCH);
   const seed = seedFrom(payload.seed);
-  const problems = ai.generateProblems({ seed, count, ...filters });
+  const problems = ai.generateProblems({ seed, count, ...filters, premium });
   if (!problems.length) {
     const error = new Error("The generator could not produce unique problems for this request");
     error.status = 503;
@@ -71,6 +72,8 @@ async function preview(admin, payload) {
     seed,
     signature: ai.batchSignature(problems),
     count: problems.length,
+    premium,
+    premium_count: problems.filter((problem) => problem.is_premium).length,
     problems,
   };
 }
@@ -78,6 +81,7 @@ async function preview(admin, payload) {
 async function publish(admin, payload, reason, ip) {
   assertCan(admin, "problems", "create");
   const filters = ai.parseFilters(payload);
+  const premium = ai.parsePremiumMode(payload.premium);
   const count = intInRange(payload.count, 1, 1, ai.MAX_BATCH);
   const seed = seedFrom(payload.seed, { required: true });
   const status = payload.status === "published" ? "published" : "draft";
@@ -89,7 +93,7 @@ async function publish(admin, payload, reason, ip) {
   // Regenerate the exact batch the admin previewed. The signature proves the
   // engine produced the same problems; if templates changed since the preview,
   // the admin is asked to regenerate instead of publishing something unseen.
-  const problems = ai.generateProblems({ seed, count, ...filters });
+  const problems = ai.generateProblems({ seed, count, ...filters, premium });
   if (!problems.length) {
     const error = new Error("The generator could not produce unique problems for this request");
     error.status = 503;
@@ -110,11 +114,11 @@ async function publish(admin, payload, reason, ip) {
   for (let index = 0; index < problems.length; index += 1) {
     const problem = problems[index];
     if (skip.includes(index)) {
-      skipped.push({ index, title: problem.title, reason: "excluded_by_admin" });
+      skipped.push({ index, title: problem.title, is_premium: problem.is_premium === true, reason: "excluded_by_admin" });
       continue;
     }
     if (ai.problemKeys(problem).some((key) => existing.has(key))) {
-      skipped.push({ index, title: problem.title, reason: "duplicate" });
+      skipped.push({ index, title: problem.title, is_premium: problem.is_premium === true, reason: "duplicate" });
       continue;
     }
     const values = {
@@ -123,7 +127,7 @@ async function publish(admin, payload, reason, ip) {
       description: problem.description,
       difficulty: problem.difficulty,
       topic: problem.topic,
-      is_premium: false,
+      is_premium: problem.is_premium === true,
       starter_code: problem.starter_code,
       expected_output: problem.expected_output,
       hints: problem.hints,
@@ -151,6 +155,7 @@ async function publish(admin, payload, reason, ip) {
       type: problem.type,
       difficulty: problem.difficulty,
       topic: problem.topic,
+      is_premium: problem.is_premium === true,
       battle_error: problem.battle_error || null,
       status,
     });
@@ -160,6 +165,7 @@ async function publish(admin, payload, reason, ip) {
     engine: ai.engineLabel(),
     seed,
     status,
+    premium_count: inserted.filter((row) => row.is_premium).length,
     inserted_count: inserted.length,
     skipped_count: skipped.length,
     inserted,

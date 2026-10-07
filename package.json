@@ -5,9 +5,10 @@
   "description": "Secure server-rendered API and dependency-free admin console for PyDebug",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check api/_db.js && node --check api/auth.js && node --check api/read.js && node --check api/write.js && node --check api/jobs.js && node --check api/ai.js && node --check lib/server/ai-engine.js && node --check js/admin.js && node --check js/login.js && node --check js/pages.js && node --check scripts/dev-server.js && node --check scripts/verify-ai-engine.js",
+    "check": "node --check api/_db.js && node --check api/auth.js && node --check api/read.js && node --check api/write.js && node --check api/jobs.js && node --check api/ai.js && node --check lib/server/ai-engine.js && node --check js/admin.js && node --check js/login.js && node --check js/pages.js && node --check scripts/dev-server.js && node --check scripts/verify-ai-engine.js && node --check scripts/smoke-panel.js",
     "verify:ai": "node scripts/verify-ai-engine.js",
-    "dev": "node scripts/dev-server.js"
+    "dev": "node scripts/dev-server.js",
+    "smoke": "node scripts/smoke-panel.js"
   },
   "engines": {
     "node": ">=20"
