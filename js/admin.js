@@ -21,6 +21,7 @@
     ["index.html","dashboard","⌁","Dashboard","dashboard"],
     ["users.html","users","◎","Users","users"],
     ["problems.html","problems","◇","Problems","problems"],
+    ["ai.html","ai","✦","AI studio","problems"],
     ["payments.html","payments","₹","Payments","payments"],
     ["referrals.html","referrals","↗","Referrals","referrals"],
     ["battles.html","battles","⚔","Battles","battles"],
@@ -71,7 +72,18 @@
     state.session = result.user; state.csrf = result.csrf; return state.session;
   }
   function params(values) { const out = new URLSearchParams(); Object.entries(values || {}).forEach(([key, value]) => { if (value !== "" && value !== undefined && value !== null) out.set(key, value); }); return out; }
-  async function read(resource, action = "list", values = {}) { const response = await request(`/api/read?${params({ ...values, resource, action })}`); return response.data; }
+  async function read(resource, action = "list", values = {}) {
+    // resource/action select the endpoint and must always win. Older builds
+    // merged page state after them, so a state key named resource/action
+    // (the audit page once had them) emptied the params and /api/read answered
+    // "Missing resource parameter — the request reached the API without its
+    // query string". Strip them defensively before merging.
+    const safeValues = { ...values };
+    delete safeValues.resource;
+    delete safeValues.action;
+    const response = await request(`/api/read?${params({ ...safeValues, resource, action })}`);
+    return response.data;
+  }
   async function write(resource, action, payload = {}, reason = "") { const response = await request("/api/write", { method: "POST", mutation: true, body: { resource, action, payload, reason } }); return response.data; }
   async function job(jobName, payload = {}, reason = "") { const response = await request("/api/jobs", { method: "POST", mutation: true, body: { job: jobName, payload, reason } }); return response.data; }
   async function ai(action, payload = {}, reason = "") { const response = await request("/api/ai", { method: "POST", mutation: true, body: { action, payload, reason } }); return response.data; }

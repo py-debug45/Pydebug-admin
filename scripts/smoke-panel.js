@@ -131,6 +131,7 @@ async function main() {
   const firstProblem = problemsData?.rows?.[0];
   if (firstProblem) await expectOk("problem detail", await api(`/api/read?resource=problems&action=detail&id=${firstProblem.id}`, { cookie: editor.cookie }));
   await expectOk("own audit read", await api(`/api/read?resource=audit&action=list`, { cookie: editor.cookie }));
+  await expectOk("editor audit export (own rows only)", await api("/api/jobs", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { job: "export", payload: { resource: "audit" }, reason: "smoke export" } }));
   await expectOk("global search", await api(`/api/read?resource=search&action=list&q=bug`, { cookie: editor.cookie }));
   await expectStatus("editor blocked from users read (RBAC)", await api(`/api/read?resource=users&action=list`, { cookie: editor.cookie }), 403);
   await expectStatus("editor blocked from AI GET stats is allowed (problems read)", await api(`/api/ai?action=stats`, { cookie: editor.cookie }), 200);

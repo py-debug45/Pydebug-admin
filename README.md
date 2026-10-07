@@ -71,6 +71,14 @@ The migration is idempotent and also upgrades the legacy admin audit table in pl
 
 It also removes any old audit foreign key so deleting a user can never remove or rewrite historical audit records. Legacy browser-admin RLS policies and the old shared panel-password verifier are removed. If a legacy `profiles.is_admin` column exists, its values are cleared and a trigger permanently forces it false; the new `admin_users` roles become the only admin authorization source.
 
+If the database was already migrated with `0001_admin.sql` before this column existed, also run:
+
+```text
+db/migrations/0002_problems_battle_error.sql
+```
+
+It adds `problems.battle_error` — the real Python exception class a bug-hunt problem's starter code raises. The problem library, the problem editor, the AI studio and the problems CSV export all read and write it; without the column those screens fail with `column problems.battle_error does not exist`. The script is idempotent and a no-op on fresh installs (0001 creates the column there).
+
 ### Existing new-problem trigger
 
 The editor writes `problems.admin_skip_notification = true` when **Notify users on publish** is off. Because the name/body of the existing notification trigger is project-specific, the migration does not overwrite it. Update that existing trigger function so it exits without broadcasting when the flag is true. Its trigger function should include this guard before notification work:
@@ -174,14 +182,14 @@ This serves the static admin UI on `http://localhost:3000` and wires `/api/*` to
 4. Attach `admin.pydebug.in` to the project.
 5. Point the DNS record to Vercel as instructed by the Vercel domain screen.
 
-`vercel.json` configures the four functions and security headers. Static admin HTML is deliberately `no-store`; versioned JS/CSS may be revalidated.
+`vercel.json` configures the five functions and security headers. Static admin HTML, JS and CSS are all deliberately `no-store`, so a redeploy is picked up immediately — a cached older `pages.js` once made the audit page call `/api/read` without its query string (`Missing resource parameter`).
 
 ## Roles
 
 | Role | Main access |
 |---|---|
 | `superadmin` | Full platform, settings and team administration |
-| `content_editor` | Problems CMS; own audit entries |
+| `content_editor` | Problems CMS and AI problem studio; own audit entries |
 | `support` | Users/support actions, payment reads, test notifications/email; own audit |
 | `finance` | Payment and reconciliation operations, premium grants, reports; own audit |
 | `moderator` | User warn/mute, referrals and discussion moderation; own audit |
