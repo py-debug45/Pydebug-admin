@@ -134,6 +134,7 @@ async function main() {
   await expectOk("editor audit export (own rows only)", await api("/api/jobs", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { job: "export", payload: { resource: "audit" }, reason: "smoke export" } }));
   await expectOk("global search", await api(`/api/read?resource=search&action=list&q=bug`, { cookie: editor.cookie }));
   await expectStatus("editor blocked from users read (RBAC)", await api(`/api/read?resource=users&action=list`, { cookie: editor.cookie }), 403);
+  await expectStatus("editor blocked from payments read (RBAC)", await api(`/api/read?resource=payments&action=list`, { cookie: editor.cookie }), 403);
   await expectStatus("editor blocked from AI GET stats is allowed (problems read)", await api(`/api/ai?action=stats`, { cookie: editor.cookie }), 200);
 
   /* AI flow with premium mix */
@@ -162,12 +163,17 @@ async function main() {
   /* ---- superadmin pass (real TOTP enrollment) ---- */
   console.log("\n· superadmin (root@pydebug.local, real TOTP)");
   const root = sessionParts(await login("root@pydebug.local"));
+  const dashData = await expectOk("dashboard read", await api(`/api/read?resource=dashboard&action=overview`, { cookie: root.cookie }));
+  record("dashboard revenue comes from the payment ledger", (dashData?.kpis?.revenue_30d ?? 0) > 0, "revenue_30d is zero");
   await expectOk("users list", await api(`/api/read?resource=users&action=list`, { cookie: root.cookie }));
   const usersData = await expectOk("users list with filters", await api(`/api/read?resource=users&action=list&plan=premium&inactive=7`, { cookie: root.cookie }));
   const targetUser = usersData?.rows?.[0];
   const anyUser = targetUser || (await api(`/api/read?resource=users&action=list`, { cookie: root.cookie })).data?.data?.rows?.[0];
   if (anyUser) await expectOk("user detail 360°", await api(`/api/read?resource=users&action=detail&id=${anyUser.id}`, { cookie: root.cookie }));
-  await expectOk("payments list", await api(`/api/read?resource=payments&action=list`, { cookie: root.cookie }));
+  const paymentsData = await expectOk("payments ledger", await api(`/api/read?resource=payments&action=list`, { cookie: root.cookie }));
+  record("payments ledger shows verified purchases", (paymentsData?.rows?.length ?? 0) > 0, "no ledger rows");
+  record("payments summary counts income", (paymentsData?.summary?.total_paise ?? 0) > 0, "income total is zero");
+  record("payments page lists active premium users", (paymentsData?.active_premium?.length ?? 0) > 0, "no active premium users");
   await expectOk("referrals list", await api(`/api/read?resource=referrals&action=list`, { cookie: root.cookie }));
   await expectOk("battles list", await api(`/api/read?resource=battles&action=list`, { cookie: root.cookie }));
   await expectOk("moderation flags", await api(`/api/read?resource=moderation&action=list`, { cookie: root.cookie }));
@@ -185,6 +191,8 @@ async function main() {
   for (const resource of ["users", "payments", "audit", "problems", "referrals", "reports"]) {
     await expectOk(`export job: ${resource}`, await api("/api/jobs", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { job: "export", payload: { resource }, reason: "smoke export" } }));
   }
+  const payExport = await expectOk("export job: payments ledger rows", await api("/api/jobs", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { job: "export", payload: { resource: "payments" }, reason: "smoke export" } }));
+  record("payments export includes purchases", (payExport?.count ?? 0) > 0, "export returned no rows");
 
   /* superadmin writes */
   if (anyUser) {

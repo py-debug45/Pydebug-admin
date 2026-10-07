@@ -7,6 +7,9 @@ const { send, method, query, pagination, cleanText, handleError } = require("../
 const {
   isoDaysAgo, safe, inFilter, profilesByIds, maskProfile, boundedList, aggregateDaily, revenueByPlan, dayKey,
 } = require("../lib/server/data");
+const {
+  buildPaymentLedger, unmatchedPayments, summariseLedger, toPlanRow,
+} = require("../lib/server/payments");
 const { uuid, UUID_RE } = require("../lib/server/validate");
 
 const PROFILE_FIELDS = "id,full_name,email,display_name,avatar_url,is_premium,premium_expires_at,xp,streak,streak_freezes,last_active_date,referral_code,referral_count,referral_qualified_count,status,status_reason,status_until,battle_invites_enabled,battle_plays,battle_wins,created_at";
@@ -46,7 +49,7 @@ async function dashboard(admin) {
     { column: "is_premium", op: "eq", value: "true" },
   ];
   const [totalUsers, signupsToday, signups7, signups30, dau, premium, streaks,
-    recentProfiles, recentPayments, recentSubmissions, battlesToday, pushSubscribers,
+    recentProfiles, grantsAll, razorpayAll, recentSubmissions, battlesToday, pushSubscribers,
     latestReminder, pushFailures, recentBattles] = await Promise.all([
     safe(() => db.count("profiles"), 0),
     safe(() => db.count("profiles", { filters: [{ column: "created_at", op: "gte", value: `${today}T00:00:00.000Z` }] }), 0),
@@ -56,7 +59,8 @@ async function dashboard(admin) {
     safe(() => db.count("profiles", { filters: premiumFilters, or: `(premium_expires_at.is.null,premium_expires_at.gt.${new Date().toISOString()})` }), 0),
     safe(() => db.count("profiles", { filters: [{ column: "streak", op: "gte", value: 3 }] }), 0),
     safe(() => boundedList("profiles", { select: "id,display_name,full_name,email,created_at", filters: [{ column: "created_at", op: "gte", value: start30 }], order: "created_at.desc" }, 10000), { rows: [] }),
-    safe(() => boundedList("payments", { select: "id,user_id,plan,amount_paise,razorpay_payment_id,created_at", filters: [{ column: "created_at", op: "gte", value: start30 }], order: "created_at.desc" }, 10000), { rows: [] }),
+    safe(() => boundedList("payment_grants", { select: "*", order: "created_at.asc" }, 10000), { rows: [] }),
+    safe(() => boundedList("payments", { select: "*", order: "created_at.asc" }, 10000), { rows: [] }),
     safe(() => boundedList("submissions", { select: "id,user_id,problem_id,status,solved_at,created_at", filters: [{ column: "created_at", op: "gte", value: start30 }], order: "created_at.desc" }, 10000), { rows: [] }),
     safe(() => db.count("battles", { filters: [{ column: "created_at", op: "gte", value: `${today}T00:00:00.000Z` }] }), 0),
     safe(() => db.count("push_subscriptions"), 0),
@@ -65,13 +69,15 @@ async function dashboard(admin) {
     safe(() => db.list("battles", { select: "id,challenger_id,opponent_id,difficulty,finished_at,created_at", order: "created_at.desc", limit: 8 }), { rows: [] }),
   ]);
 
-  const paymentRows = recentPayments.rows;
   const submissionRows = recentSubmissions.rows;
   const revenueAllowed = can(admin.role, "payments", "read");
+  // Revenue comes from the verified-payment ledger (payment_grants), enriched
+  // with the actual amount paid from the Razorpay `payments` table when present.
+  const ledger = buildPaymentLedger(grantsAll.rows, razorpayAll.rows);
   const cutoffFor = (days) => days === 1
     ? new Date(`${today}T00:00:00.000Z`).getTime()
     : Date.now() - days * 86400000;
-  const revenueFor = (days) => paymentRows
+  const revenueFor = (days) => ledger
     .filter((row) => new Date(row.created_at).getTime() >= cutoffFor(days))
     .reduce((sum, row) => sum + Number(row.amount_paise || 0), 0);
   const solvesFor = (days) => submissionRows.filter((row) => row.status === "solved"
@@ -83,7 +89,7 @@ async function dashboard(admin) {
   const recent = [
     ...recentProfiles.rows.slice(0, 5).map((row) => ({ type: "signup", at: row.created_at, text: canReadUsers ? `${row.display_name || row.full_name || (canSeeEmail(admin.role) ? row.email : maskEmail(row.email)) || "New learner"} joined` : "A new learner joined" })),
     ...submissionRows.slice(0, 5).map((row) => ({ type: row.status === "solved" ? "solve" : "attempt", at: row.solved_at || row.created_at, text: row.status === "solved" ? "A problem was solved" : "A problem was attempted" })),
-    ...(revenueAllowed ? paymentRows.slice(0, 4).map((row) => ({ type: "payment", at: row.created_at, text: `${row.plan || "Premium"} payment · ₹${(Number(row.amount_paise || 0) / 100).toLocaleString("en-IN")}` })) : []),
+    ...(revenueAllowed ? ledger.slice(0, 4).map((row) => ({ type: "payment", at: row.created_at, text: `${row.plan_label} premium purchase · ₹${(Number(row.amount_paise || 0) / 100).toLocaleString("en-IN")}` })) : []),
     ...recentBattles.rows.slice(0, 4).map((row) => ({ type: "battle", at: row.created_at, text: `${row.difficulty || ""} battle ${row.finished_at ? "finished" : "started"}` })),
   ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 12);
 
@@ -101,7 +107,7 @@ async function dashboard(admin) {
     charts: {
       signups: aggregateDaily(recentProfiles.rows, "created_at", null, 30),
       solves: aggregateDaily(submissionRows.filter((row) => row.status === "solved"), "solved_at", null, 30),
-      revenue: revenueAllowed ? revenueByPlan(paymentRows, 30) : [],
+      revenue: revenueAllowed ? revenueByPlan(ledger.map(toPlanRow), 30) : [],
     },
     alerts: [
       ...(reminderAgeHours === null || reminderAgeHours > 25 ? [{ level: "warning", text: reminderAgeHours === null ? "No streak reminder run was found" : `Streak reminder cron last ran ${Math.floor(reminderAgeHours)}h ago` }] : []),
@@ -185,21 +191,39 @@ async function problemDetail(admin, q) {
 async function payments(admin, q) {
   assertCan(admin, "payments", "read");
   const { page, pageSize, offset } = pagination(q);
+  // payment_grants is the user app's verified-payment ledger (verify-payment
+  // writes one row per successful Razorpay payment). The legacy `payments`
+  // table only enriches amounts and flags captured-but-not-credited money.
   const filters = dateRangeFilters(q);
-  if (q.plan) filters.push({ column: "plan", op: "eq", value: searchTerm(q.plan) });
+  if (q.plan) filters.push({ column: "plan_key", op: "eq", value: searchTerm(q.plan) });
   const term = searchTerm(q.search);
-  const or = term ? `(razorpay_payment_id.ilike.*${term}*,razorpay_order_id.ilike.*${term}*)` : undefined;
-  const result = await db.list("payments", { filters, or, order: "created_at.desc", limit: pageSize, offset, count: true });
-  const profiles = await profilesByIds(result.rows.map((row) => row.user_id), admin.role);
-  const recent = await safe(() => boundedList("payments", { select: "plan,amount_paise,created_at", filters: [{ column: "created_at", op: "gte", value: isoDaysAgo(90) }], order: "created_at.asc" }, 10000), { rows: [] });
-  const totals = recent.rows.reduce((acc, row) => {
-    const amount = Number(row.amount_paise || 0);
-    acc.total += amount;
-    if (new Date(row.created_at) >= new Date(isoDaysAgo(30))) acc.days30 += amount;
-    acc.by_plan[row.plan || "other"] = (acc.by_plan[row.plan || "other"] || 0) + amount;
-    return acc;
-  }, { total: 0, days30: 0, by_plan: {} });
-  return { rows: result.rows.map((row) => maskEmailsDeep({ ...row, user: profiles[row.user_id] || null }, admin.role)), total: result.count ?? 0, page, page_size: pageSize, summary: totals, daily: revenueByPlan(recent.rows, 30) };
+  const or = term ? `(payment_id.ilike.*${term}*,order_id.ilike.*${term}*)` : undefined;
+  const nowIso = new Date().toISOString();
+  const [result, allGrants, razorpay, activePremium] = await Promise.all([
+    db.list("payment_grants", { filters, or, order: "created_at.desc", limit: pageSize, offset, count: true }),
+    safe(() => boundedList("payment_grants", { select: "*", order: "created_at.asc" }, 10000), { rows: [] }),
+    safe(() => boundedList("payments", { select: "*", order: "created_at.desc" }, 10000), { rows: [] }),
+    safe(() => db.list("profiles", {
+      select: "id,display_name,full_name,email,premium_expires_at",
+      filters: [{ column: "is_premium", op: "eq", value: "true" }],
+      or: `(premium_expires_at.is.null,premium_expires_at.gte.${nowIso})`,
+      order: "premium_expires_at.asc", limit: 100,
+    }), { rows: [] }),
+  ]);
+  const ledger = buildPaymentLedger(result.rows, razorpay.rows);
+  const fullLedger = buildPaymentLedger(allGrants.rows, razorpay.rows);
+  const unmatched = unmatchedPayments(allGrants.rows, razorpay.rows);
+  const profiles = await profilesByIds([...ledger, ...unmatched].map((row) => row.user_id), admin.role);
+  const summary = summariseLedger(fullLedger);
+  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  return {
+    rows: ledger.map((row) => maskEmailsDeep({ ...row, user: profiles[row.user_id] || null }, admin.role)),
+    total: result.count ?? 0, page, page_size: pageSize,
+    summary,
+    daily: revenueByPlan(fullLedger.filter((row) => row.created_at >= monthAgo).map(toPlanRow), 30),
+    active_premium: activePremium.rows.map((row) => maskProfile(row, admin.role)),
+    unmatched_payments: unmatched.map((row) => maskEmailsDeep({ ...row, user: profiles[row.user_id] || null }, admin.role)),
+  };
 }
 
 async function referrals(admin, q) {
@@ -301,10 +325,11 @@ async function reports(admin, q) {
   const from = q.from && !Number.isNaN(Date.parse(q.from)) ? new Date(q.from).toISOString() : isoDaysAgo(90);
   const to = q.to && !Number.isNaN(Date.parse(q.to)) ? new Date(`${q.to}T23:59:59.999Z`).toISOString() : new Date().toISOString();
   const filters = [{ column: "created_at", op: "gte", value: from }, { column: "created_at", op: "lte", value: to }];
-  const [profiles, submissions, paymentsRows, problemsRows] = await Promise.all([
+  const [profiles, submissions, grantsAll, razorpayAll, problemsRows] = await Promise.all([
     safe(() => boundedList("profiles", { select: "id,created_at,last_active_date,streak,is_premium,premium_expires_at", filters, order: "created_at.asc" }, 10000), { rows: [] }),
     safe(() => boundedList("submissions", { select: "id,user_id,problem_id,status,created_at,solved_at", filters, order: "created_at.asc" }, 20000), { rows: [] }),
-    safe(() => boundedList("payments", { select: "user_id,plan,amount_paise,created_at", filters, order: "created_at.asc" }, 10000), { rows: [] }),
+    safe(() => boundedList("payment_grants", { select: "*", order: "created_at.asc" }, 10000), { rows: [] }),
+    safe(() => boundedList("payments", { select: "*", order: "created_at.asc" }, 10000), { rows: [] }),
     safe(() => boundedList("problems", { select: "id,title,difficulty,topic", order: "created_at.asc" }, 10000), { rows: [] }),
   ]);
   const stats = new Map(problemsRows.rows.map((row) => [row.id, { ...row, attempts: 0, solves: 0 }]));
@@ -313,15 +338,22 @@ async function reports(admin, q) {
     item.attempts += 1; if (row.status === "solved") item.solves += 1;
   });
   const content = [...stats.values()].filter((row) => row.attempts).map((row) => ({ ...row, success_rate: Math.round(row.solves * 1000 / row.attempts) / 10 })).sort((a, b) => a.success_rate - b.success_rate);
-  const totalRevenue = paymentsRows.rows.reduce((sum, row) => sum + Number(row.amount_paise || 0), 0);
-  const payingUsers = new Set(paymentsRows.rows.map((row) => row.user_id)).size;
+  // Revenue = verified-payment ledger (payment_grants) joined with the actual
+  // captured amounts from the Razorpay `payments` table when available.
+  const ledger = buildPaymentLedger(grantsAll.rows, razorpayAll.rows)
+    .filter((row) => {
+      const at = new Date(row.created_at || 0).getTime();
+      return Number.isFinite(at) && at >= new Date(from).getTime() && at <= new Date(to).getTime();
+    });
+  const totalRevenue = ledger.reduce((sum, row) => sum + Number(row.amount_paise || 0), 0);
+  const payingUsers = new Set(ledger.map((row) => row.user_id).filter(Boolean)).size;
   const planMix = {};
-  paymentsRows.rows.forEach((row) => { planMix[row.plan || "other"] = (planMix[row.plan || "other"] || 0) + Number(row.amount_paise || 0); });
+  ledger.forEach((row) => { planMix[row.plan_key || "other"] = (planMix[row.plan_key || "other"] || 0) + Number(row.amount_paise || 0); });
   const expiring = await safe(() => db.list("profiles", { select: "id,display_name,email,premium_expires_at", filters: [{ column: "is_premium", op: "eq", value: "true" }, { column: "premium_expires_at", op: "gte", value: new Date().toISOString() }, { column: "premium_expires_at", op: "lte", value: new Date(Date.now() + 7 * 86400000).toISOString() }], order: "premium_expires_at.asc", limit: 200 }), { rows: [] });
   return {
     range: { from, to },
     growth: { signups: aggregateDaily(profiles.rows, "created_at", null, 30), retention: retentionReport(profiles.rows, submissions.rows) },
-    revenue: { total_paise: totalRevenue, paying_users: payingUsers, arpu_paise: payingUsers ? Math.round(totalRevenue / payingUsers) : 0, plan_mix: planMix, daily: revenueByPlan(paymentsRows.rows, 30) },
+    revenue: { total_paise: totalRevenue, paying_users: payingUsers, arpu_paise: payingUsers ? Math.round(totalRevenue / payingUsers) : 0, plan_mix: planMix, daily: revenueByPlan(ledger.map(toPlanRow), 30) },
     content: { hardest: content.slice(0, 10), easiest: [...content].reverse().slice(0, 10) },
     engagement: { submissions: submissions.rows.length, solves: submissions.rows.filter((row) => row.status === "solved").length, active_users: new Set(submissions.rows.map((row) => row.user_id)).size },
     churn: expiring.rows.map((row) => maskProfile(row, admin.role)),
@@ -362,8 +394,16 @@ async function globalSearch(admin, q) {
   operations.push(can(admin.role, "users", "read") ? safe(() => db.list("profiles", { select: "id,display_name,full_name,email,status", or: `(${userSearchClauses.join(",")})`, limit: 8 }), { rows: [] }) : Promise.resolve({ rows: [] }));
   operations.push(can(admin.role, "problems", "read") ? safe(() => db.list("problems", { select: "id,title,difficulty,status", or: `(title.ilike.*${term}*,topic.ilike.*${term}*)`, limit: 8 }), { rows: [] }) : Promise.resolve({ rows: [] }));
   operations.push(can(admin.role, "payments", "read") ? safe(() => db.list("payments", { select: "id,razorpay_payment_id,plan,amount_paise,created_at", or: `(razorpay_payment_id.ilike.*${term}*,razorpay_order_id.ilike.*${term}*)`, limit: 8 }), { rows: [] }) : Promise.resolve({ rows: [] }));
-  const [users, problemsRows, paymentRows] = await Promise.all(operations);
-  return { users: users.rows.map((row) => maskProfile(row, admin.role)), problems: problemsRows.rows, payments: paymentRows.rows };
+  operations.push(can(admin.role, "payments", "read") ? safe(() => db.list("payment_grants", { select: "payment_id,order_id,plan_key,created_at", or: `(payment_id.ilike.*${term}*,order_id.ilike.*${term}*)`, limit: 8 }), { rows: [] }) : Promise.resolve({ rows: [] }));
+  const [users, problemsRows, paymentRows, grantRows] = await Promise.all(operations);
+  return {
+    users: users.rows.map((row) => maskProfile(row, admin.role)),
+    problems: problemsRows.rows,
+    payments: [
+      ...grantRows.rows.map((row) => ({ id: row.payment_id, razorpay_payment_id: row.payment_id, plan: row.plan_key, amount_paise: null, created_at: row.created_at })),
+      ...paymentRows.rows,
+    ],
+  };
 }
 
 module.exports = async function handler(req, res) {

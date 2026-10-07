@@ -41,7 +41,7 @@ The previous browser-side Supabase admin client has been removed. Database acces
 - Users list with search, segmentation, pagination and CSV export
 - User 360° view: account state, premium, progress, streak, referrals, battles, achievements, notifications and audit
 - Audited premium grants/revokes, suspension, warn/mute, XP changes, progress reset, streak repair and Auth user deletion
-- Payments ledger, plan reporting, manual entitlement grant and Razorpay CSV reconciliation
+- Payments ledger from `payment_grants` (the user app's verified-payment record): total income, per-purchase actual amount paid (discount-aware), active premium users with expiry, plan reporting, manual entitlement grant and Razorpay CSV reconciliation
 - Problems CMS with drafts, publish/archive, duplicate, hints, preview, access control and notification opt-out flag
 - Referral funnel, top referrers, fraud invalidation and reward revocation
 - Battle completion/pool health and stuck-session cleanup
@@ -52,12 +52,14 @@ The previous browser-side Supabase admin client has been removed. Database acces
 - App settings and admin team/role management
 - Filterable audit viewer and CSV export
 
-## 1. Run the Supabase migration
+## 1. Run the Supabase migrations
 
-In the **same Supabase project used by PyDebug**, open SQL Editor and run:
+In the **same Supabase project used by PyDebug**, open SQL Editor and run, in order:
 
 ```text
 db/migrations/0001_admin.sql
+db/migrations/0002_problems_battle_error.sql
+db/migrations/0003_payment_ledger.sql
 ```
 
 The migration is idempotent and also upgrades the legacy admin audit table in place. It creates:
@@ -71,13 +73,10 @@ The migration is idempotent and also upgrades the legacy admin audit table in pl
 
 It also removes any old audit foreign key so deleting a user can never remove or rewrite historical audit records. Legacy browser-admin RLS policies and the old shared panel-password verifier are removed. If a legacy `profiles.is_admin` column exists, its values are cleared and a trigger permanently forces it false; the new `admin_users` roles become the only admin authorization source.
 
-If the database was already migrated with `0001_admin.sql` before this column existed, also run:
+If the database was already migrated with `0001_admin.sql` alone, also run the two follow-up migrations (both idempotent, safe to re-run):
 
-```text
-db/migrations/0002_problems_battle_error.sql
-```
-
-It adds `problems.battle_error` — the real Python exception class a bug-hunt problem's starter code raises. The problem library, the problem editor, the AI studio and the problems CSV export all read and write it; without the column those screens fail with `column problems.battle_error does not exist`. The script is idempotent and a no-op on fresh installs (0001 creates the column there).
+- `db/migrations/0002_problems_battle_error.sql` — adds `problems.battle_error`, the real Python exception class a bug-hunt problem's starter code raises. The problem library, the problem editor, the AI studio and the problems CSV export all read and write it; without the column those screens fail with `column problems.battle_error does not exist`.
+- `db/migrations/0003_payment_ledger.sql` — adds `payment_grants.amount_paise` (the actual amount paid, so discounted checkouts show the real price), an index for ledger reads, row level security on the payment ledger, and the legacy Razorpay `payments` table when missing. For new purchases to carry the actual paid amount, update the user site's verify-payment API to write the Razorpay captured amount into `payment_grants.amount_paise`; until then the panel falls back to a matching Razorpay `payments` row or the plan list price (monthly ₹99 / six-month ₹499 / yearly ₹799).
 
 ### Existing new-problem trigger
 

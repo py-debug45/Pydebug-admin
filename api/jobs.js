@@ -4,7 +4,8 @@ const db = require("./_db");
 const { requireAdmin } = require("../lib/server/admin-auth");
 const { assertCan, can, maskEmail, canSeeEmail } = require("../lib/server/permissions");
 const { withAudit } = require("../lib/server/audit");
-const { inFilter, safe, boundedList } = require("../lib/server/data");
+const { inFilter, safe, boundedList, profilesByIds } = require("../lib/server/data");
+const { buildPaymentLedger, unmatchedPayments } = require("../lib/server/payments");
 const { send, method, readJson, clientIp, assertSameOrigin, cleanText, requiredText, handleError } = require("../lib/server/http");
 const { uuid, oneOf } = require("../lib/server/validate");
 
@@ -109,7 +110,7 @@ async function reconcile(admin, payload, reason, ip) {
   for (let offset = 0; offset < ids.length; offset += 200) {
     const chunk = ids.slice(offset, offset + 200);
     const [payments, grants] = await Promise.all([
-      db.list("payments", { filters: [{ column: "razorpay_payment_id", op: "in", value: inFilter(chunk) }], limit: 200 }),
+      safe(() => db.list("payments", { filters: [{ column: "razorpay_payment_id", op: "in", value: inFilter(chunk) }], limit: 200 }), { rows: [] }),
       safe(() => db.list("payment_grants", { filters: [{ column: "payment_id", op: "in", value: inFilter(chunk) }], limit: 200 }), { rows: [] }),
     ]);
     foundPayments.push(...payments.rows);
@@ -177,10 +178,43 @@ async function exportData(admin, payload, reason, ip) {
   } else if (resource === "audit") {
     const filters = can(admin.role, "audit", "read_all") ? [] : [{ column: "admin_id", op: "eq", value: admin.admin_id }];
     rows = (await boundedList("admin_audit_log", { select: "id,admin_id,admin_role,resource,action,target_id,reason,ip,created_at", filters, order: "created_at.desc" }, limit)).rows;
+  } else if (resource === "payments") {
+    // Unified premium ledger: verified purchases (payment_grants) enriched with
+    // the actual amount paid, plus captured-but-not-credited Razorpay rows.
+    const grants = await safe(() => boundedList("payment_grants", { select: "*", order: "created_at.desc" }, limit), { rows: [] });
+    const razorpay = await safe(() => boundedList("payments", { select: "*", order: "created_at.desc" }, limit), { rows: [] });
+    const ledger = buildPaymentLedger(grants.rows, razorpay.rows);
+    const unmatched = unmatchedPayments(grants.rows, razorpay.rows);
+    const profiles = await profilesByIds([...ledger, ...unmatched].map((row) => row.user_id), admin.role);
+    rows = [
+      ...ledger.map((row) => ({
+        record: "purchase",
+        user: profiles[row.user_id]?.email || row.user_id,
+        payment_id: row.payment_id,
+        order_id: row.order_id,
+        plan: row.plan_label,
+        amount_paise: row.amount_paise,
+        list_price_paise: row.list_price_paise,
+        discount_paise: row.discount_paise,
+        premium_until: row.expires_at,
+        created_at: row.created_at,
+      })),
+      ...unmatched.map((row) => ({
+        record: "paid_not_credited",
+        user: profiles[row.user_id]?.email || row.user_id,
+        payment_id: row.payment_id,
+        order_id: row.order_id,
+        plan: row.plan,
+        amount_paise: row.amount_paise,
+        list_price_paise: "",
+        discount_paise: 0,
+        premium_until: "",
+        created_at: row.created_at,
+      })),
+    ];
   } else {
     const table = resource === "referrals" ? "referrals" : resource;
     const selects = {
-      payments: "id,user_id,razorpay_payment_id,razorpay_order_id,plan,amount_paise,created_at",
       problems: "id,type,title,description,difficulty,topic,is_premium,expected_output,hints,battle_error,status,created_at,updated_at",
       referrals: "*",
     };

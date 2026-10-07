@@ -23,9 +23,35 @@ const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
 
+const PAYMENTS_FIXTURE = {
+  rows: [{
+    payment_id: "pay_test_1",
+    order_id: "order_test_1",
+    user_id: "u1",
+    plan_key: "monthly",
+    plan_label: "Monthly",
+    amount_paise: 7900,
+    list_price_paise: 9900,
+    discount_paise: 2000,
+    expires_at: "2026-11-06T00:00:00.000Z",
+    created_at: "2026-10-01T00:00:00.000Z",
+    source: "razorpay",
+    razorpay_matched: true,
+    user: { id: "u1", display_name: "Test User", email: "test@example.com" },
+  }],
+  total: 1,
+  page: 1,
+  page_size: 50,
+  summary: { total_paise: 7900, days30_paise: 7900, days90_paise: 7900, count: 1, paying_users: 1, by_plan: { monthly: 7900 } },
+  daily: [{ date: "2026-10-07", monthly: 7900, sixmonth: 0, yearly: 0, other: 0 }],
+  active_premium: [{ id: "u1", display_name: "Test User", email: "test@example.com", premium_expires_at: "2026-11-06T00:00:00.000Z" }],
+  unmatched_payments: [],
+};
+
 function loadPanel(role = "content_editor", page = "audit") {
   const requests = [];
   const app = { innerHTML: "" };
+  const pageContent = { innerHTML: "" };
   const sandbox = {
     console,
     URLSearchParams,
@@ -40,18 +66,23 @@ function loadPanel(role = "content_editor", page = "audit") {
     document: {
       body: { dataset: { page } },
       addEventListener() {},
-      getElementById: (id) => (id === "app" ? app : null),
+      getElementById: (id) => (id === "app" ? app : id === "page-content" ? pageContent : null),
       querySelector: () => null,
       querySelectorAll: () => [],
       createElement: () => ({ style: {}, setAttribute() {}, append() {}, click() {}, remove() {} }),
     },
     fetch: async (url, options = {}) => {
       requests.push({ url: String(url), options });
+      let data = { rows: [], total: 0, page: 1, page_size: 50 };
+      try {
+        const parsed = new URL(String(url), "http://local");
+        if (parsed.pathname === "/api/read" && parsed.searchParams.get("resource") === "payments") data = PAYMENTS_FIXTURE;
+      } catch { /* keep the default shape */ }
       return {
         ok: true,
         status: 200,
         headers: { get: () => "application/json" },
-        json: async () => ({ ok: true, data: { rows: [], total: 0, page: 1, page_size: 50 } }),
+        json: async () => ({ ok: true, data }),
       };
     },
   };
@@ -71,6 +102,7 @@ function loadPanel(role = "content_editor", page = "audit") {
     AdminPages: sandbox.window.AdminPages,
     requests,
     app,
+    pageContent,
     document: sandbox.document,
   };
 }
@@ -127,4 +159,20 @@ test("AI studio page renders for roles with problems read", async () => {
   await panel.AdminPages.init("ai");
   assert.ok(panel.app.innerHTML.includes("AI problem studio"), "AI studio shell should render");
   assert.equal(readCalls(panel.requests).length, 0, "AI studio makes no read call on load");
+});
+
+test("payments page shows income, the purchase ledger and the actual amount paid", async () => {
+  const panel = loadPanel("finance", "payments");
+  await panel.AdminPages.init("payments");
+  const html = panel.pageContent.innerHTML;
+  assert.ok(html.includes("Total income"), "total income KPI should render");
+  assert.ok(html.includes("₹79"), "the actual discounted amount paid (₹79) should render, not the ₹99 list price");
+  assert.ok(html.includes("list ₹99"), "the list price should be shown next to a discounted purchase");
+  assert.ok(html.includes("Test User"), "the buying user should be shown");
+  assert.ok(html.includes("Active premium users"), "the active premium users section should render");
+  assert.ok(html.includes("Premium purchases"), "the purchase ledger table should render");
+  const [call] = readCalls(panel.requests);
+  assert.ok(call, "payments page should call /api/read");
+  assert.equal(call.params.get("resource"), "payments");
+  assert.equal(call.params.get("action"), "list");
 });
