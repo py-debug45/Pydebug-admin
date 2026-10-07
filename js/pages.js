@@ -182,10 +182,90 @@
   }
 
   async function audit() {
-    A.shell("Audit log", "Immutable history of every privileged admin mutation.", '<button class="btn" id="export-audit">⇩ Export CSV</button>');const state={page:1,page_size:50,admin:"",resource:"",action:"",from:"",to:""};
-    const load=async()=>{setLoading();try{const data=await A.read("audit","list",state);const rows=data.rows.map((row)=>`<tr><td>${A.date(row.created_at)}</td><td><span class="cell-title mono">${A.esc(row.admin_id)}</span><span class="cell-sub">${A.esc(row.admin_role)}</span></td><td>${A.esc(row.resource)} · <strong>${A.esc(row.action)}</strong><span class="cell-sub">${A.esc(row.target_id||"—")}</span></td><td>${A.esc(row.reason||"—")}</td><td><details><summary>Diff</summary><pre class="code">${A.esc(JSON.stringify({old:row.old_value,new:row.new_value},null,2))}</pre></details></td><td class="mono">${A.esc(row.ip||"—")}</td></tr>`).join("");A.setContent(`<form class="toolbar" id="filters"><div class="field"><label>Resource</label><input name="resource" value="${A.attr(state.resource)}"></div><div class="field"><label>Action</label><input name="action" value="${A.attr(state.action)}"></div><div class="field"><label>Admin UUID</label><input name="admin" value="${A.attr(state.admin)}"></div><div class="field"><label>From</label><input type="date" name="from" value="${A.attr(state.from)}"></div><div class="field"><label>To</label><input type="date" name="to" value="${A.attr(state.to)}"></div><button class="btn btn-primary">Apply</button></form>${table(["Time","Admin","Action","Reason","Values","IP"],rows,"Audit log")}${A.pagination(data)}`);bindFilterForm($("#filters"),state,load);bindPagination(load,state);}catch(error){showError(error);}};$("#export-audit")?.addEventListener("click",async(event)=>A.run(event.currentTarget,async()=>{const result=await A.job("export",{resource:"audit"});A.download(result.csv,result.filename);},"Audit export ready"));await load();
+    A.shell("Audit log", "Immutable history of every privileged admin mutation.", '<button class="btn" id="export-audit">⇩ Export CSV</button>');const state={page:1,page_size:50,admin:"",log_resource:"",log_action:"",from:"",to:""};
+    const load=async()=>{setLoading();try{const data=await A.read("audit","list",state);const rows=data.rows.map((row)=>`<tr><td>${A.date(row.created_at)}</td><td><span class="cell-title mono">${A.esc(row.admin_id)}</span><span class="cell-sub">${A.esc(row.admin_role)}</span></td><td>${A.esc(row.resource)} · <strong>${A.esc(row.action)}</strong><span class="cell-sub">${A.esc(row.target_id||"—")}</span></td><td>${A.esc(row.reason||"—")}</td><td><details><summary>Diff</summary><pre class="code">${A.esc(JSON.stringify({old:row.old_value,new:row.new_value},null,2))}</pre></details></td><td class="mono">${A.esc(row.ip||"—")}</td></tr>`).join("");A.setContent(`<form class="toolbar" id="filters"><div class="field"><label>Resource</label><input name="log_resource" value="${A.attr(state.log_resource)}" placeholder="users, problems, auth…"></div><div class="field"><label>Action</label><input name="log_action" value="${A.attr(state.log_action)}" placeholder="ai_create, edit, login…"></div><div class="field"><label>Admin UUID</label><input name="admin" value="${A.attr(state.admin)}"></div><div class="field"><label>From</label><input type="date" name="from" value="${A.attr(state.from)}"></div><div class="field"><label>To</label><input type="date" name="to" value="${A.attr(state.to)}"></div><button class="btn btn-primary">Apply</button></form>${table(["Time","Admin","Action","Reason","Values","IP"],rows,"Audit log")}${A.pagination(data)}`);bindFilterForm($("#filters"),state,load);bindPagination(load,state);}catch(error){showError(error);}};$("#export-audit")?.addEventListener("click",async(event)=>A.run(event.currentTarget,async()=>{const result=await A.job("export",{resource:"audit"});A.download(result.csv,result.filename);},"Audit export ready"));await load();
   }
 
-  const handlers={dashboard,users,user:userDetail,problems,"problem-edit":problemEdit,payments,referrals,battles,moderation,push,emails,reports,settings,audit};
+  async function aiStudio() {
+    A.shell("AI problem studio", "Generate real bug-hunt and output-prediction problems on this server. No AI API key, no external calls.", '<a class="btn" href="/problems.html">← Library</a>');
+    if(!A.has("problems","read"))return showError(new Error("You do not have access"));
+    const state={type:"any",difficulty:"any",count:5,premium:"none",status:"draft",notify:false};
+    let preview=null; let skip=new Set(); let result=null; let busy=false;
+    const canCreate=A.has("problems","create");
+
+    const problemCard=(p,i)=>{
+      const excluded=skip.has(i);
+      return `<section class="card ai-problem${excluded?" is-excluded":""}" data-index="${i}">
+        <div class="card-head"><div>
+          <h2 class="cell-title">${A.esc(p.title)}</h2>
+          <p>${A.tag(p.type==="bug"?"bug hunt":"output")}${A.tag(p.difficulty)}${A.tag(p.topic)}${p.is_premium?A.tag("premium"):A.tag("free")}${p.type==="bug"?A.tag(p.battle_error):A.tag("runs clean")}</p>
+        </div>${canCreate?`<div class="actions"><button class="btn btn-sm" data-skip="${i}">${excluded?"Include again":"Exclude"}</button></div>`:""}</div>
+        <p class="muted">${A.esc(p.description)}</p>
+        <pre class="code">${A.esc(p.starter_code)}</pre>
+        ${p.type==="bug"
+          ?`<div class="alert alert-danger"><strong>Real runtime error:</strong> ${A.esc(p.expected_output)}</div>`
+          :`<div class="alert empty-alert"><strong>Real program output:</strong> ${A.esc(p.expected_output)}</div>`}
+        <details><summary>Hints (${p.hints.length})</summary><ol class="hint-list">${p.hints.map((hint)=>`<li>${A.esc(hint)}</li>`).join("")}</ol></details>
+      </section>`;
+    };
+
+    const render=()=>{
+      const statsCard=`<section class="card"><div class="card-head"><div><h2>How this works</h2><p>PyDebug Local AI · ${A.esc(preview?preview.engine:"pydebug-local-ai/v1")}</p></div><span class="tag tag-green">NO API KEY</span></div>
+        <p class="muted">Every <strong>bug hunt</strong> problem ships code that really raises a Python exception (IndexError, ValueError, TypeError, KeyError, …) — verified against a real interpreter. Every <strong>output</strong> problem runs cleanly and its listed output is the program's true stdout. When you add problems, titles and code are compared with your existing library, so the same problem is never inserted twice. Pick a premium mix and exactly that many generated problems become premium-only.</p>
+        <form class="toolbar" id="ai-form">
+          <div class="field"><label>Type</label><select name="type"><option value="any" ${state.type==="any"?"selected":""}>Mixed (bugs + output)</option><option value="bug" ${state.type==="bug"?"selected":""}>Bug hunt (real errors)</option><option value="question" ${state.type==="question"?"selected":""}>Output prediction</option></select></div>
+          <div class="field"><label>Difficulty</label><select name="difficulty"><option value="any" ${state.difficulty==="any"?"selected":""}>Mixed (all levels)</option><option value="easy" ${state.difficulty==="easy"?"selected":""}>Easy only</option><option value="medium" ${state.difficulty==="medium"?"selected":""}>Medium only</option><option value="hard" ${state.difficulty==="hard"?"selected":""}>Hard only</option></select></div>
+          <div class="field"><label>Premium mix</label><select name="premium"><option value="none" ${state.premium==="none"?"selected":""}>All free</option><option value="quarter" ${state.premium==="quarter"?"selected":""}>≈1 in 4 premium (2-3 of 10)</option><option value="third" ${state.premium==="third"?"selected":""}>≈1 in 3 premium (3 of 10)</option><option value="half" ${state.premium==="half"?"selected":""}>Half premium (5 of 10)</option></select></div>
+          <div class="field"><label>How many</label><input type="number" name="count" min="1" max="10" value="${state.count}" required></div>
+          <div class="field"><label>Add as</label><select name="status"><option value="draft" ${state.status==="draft"?"selected":""}>Draft</option><option value="published" ${state.status==="published"?"selected":""}>Published</option></select></div>
+          <div class="field"><label>Notify users</label><select name="notify"><option value="off" ${state.notify?"":"selected"}>Off (quiet add)</option><option value="on" ${state.notify?"selected":""}>On (publish notification)</option></select></div>
+          <button class="btn btn-primary" id="ai-generate" ${canCreate?"":"disabled title=\"You need problem create access\""}>✦ Generate problems</button>
+        </form>
+        ${preview?`<div class="alert-strip"><div class="alert empty-alert">✓ ${preview.count} problem${preview.count===1?"":"s"} generated on-server · ${preview.premium_count} premium · seed <span class="mono">${preview.seed}</span> · signature <span class="mono">${A.esc(preview.signature.slice(0,10))}…</span></div></div>`:""}</section>`;
+
+      const resultCard=result?`<section class="card"><div class="card-head"><div><h2>Add result</h2><p>Seed <span class="mono">${result.seed}</span> · ${A.esc(result.engine)}</p></div></div>
+        ${result.inserted_count?`<div class="alert empty-alert">✓ ${result.inserted_count} problem${result.inserted_count===1?"":"s"} added as ${A.esc(result.status)} · ${result.premium_count} premium · ${result.inserted_count-result.premium_count} free — <a class="text-cyan" href="/problems.html">open the problem library</a></div>`:""}
+        ${result.skipped_count?`<div class="alert alert-danger">↷ ${result.skipped_count} skipped: ${result.skipped.map((row)=>`${A.esc(row.title)} (${row.reason==="duplicate"?"already in your library — duplicate blocked":row.reason==="excluded_by_admin"?"excluded by you":A.esc(row.reason)})`).join(" · ")}</div>`:""}
+        ${!result.inserted_count&&!result.skipped_count?'<div class="alert">Nothing was added</div>':""}
+      </section>`:"";
+
+      const cards=preview?preview.problems.map(problemCard).join(""):"";
+      A.setContent(`<div class="grid grid-2">${statsCard}${resultCard}</div>
+        ${preview?`<div class="page-actions-bar"><div class="actions">${canCreate?`<button class="btn btn-primary" id="ai-publish">＋ Add ${preview.count-skip.size} to library</button>`:""}<button class="btn" id="ai-regenerate">↻ Regenerate</button></div></div><div class="grid grid-2">${cards}</div>`:'<div class="alert-strip"><div class="alert">Generate a batch to preview real problems here. Nothing is written to the library until you add it.</div></div>'}`);
+
+      $("#ai-form")?.addEventListener("submit",(event)=>{event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget).entries());state.type=values.type;state.difficulty=values.difficulty;state.premium=values.premium;state.count=Math.min(10,Math.max(1,Number(values.count)||5));state.status=values.status;state.notify=values.notify==="on";generate();});
+      $$("[data-skip]").forEach((button)=>button.addEventListener("click",()=>{const index=Number(button.dataset.skip);if(skip.has(index))skip.delete(index);else skip.add(index);render();}));
+      $("#ai-regenerate")?.addEventListener("click",()=>{generate();});
+      $("#ai-publish")?.addEventListener("click",async(event)=>{
+        const button=event.currentTarget;
+        if(busy||!preview)return;
+        const values=await A.dialog({title:"Add AI problems to the library",message:`${preview.count-skip.size} problem(s) will be inserted as ${state.status}. Duplicates in your library are skipped automatically.`,reason:true});
+        if(!values)return;
+        busy=true;button.disabled=true;
+        try{
+          result=await A.ai("publish",{seed:preview.seed,signature:preview.signature,count:preview.count,type:state.type,difficulty:state.difficulty,premium:state.premium,status:state.status,notify_users:state.notify,skip:[...skip]},values.reason);
+          A.toast(`${result.inserted_count} problem(s) added`);
+        }catch(error){A.toast(error.message,"error");}
+        finally{busy=false;}
+        render();
+      });
+    };
+
+    const generate=async()=>{
+      if(busy)return;busy=true;
+      const button=$("#ai-generate");if(button){button.disabled=true;button.textContent="Generating…";}
+      try{
+        preview=await A.ai("preview",{type:state.type,difficulty:state.difficulty,premium:state.premium,count:state.count});
+        skip=new Set();result=null;
+        A.toast(`${preview.count} problem(s) generated · ${preview.premium_count} premium`);
+      }catch(error){A.toast(error.message,"error");}
+      finally{busy=false;}
+      render();
+    };
+
+    render();
+  }
+
+  const handlers={dashboard,users,user:userDetail,problems,"problem-edit":problemEdit,ai:aiStudio,payments,referrals,battles,moderation,push,emails,reports,settings,audit};
   window.AdminPages={init:async(page)=>{const handler=handlers[page];if(!handler)throw new Error(`Unknown page: ${page}`);await handler();}};
 })();

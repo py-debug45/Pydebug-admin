@@ -253,3 +253,34 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* AI problem studio */
+.page-actions-bar { display: flex; justify-content: flex-end; margin: 0 0 14px; }
+.ai-problem { transition: opacity .15s ease; }
+.ai-problem.is-excluded { opacity: .45; }
+.ai-problem .code { margin: 10px 0; }
+.hint-list { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+.hint-list li { margin: 4px 0; }
+
+/* Mobile speed & smoothness */
+body { -webkit-tap-highlight-color: transparent; }
+.table-wrap, .code, .search-results, .alert-strip, .tabs, .nav {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.card-head { flex-wrap: wrap; }
+.card-head .actions { flex-wrap: wrap; }
+@media (max-width: 680px) {
+  /* iOS zooms focused inputs smaller than 16px, which feels laggy — keep 16px. */
+  input, select, textarea { font-size: 16px; }
+  .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .toolbar .field { width: 100%; min-width: 0; }
+  .toolbar .field-grow { grid-column: 1 / -1; }
+  .toolbar .btn { grid-column: 1 / -1; }
+  .topbar { backdrop-filter: blur(8px); height: 58px; }
+  .content { padding-bottom: 40px; }
+  .cell-title, .cell-sub { max-width: 220px; }
+  .toast-stack { right: 10px; bottom: 10px; }
+  .pagination { flex-wrap: wrap; }
+  .ai-problem .code { max-height: 300px; }
+}

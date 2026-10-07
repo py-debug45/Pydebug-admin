@@ -9,7 +9,8 @@
     "api/auth.js": { "maxDuration": 10, "memory": 256 },
     "api/read.js": { "maxDuration": 30, "memory": 512 },
     "api/write.js": { "maxDuration": 30, "memory": 512 },
-    "api/jobs.js": { "maxDuration": 60, "memory": 512 }
+    "api/jobs.js": { "maxDuration": 60, "memory": 512 },
+    "api/ai.js": { "maxDuration": 60, "memory": 512 }
   },
   "headers": [
     {

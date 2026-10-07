@@ -71,9 +71,10 @@
     state.session = result.user; state.csrf = result.csrf; return state.session;
   }
   function params(values) { const out = new URLSearchParams(); Object.entries(values || {}).forEach(([key, value]) => { if (value !== "" && value !== undefined && value !== null) out.set(key, value); }); return out; }
-  async function read(resource, action = "list", values = {}) { const response = await request(`/api/read?${params({ resource, action, ...values })}`); return response.data; }
+  async function read(resource, action = "list", values = {}) { const response = await request(`/api/read?${params({ ...values, resource, action })}`); return response.data; }
   async function write(resource, action, payload = {}, reason = "") { const response = await request("/api/write", { method: "POST", mutation: true, body: { resource, action, payload, reason } }); return response.data; }
   async function job(jobName, payload = {}, reason = "") { const response = await request("/api/jobs", { method: "POST", mutation: true, body: { job: jobName, payload, reason } }); return response.data; }
+  async function ai(action, payload = {}, reason = "") { const response = await request("/api/ai", { method: "POST", mutation: true, body: { action, payload, reason } }); return response.data; }
   function has(resource, action = "read") { const value = MATRIX[resource]?.[action]; return value === "*" || (Array.isArray(value) && value.includes(state.session?.role)); }
 
   function toast(message, type = "success") {

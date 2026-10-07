@@ -344,8 +344,11 @@ async function audit(admin, q) {
   const filters = dateRangeFilters(q);
   if (!canAll) filters.push({ column: "admin_id", op: "eq", value: admin.admin_id });
   else if (q.admin) filters.push({ column: "admin_id", op: "eq", value: uuid(q.admin, "admin") });
-  if (q.resource) filters.push({ column: "resource", op: "eq", value: searchTerm(q.resource) });
-  if (q.action) filters.push({ column: "action", op: "eq", value: searchTerm(q.action) });
+  // Column filters deliberately read log_resource/log_action: the router-level
+  // resource/action params select the endpoint and must never be treated as
+  // column values (they previously collided and emptied or broke the page).
+  if (q.log_resource) filters.push({ column: "resource", op: "eq", value: searchTerm(q.log_resource) });
+  if (q.log_action) filters.push({ column: "action", op: "eq", value: searchTerm(q.log_action) });
   const result = await db.list("admin_audit_log", { filters, order: "created_at.desc", limit: pageSize, offset, count: true });
   return { rows: result.rows.map((row) => maskEmailsDeep(row, admin.role)), total: result.count ?? 0, page, page_size: pageSize };
 }
@@ -386,7 +389,14 @@ module.exports = async function handler(req, res) {
     else if (resource === "settings") data = await settings(admin);
     else if (resource === "audit") data = await audit(admin, q);
     else if (resource === "search") data = await globalSearch(admin, q);
-    else { const error = new Error("Unknown read resource or action"); error.status = 404; error.code = "not_found"; throw error; }
+    else {
+      const error = resource
+        ? new Error(`Unknown read resource or action: ${resource}/${action}`)
+        : new Error("Missing resource parameter — the request reached the API without its query string");
+      error.status = resource ? 404 : 400;
+      error.code = resource ? "not_found" : "missing_resource";
+      throw error;
+    }
     return send(res, 200, { ok: true, data });
   } catch (error) {
     return handleError(res, error);
