@@ -46,6 +46,7 @@ const ai = require("../lib/server/ai-engine");
  * ------------------------------------------------------------------ */
 const now = Date.now();
 const iso = (msAgo) => new Date(now - msAgo).toISOString();
+const ahead = (ms) => new Date(now + ms).toISOString();
 const DAY = 86400000;
 
 const ROOT_ADMIN_ID = "00000000-0000-4000-8000-00000000a001";
@@ -66,8 +67,8 @@ const users = [
   email,
   display_name: name.split(" ")[0],
   avatar_url: null,
-  is_premium: index % 3 === 0,
-  premium_expires_at: index % 3 === 0 ? iso(-90 * DAY) : null,
+  is_premium: false,
+  premium_expires_at: null,
   xp,
   streak: streakDays,
   streak_freezes: index % 4,
@@ -83,6 +84,20 @@ const users = [
   battle_wins: index,
   created_at: iso(joinedDays * DAY),
 }));
+
+// Premium state mirrors the payment_grants ledger below (who bought premium
+// and until when) so the users, payments and dashboard pages stay coherent.
+const premiumUntil = new Map([
+  [users[0].id, ahead(300 * DAY)], // yearly
+  [users[1].id, ahead(200 * DAY)], // yearly
+  [users[2].id, ahead(3 * DAY)],   // monthly — expiring soon
+  [users[3].id, ahead(10 * DAY)],  // monthly
+  [users[4].id, ahead(150 * DAY)], // six-month
+]);
+users.forEach((user) => {
+  user.is_premium = premiumUntil.has(user.id);
+  user.premium_expires_at = premiumUntil.get(user.id) || null;
+});
 
 // Seed problems from the local AI engine itself so shapes always stay in sync.
 // Fixed seed 4242: reusing it in the AI studio shows duplicate-blocking live.
@@ -145,9 +160,16 @@ const discussionFlags = [
   { id: crypto.randomUUID(), discussion_id: discussions[1].id, reporter_id: users[2].id, reason: "Off-topic rant", resolved_by: ROOT_ADMIN_ID, resolved_at: iso(2 * DAY), resolution: "hidden", created_at: iso(3 * DAY) },
 ];
 
+// The REAL payment ledger: the user app's verify-payment API writes one row
+// per verified Razorpay payment (payment_id = the Razorpay payment id).
+// Shape matches the production table (see db/migrations/0003_payment_ledger.sql).
 const paymentGrants = [
-  { id: crypto.randomUUID(), user_id: users[3].id, payment_id: null, plan_key: "manual", days: 14, reason_logged: "Goodwill credit after support ticket", created_at: iso(6 * DAY) },
-  { id: crypto.randomUUID(), user_id: users[5].id, payment_id: null, plan_key: "referral_reward", days: 7, reason_logged: "Referral qualified", created_at: iso(11 * DAY) },
+  { payment_id: "pay_dev_1000", order_id: "order_dev_1000", user_id: users[0].id, plan_key: "yearly", expires_at: ahead(300 * DAY), created_at: iso(40 * DAY) },
+  { payment_id: "pay_dev_1001", order_id: "order_dev_1001", user_id: users[1].id, plan_key: "yearly", expires_at: ahead(200 * DAY), created_at: iso(20 * DAY) },
+  { payment_id: "pay_dev_1002", order_id: "order_dev_1002", user_id: users[2].id, plan_key: "monthly", expires_at: ahead(3 * DAY), created_at: iso(27 * DAY) }, // expiring soon
+  { payment_id: "pay_dev_1003", order_id: "order_dev_1003", user_id: users[3].id, plan_key: "monthly", expires_at: ahead(10 * DAY), created_at: iso(15 * DAY) },
+  { payment_id: "pay_dev_1004", order_id: "order_dev_1004", user_id: users[4].id, plan_key: "sixmonth", amount_paise: 39900, expires_at: ahead(150 * DAY), created_at: iso(60 * DAY) }, // amount recorded on the grant (discounted ₹399)
+  { payment_id: "pay_dev_1005", order_id: "order_dev_1005", user_id: users[5].id, plan_key: "monthly", expires_at: iso(5 * DAY), created_at: iso(70 * DAY) }, // expired
 ];
 
 const pushAnnouncements = [
@@ -166,19 +188,19 @@ const lifecycleEmailLog = [
   { id: crypto.randomUUID(), event: "reengage", email: users[6].email, status: "failed", error: "no verified address", created_at: iso(1 * DAY) },
 ];
 
-const payments = Array.from({ length: 12 }, (_, index) => {
-  const plan = ["monthly", "sixmonth", "yearly"][index % 3];
-  return {
-    id: `00000000-0000-4000-8000-0000000d${String(index).padStart(4, "0")}`,
-    user_id: users[index % users.length].id,
-    plan,
-    amount_paise: plan === "monthly" ? 9900 : plan === "sixmonth" ? 49900 : 89900,
-    razorpay_payment_id: `pay_dev_${1000 + index}`,
-    razorpay_order_id: `order_dev_${1000 + index}`,
-    status: "captured",
-    created_at: iso((index * 2 + 1) * DAY),
-  };
-});
+// Razorpay ledger (legacy/secondary): enriches the actual amount paid per
+// purchase and flags captured-but-not-credited payments. Rows 1000-1005 match
+// payment_grants; rows 1006-1007 are captured but never credited.
+const payments = [
+  { id: "00000000-0000-4000-8000-0000000d0000", user_id: users[0].id, plan: "yearly", amount_paise: 79900, razorpay_payment_id: "pay_dev_1000", razorpay_order_id: "order_dev_1000", status: "captured", created_at: iso(40 * DAY) },
+  { id: "00000000-0000-4000-8000-0000000d0001", user_id: users[1].id, plan: "yearly", amount_paise: 79900, razorpay_payment_id: "pay_dev_1001", razorpay_order_id: "order_dev_1001", status: "captured", created_at: iso(20 * DAY) },
+  { id: "00000000-0000-4000-8000-0000000d0002", user_id: users[2].id, plan: "monthly", amount_paise: 7900, razorpay_payment_id: "pay_dev_1002", razorpay_order_id: "order_dev_1002", status: "captured", created_at: iso(27 * DAY) }, // discounted ₹79
+  { id: "00000000-0000-4000-8000-0000000d0003", user_id: users[3].id, plan: "monthly", amount_paise: 9900, razorpay_payment_id: "pay_dev_1003", razorpay_order_id: "order_dev_1003", status: "captured", created_at: iso(15 * DAY) },
+  { id: "00000000-0000-4000-8000-0000000d0004", user_id: users[4].id, plan: "sixmonth", amount_paise: 49900, razorpay_payment_id: "pay_dev_1004", razorpay_order_id: "order_dev_1004", status: "captured", created_at: iso(60 * DAY) },
+  { id: "00000000-0000-4000-8000-0000000d0005", user_id: users[5].id, plan: "monthly", amount_paise: 9900, razorpay_payment_id: "pay_dev_1005", razorpay_order_id: "order_dev_1005", status: "captured", created_at: iso(70 * DAY) },
+  { id: "00000000-0000-4000-8000-0000000d0006", user_id: users[6].id, plan: "monthly", amount_paise: 9900, razorpay_payment_id: "pay_dev_1006", razorpay_order_id: "order_dev_1006", status: "captured", created_at: iso(4 * DAY) }, // not credited
+  { id: "00000000-0000-4000-8000-0000000d0007", user_id: users[7].id, plan: "yearly", amount_paise: 79900, razorpay_payment_id: "pay_dev_1007", razorpay_order_id: "order_dev_1007", status: "captured", created_at: iso(2 * DAY) }, // not credited
+];
 
 const submissions = [];
 problems.forEach((problem, problemIndex) => {
@@ -256,7 +278,8 @@ function matchesOp(stored, op, raw) {
   const value = parseValue(raw);
   if (op === "is") return stored === null ? value === null : String(stored) === String(value);
   if (op === "in") {
-    const list = String(raw).replace(/^\(/, "").replace(/\)$/, "").split(",").map((item) => item.trim());
+    // PostgREST `in` lists quote their values: in.("a","b") — strip the quotes.
+    const list = String(raw).replace(/^\(/, "").replace(/\)$/, "").split(",").map((item) => item.trim().replace(/^"|"$/g, ""));
     return list.some((item) => looseEquals(stored, parseValue(item)));
   }
   if (op === "ilike") {
@@ -332,7 +355,7 @@ function statsView(params) {
   }));
   const idFilter = params.get("id");
   if (idFilter && idFilter.startsWith("in.")) {
-    const list = idFilter.slice(3).replace(/^\(/, "").replace(/\)$/, "").split(",").map((item) => item.trim());
+    const list = idFilter.slice(3).replace(/^\(/, "").replace(/\)$/, "").split(",").map((item) => item.trim().replace(/^"|"$/g, ""));
     out = out.filter((row) => list.includes(row.id));
   }
   return out;

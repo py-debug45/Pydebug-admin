@@ -153,7 +153,11 @@ alter table public.problems
     check (status in ('draft','published','archived')),
   add column if not exists updated_at timestamptz default now(),
   add column if not exists created_by uuid,
-  add column if not exists admin_skip_notification boolean not null default false;
+  add column if not exists admin_skip_notification boolean not null default false,
+  add column if not exists battle_error text;
+
+comment on column public.problems.battle_error is
+  'Bug-hunt problems: the real Python exception class raised by the starter code (e.g. IndexError). Empty for output-prediction problems.';
 
 comment on column public.problems.admin_skip_notification is
   'Admin editor opt-out flag. Existing new-problem notification trigger must return NEW without broadcasting when this is true.';
