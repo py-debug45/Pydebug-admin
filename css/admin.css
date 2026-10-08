@@ -341,9 +341,20 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 
 /* Mobile speed & smoothness */
 body { -webkit-tap-highlight-color: transparent; }
-.table-wrap, .code, .search-results, .alert-strip, .tabs, .nav {
+/* Vertical inner scrollers keep their scroll contained (nice edge behaviour).
+   Horizontal-only scrollers (.table-wrap, .tabs, .alert-strip) must NOT set
+   overscroll-behavior: contain: their vertical scroll range is zero, so a
+   vertical wheel/touch pan over them is "at the boundary" immediately and
+   contain swallows it — the page itself then refuses to scroll (tables cover
+   most of every data page, so scrolling felt stuck). touch-action: pan-x lets
+   the browser route vertical pans straight to the page instead of the table. */
+.code, .search-results, .nav, .ai-bell__list {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+.table-wrap, .tabs, .alert-strip {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
 .card-head { flex-wrap: wrap; }
 .card-head .actions { flex-wrap: wrap; }

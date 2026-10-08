@@ -179,3 +179,31 @@ test("payments page shows income, the purchase ledger and the actual amount paid
   assert.equal(call.params.get("resource"), "payments");
   assert.equal(call.params.get("action"), "list");
 });
+
+/*
+ * CSS regression guard for the "page scroll stuck over data tables" bug.
+ * overscroll-behavior: contain is only correct on scrollers that actually
+ * scroll in the gesture's axis. On horizontal-only scrollers (.table-wrap,
+ * .tabs, .alert-strip) its vertical scroll range is zero, so a vertical
+ * wheel/touch pan over them is swallowed and the page refuses to scroll —
+ * tables cover most of every data page, so scrolling felt completely stuck.
+ */
+test("horizontal-only scrollers must not contain overscroll-behavior", () => {
+  const css = fs.readFileSync(path.join(ROOT, "css/admin.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const blocks = [];
+  const rule = /([^{}]+)\{([^{}]*)\}/g;
+  let match;
+  while ((match = rule.exec(css))) {
+    const selectors = match[1].split(",").map((part) => part.trim().split(/\s+/).pop()).filter(Boolean);
+    blocks.push({ selectors, body: match[2] });
+  }
+  const appliesTo = (selector) => blocks.filter((block) => block.selectors.includes(selector));
+  for (const selector of [".table-wrap", ".tabs", ".alert-strip"]) {
+    const offenders = appliesTo(selector).filter((block) => /overscroll-behavior/.test(block.body));
+    assert.deepEqual(offenders.map((block) => block.selectors), [], `${selector} must not set overscroll-behavior — it blocks page scrolling over tables`);
+    assert.ok(appliesTo(selector).some((block) => /touch-action:\s*pan-x/.test(block.body)), `${selector} should declare touch-action: pan-x so vertical pans reach the page`);
+  }
+  for (const selector of [".code", ".search-results", ".nav"]) {
+    assert.ok(appliesTo(selector).some((block) => /overscroll-behavior:\s*contain/.test(block.body)), `${selector} is a real vertical scroller and should keep its contained scroll`);
+  }
+});
