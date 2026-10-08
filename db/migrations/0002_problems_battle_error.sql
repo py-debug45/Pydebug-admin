@@ -2,7 +2,7 @@
 --
 -- The panel reads and writes problems.battle_error everywhere: the problem
 -- library and editor (api/read.js PROBLEM_FIELDS), problem create/edit
--- (api/write.js problemPayload), the AI studio publish (api/ai.js), the
+-- (api/write.js problemPayload), the Own-AI factory (api/ai.js), the
 -- battles question pool and the problems CSV export (api/jobs.js).
 -- Migration 0001 added the other admin problem columns (status, updated_at,
 -- created_by, admin_skip_notification) but not this one, so on any database

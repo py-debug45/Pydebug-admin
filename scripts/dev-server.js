@@ -9,12 +9,12 @@
  * It serves the static admin UI and wires /api/* to the REAL serverless
  * handlers (api/auth.js, api/read.js, api/write.js, api/jobs.js, api/ai.js).
  * Instead of Supabase, a tiny in-memory PostgREST-compatible mock runs on
- * the loopback interface, so the full panel — including the AI studio —
- * works with zero configuration and zero production credentials.
+ * the loopback interface, so the full panel — including the Own-AI Control
+ * Center — works with zero configuration and zero production credentials.
  *
  * This script is for local development only; Vercel never deploys it.
  * Demo accounts (any password works):
- *   dev@pydebug.local   -> content_editor (no 2FA, full problems + AI studio)
+ *   dev@pydebug.local   -> content_editor (no 2FA, full problems + AI Control)
  *   root@pydebug.local  -> superadmin (real TOTP enrollment on first login)
  */
 
@@ -39,7 +39,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = "dev-service-role-key";
 process.env.ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || crypto.randomBytes(36).toString("base64url");
 if (!process.env.ADMIN_ALLOWED_EMAILS) process.env.ADMIN_ALLOWED_EMAILS = "";
 
-const ai = require("../lib/server/ai-engine");
+const ownAi = require("../lib/server/own-ai");
 
 /* ------------------------------------------------------------------ *
  * In-memory tables + seed data.
@@ -99,10 +99,10 @@ users.forEach((user) => {
   user.premium_expires_at = premiumUntil.get(user.id) || null;
 });
 
-// Seed problems from the local AI engine itself so shapes always stay in sync.
-// Fixed seed 4242: reusing it in the AI studio shows duplicate-blocking live.
-const seededAi = ai.generateProblems({ seed: 4242, count: 4, type: "any", difficulty: "any", premium: "quarter" });
-const seededAi2 = ai.generateProblems({ seed: 909, count: 3, type: "bug", difficulty: "easy" });
+// Seed problems from the Own-AI engine itself so shapes always stay in sync.
+// The sample sampler runs the full template + validator pipeline (no DB).
+const seededAi = ownAi.sampleProblems(4, { mix: "both", difficulty: "mixed" });
+const seededAi2 = ownAi.sampleProblems(3, { mix: "bug", difficulty: "easy" });
 const problems = [...seededAi, ...seededAi2].map((problem, index) => ({
   id: `00000000-0000-4000-8000-0000000c${String(index).padStart(4, "0")}`,
   ...problem,
@@ -228,6 +228,8 @@ const tables = new Map(Object.entries({
     { user_id: DEV_ADMIN_ID, email: "dev@pydebug.local", role: "content_editor", totp_enabled: false, totp_secret_encrypted: null, created_by: ROOT_ADMIN_ID, created_at: iso(60 * DAY), last_login_at: null },
   ],
   admin_audit_log: [],
+  ai_settings: [],
+  ai_logs: [],
   app_settings: [
     { key: "maintenance_mode", value: false, updated_at: iso(3 * DAY) },
     { key: "daily_challenge_enabled", value: true, updated_at: iso(5 * DAY) },
@@ -495,10 +497,10 @@ mockServer.listen(MOCK_PORT, "127.0.0.1", () => {
     console.log(`  Panel:     http://localhost:${PORT}  (or the live preview URL)`);
     console.log(`  Mock API:  http://127.0.0.1:${MOCK_PORT}  (in-memory Supabase stand-in)`);
     console.log("  Logins (any password):");
-    console.log("    dev@pydebug.local    content_editor — straight in, full AI studio");
+    console.log("    dev@pydebug.local    content_editor — straight in, full AI Control");
     console.log("    root@pydebug.local   superadmin — real TOTP enrollment on first login");
-    console.log("  Tip: open the AI studio and reuse seed 4242 to watch duplicate");
-    console.log("       blocking refuse to re-add the seeded problems.");
+    console.log("  Tip: open AI Control (/ai.html), flip the master switch ON and watch");
+    console.log("       the guard work; the factory preview never inserts anything.");
     console.log("  All data is in-memory and resets on restart. Dev only — never deploy.");
     console.log("");
   });

@@ -6,8 +6,8 @@
  * in a Node vm context with a minimal DOM shim and a capturing fetch stub.
  *
  * These tests pin down two production incidents:
- *  1. The sidebar never linked to the AI studio (/ai.html) even though the
- *     page, its handler and /api/ai all existed.
+ *  1. The sidebar never linked to the AI Control page (/ai.html) even though
+ *     the page, its handler and /api/ai all existed.
  *  2. An older pages.js built the audit page's read URL from page state that
  *     contained `resource`/`action` keys, which emptied the router params and
  *     made /api/read answer "Missing resource parameter — the request reached
@@ -116,17 +116,17 @@ function readCalls(requests) {
     });
 }
 
-test("sidebar renders an AI studio link for roles with problems read", async () => {
+test("sidebar renders an AI Control link for roles with ai read", async () => {
   const { AdminPages, app } = loadPanel("content_editor");
   await AdminPages.init("audit");
   assert.ok(app.innerHTML.includes('href="/ai.html"'), "sidebar should link to /ai.html");
-  assert.ok(app.innerHTML.includes("AI studio"), "sidebar should label the link AI studio");
+  assert.ok(app.innerHTML.includes("AI Control"), "sidebar should label the link AI Control");
 });
 
-test("sidebar hides the AI studio link for roles without problems read", async () => {
+test("sidebar hides the AI Control link for roles without ai read", async () => {
   const { AdminPages, app } = loadPanel("finance");
   await AdminPages.init("audit");
-  assert.ok(!app.innerHTML.includes('href="/ai.html"'), "finance has no problems access, so no AI studio link");
+  assert.ok(!app.innerHTML.includes('href="/ai.html"'), "finance has no ai access, so no AI Control link");
 });
 
 test("audit page reads /api/read with resource=audit and action=list", async () => {
@@ -154,11 +154,12 @@ test("read() always sends resource/action even when page state contains those ke
   assert.equal(call.params.get("admin"), null, "empty filter values are omitted from the query string");
 });
 
-test("AI studio page renders for roles with problems read", async () => {
+test("AI Control page renders for roles with ai read", async () => {
   const panel = loadPanel("content_editor", "ai");
   await panel.AdminPages.init("ai");
-  assert.ok(panel.app.innerHTML.includes("AI problem studio"), "AI studio shell should render");
-  assert.equal(readCalls(panel.requests).length, 0, "AI studio makes no read call on load");
+  assert.ok(panel.app.innerHTML.includes("AI Control Center"), "AI Control shell should render");
+  assert.ok(panel.pageContent.innerHTML.includes("AI modules"), "the Own-AI module toggles should render");
+  assert.equal(readCalls(panel.requests).length, 0, "AI Control loads everything through /api/ai, not /api/read");
 });
 
 test("payments page shows income, the purchase ledger and the actual amount paid", async () => {

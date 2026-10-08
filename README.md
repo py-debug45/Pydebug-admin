@@ -14,7 +14,7 @@ The previous browser-side Supabase admin client has been removed. Database acces
   - `api/read.js` — all paginated reads
   - `api/write.js` — all admin mutations
   - `api/jobs.js` — broadcasts, exports, reconciliation, email tests and rebuild dispatches
-  - `api/ai.js` — the on-server AI problem generator (preview, publish, stats)
+  - `api/ai.js` — the Own-AI Control Center (moderation, problem factory, guards, growth, reports)
 - Dependency-free PostgREST client in `api/_db.js` using global `fetch` and a 15-second timeout
 - 8-hour HMAC-signed `HttpOnly; Secure; SameSite=Strict` session cookie
 - Same-origin checks and a per-session CSRF token on mutations
@@ -29,15 +29,17 @@ The previous browser-side Supabase admin client has been removed. Database acces
 ### Admin modules
 
 - Dashboard KPIs, 30-day signup/solve/revenue charts, cron/push alerts and recent events
-- AI problem studio (`/ai.html`): generates practice problems **on the server with no AI API key and no external calls**
-  - Bug-hunt problems whose code really raises a Python exception (`IndexError`, `ValueError`, `TypeError`, `KeyError`, `ZeroDivisionError`, `AttributeError`, `NameError`, `StopIteration`, …); `battle_error` and `expected_output` carry the true exception line
-  - Output-prediction problems that run cleanly; `expected_output` is the program's real stdout (mirrored with exact Python 3 semantics and cross-checked against a real CPython interpreter)
-  - Selectable premium mix: all free, ≈1 in 4, ≈1 in 3 or half — chosen deterministically from the seed, so preview and publish always agree and exactly that many generated problems are inserted as premium-only
-  - Type and difficulty selects: bug hunt, output prediction or mixed; easy, medium, hard or mixed — only what you choose is generated
-  - Seeded previews: "Add to library" re-generates the exact previewed batch and verifies a signature first
-  - Duplicate-free publishing: normalized titles and starter code are compared with up to 5,000 existing problems, so the same problem is never added twice
-  - Every publish is audit-logged as `problems / ai_create` and honours the notification opt-out flag
-  - Run `npm run verify:ai` any time to execute every template against a real `python3` and prove the outputs
+- Own-AI Control Center (`/ai.html`) — the panel's own AI, restored from the legacy admin panel. Everything runs **on the server with no AI API key and no external calls**; state lives in the `ai_settings` / `ai_logs` tables (migration `0004_own_ai.sql`)
+  - One master switch; background runs happen while the AI page is open (the server enforces the schedule and a 55s cross-tab lock)
+  - Discussion moderation: scans comments in English + Hindi/Hinglish (leet, spaced-out and punctuated evasion included), deletes abusive ones, warns the offender
+  - Auto problem factory: verified templates only — every bug-hunt problem's starter code really raises the detected Python exception (`IndexError`, `ValueError`, `TypeError`, …) and every output-prediction problem's `expected_output` is the program's real stdout, cross-checked against a real CPython interpreter (`npm run verify:ai`); exactly 3 hints per problem; mix/difficulty/per-run/hours and an optional premium mix
+  - Duplicate guard and bug error-guard: auto-deletes duplicate problems (oldest wins, children included) and Fix-the-Bug problems whose code runs without raising an error
+  - Growth & retention: welcome for new users, premium expiry reminders, win-back, stuck-user help and leaderboard alerts (all rate-limited per user)
+  - Safety+: FAQ auto-helper replies and a copy-paste cheat scan over the last 30 days of submissions
+  - Content AI: topic gap filler, per-problem variations (✦ AI button in the problem library), quality report, automatic hint repair and bulk import (JSON/CSV, every row validated first)
+  - Reports: daily digest, panel health score with one-click fixes, and difficulty calibration from real solve rates
+  - Local diagnostic lab and a moderation tester, plus the full AI activity log
+  - RBAC: reads need `ai.read`, actions need `ai.control` plus the underlying resource permission (`problems.create/delete/edit`, `moderation.delete`); user-facing notifications need `ai.notify`; every manual mutation is audit-logged
 - Users list with search, segmentation, pagination and CSV export
 - User 360° view: account state, premium, progress, streak, referrals, battles, achievements, notifications and audit
 - Audited premium grants/revokes, suspension, warn/mute, XP changes, progress reset, streak repair and Auth user deletion
@@ -75,7 +77,8 @@ It also removes any old audit foreign key so deleting a user can never remove or
 
 If the database was already migrated with `0001_admin.sql` alone, also run the two follow-up migrations (both idempotent, safe to re-run):
 
-- `db/migrations/0002_problems_battle_error.sql` — adds `problems.battle_error`, the real Python exception class a bug-hunt problem's starter code raises. The problem library, the problem editor, the AI studio and the problems CSV export all read and write it; without the column those screens fail with `column problems.battle_error does not exist`.
+- `db/migrations/0002_problems_battle_error.sql` — adds `problems.battle_error`, the real Python exception class a bug-hunt problem's starter code raises. The problem library, the problem editor, the Own-AI factory and the problems CSV export all read and write it; without the column those screens fail with `column problems.battle_error does not exist`.
+- `db/migrations/0004_own_ai.sql` — creates the `ai_settings` / `ai_logs` tables for the Own-AI Control Center (master switch, module toggles, factory settings, watch lock, activity log), locked to the service role only.
 - `db/migrations/0003_payment_ledger.sql` — adds `payment_grants.amount_paise` (the actual amount paid, so discounted checkouts show the real price), an index for ledger reads, row level security on the payment ledger, and the legacy Razorpay `payments` table when missing. For new purchases to carry the actual paid amount, update the user site's verify-payment API to write the Razorpay captured amount into `payment_grants.amount_paise`; until then the panel falls back to a matching Razorpay `payments` row or the plan list price (monthly ₹99 / six-month ₹499 / yearly ₹799).
 
 ### Existing new-problem trigger
@@ -153,13 +156,13 @@ Tests cover:
 - TOTP generation/verification and encrypted secret storage
 - role gates, including a `content_editor` rejected from the payments read endpoint with 403
 - old/new audit values, reason enforcement, secret redaction and audit-write failure behavior
-- the local AI engine: seeded determinism, complete problem shapes, premium-mix proportions, duplicate-key protection, publish-flow deduplication and real-Python behaviour for both bug and output problems (auto-skipped when `python3` is absent)
+- the Own-AI engine: moderation scanner (English + Hindi), problem validation, premium mix, bulk import, and the full API surface (factory, guards, moderation, growth, reports, watch tick, RBAC and audit) against an in-memory database; plus real-Python behaviour for both bug and output problems (auto-skipped when `python3` is absent)
 
 The real APIs need Vercel/local environment variables and a migrated Supabase project. Do not use production service-role credentials in a shared local environment.
 
 ## 4a. Local development server (mock data)
 
-To click through the whole panel — including the AI studio — without Vercel or Supabase:
+To click through the whole panel — including the Own-AI Control Center — without Vercel or Supabase:
 
 ```bash
 PYDEBUG_ADMIN_DEV=1 npm run dev     # panel on :3000, in-memory mock on :3001
@@ -168,8 +171,9 @@ npm run smoke                        # 50-check API smoke test against it
 
 `npm run smoke` logs in as both demo accounts (completing the superadmin's
 real TOTP enrollment), exercises every read endpoint, all CSV export jobs, a
-representative set of writes, RBAC rejections, CSRF rejection and the full AI
-preview/publish/duplicate-blocking flow.
+representative set of writes, RBAC rejections, CSRF rejection and the full
+Own-AI Control Center flow (factory, guards, moderation, growth, reports and
+the watch tick).
 
 This serves the static admin UI on `http://localhost:3000` and wires `/api/*` to the **real** serverless handlers, backed by a tiny in-memory PostgREST-compatible mock on the loopback interface. Demo accounts (any password): `dev@pydebug.local` (content editor, straight in) and `root@pydebug.local` (superadmin, real TOTP enrollment on first login). All data resets on restart; the script refuses to start unless `PYDEBUG_ADMIN_DEV=1` is set and is never deployed to Vercel.
 
@@ -188,7 +192,7 @@ This serves the static admin UI on `http://localhost:3000` and wires `/api/*` to
 | Role | Main access |
 |---|---|
 | `superadmin` | Full platform, settings and team administration |
-| `content_editor` | Problems CMS and AI problem studio; own audit entries |
+| `content_editor` | Problems CMS and AI Control (factory, dedup, error guard); own audit entries |
 | `support` | Users/support actions, payment reads, test notifications/email; own audit |
 | `finance` | Payment and reconciliation operations, premium grants, reports; own audit |
 | `moderator` | User warn/mute, referrals and discussion moderation; own audit |

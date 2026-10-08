@@ -9,6 +9,7 @@
     payments: { read: ["superadmin","support","finance","analyst"], manual_grant: ["superadmin","finance"], reconcile: ["superadmin","finance"] },
     referrals: { read: ["superadmin","support","finance","moderator","analyst"], invalidate: ["superadmin","moderator"] },
     battles: { read: ["superadmin","support","moderator","analyst"], cleanup: ["superadmin"] },
+    ai: { read: ["superadmin","content_editor","support","moderator","analyst"], control: ["superadmin","content_editor","moderator"], notify: ["superadmin","moderator"] },
     moderation: { read: ["superadmin","support","moderator","analyst"], resolve: ["superadmin","moderator"] },
     push: { read: ["superadmin","analyst"], send: ["superadmin"], test_send: ["superadmin","support"] },
     emails: { read: ["superadmin","analyst"], test_send: ["superadmin","support"] },
@@ -21,7 +22,7 @@
     ["index.html","dashboard","⌁","Dashboard","dashboard"],
     ["users.html","users","◎","Users","users"],
     ["problems.html","problems","◇","Problems","problems"],
-    ["ai.html","ai","✦","AI studio","problems"],
+    ["ai.html","ai","✦","AI Control","ai"],
     ["payments.html","payments","₹","Payments","payments"],
     ["referrals.html","referrals","↗","Referrals","referrals"],
     ["battles.html","battles","⚔","Battles","battles"],
@@ -87,6 +88,7 @@
   async function write(resource, action, payload = {}, reason = "") { const response = await request("/api/write", { method: "POST", mutation: true, body: { resource, action, payload, reason } }); return response.data; }
   async function job(jobName, payload = {}, reason = "") { const response = await request("/api/jobs", { method: "POST", mutation: true, body: { job: jobName, payload, reason } }); return response.data; }
   async function ai(action, payload = {}, reason = "") { const response = await request("/api/ai", { method: "POST", mutation: true, body: { action, payload, reason } }); return response.data; }
+  async function aiGet(action, values = {}) { const response = await request(`/api/ai?${params({ ...values, action })}`); return response.data; }
   function has(resource, action = "read") { const value = MATRIX[resource]?.[action]; return value === "*" || (Array.isArray(value) && value.includes(state.session?.role)); }
 
   function toast(message, type = "success") {
@@ -136,6 +138,62 @@
     const input = document.getElementById("global-search"); const results = document.getElementById("search-results");
     input?.addEventListener("input", () => { clearTimeout(state.searchTimer); const term = input.value.trim(); if (term.length < 2) { results.hidden = true; return; } state.searchTimer = setTimeout(async () => { try { const data = await read("search", "list", { q: term }); results.innerHTML = searchHtml(data); results.hidden = false; } catch { results.hidden = true; } }, 280); });
     document.addEventListener("click", (event) => { if (!event.target.closest(".global-search") && results) results.hidden = true; });
+    bindAiGuard();
+  }
+
+  /* ---- Own-AI guard pill + bell (topbar, every page) ---- */
+  function paintGuardPill(master) {
+    const pill = document.getElementById("ai-guard-pill");
+    if (!pill) return;
+    pill.hidden = false;
+    pill.className = `ai-guard-pill ${master ? "ai-guard-pill--on" : "ai-guard-pill--off"}`;
+    pill.innerHTML = master ? '<span class="ai-dot"></span>🤖 AI Guard ON' : "🤖 AI Guard OFF";
+    pill.title = master ? "Own-AI is watching this panel" : "Own-AI is off — enable it in AI Control";
+    if (!pill.dataset.aiLinked) {
+      pill.dataset.aiLinked = "1";
+      pill.style.cursor = "pointer";
+      pill.addEventListener("click", () => { location.href = "/ai.html"; });
+    }
+  }
+  function paintBell(data) {
+    const wrap = document.getElementById("ai-bell");
+    const badge = document.getElementById("ai-bell-badge");
+    const list = document.getElementById("ai-bell-list");
+    if (!wrap || !badge || !list) return;
+    wrap.hidden = false;
+    badge.textContent = data.unread > 9 ? "9+" : String(data.unread || 0);
+    badge.style.display = data.unread ? "" : "none";
+    const dot = (level) => (level === "error" ? "🔴" : "🟡");
+    list.innerHTML = data.items.length
+      ? data.items.map((item) => `<div class="ai-bell__item"><span>${dot(item.level)}</span><span><strong>${esc(item.action)}</strong> — ${esc(item.detail)}</span><small>${ago(item.t)}</small></div>`).join("")
+      : '<div class="ai-bell__empty">All quiet. Turn the AI ON to get findings here.</div>';
+  }
+  async function refreshAiGuard() {
+    if (!has("ai", "read")) return;
+    try {
+      const data = await aiGet("bell");
+      paintGuardPill(data.master);
+      paintBell(data);
+    } catch { /* the bell is best-effort */ }
+  }
+  function bindAiGuard() {
+    const pill = document.getElementById("ai-guard-pill");
+    if (!pill || !has("ai", "read")) return;
+    const panel = document.getElementById("ai-bell-panel");
+    document.getElementById("ai-bell-btn")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      panel.hidden = !panel.hidden;
+    });
+    document.addEventListener("click", (event) => {
+      if (panel && !event.target.closest("#ai-bell")) panel.hidden = true;
+    });
+    document.getElementById("ai-bell-read")?.addEventListener("click", async () => {
+      try { await ai("bell_read"); } catch { /* best-effort */ }
+      const badge = document.getElementById("ai-bell-badge");
+      if (badge) { badge.textContent = "0"; badge.style.display = "none"; }
+    });
+    refreshAiGuard();
+    setInterval(refreshAiGuard, 60000);
   }
 
   function searchHtml(data) {
@@ -179,6 +237,6 @@
     catch (error) { if (error.status !== 401) { const app=document.getElementById("app"); if(app) app.innerHTML=`<div class="loading-screen"><div><strong>Admin panel could not start</strong><br><span class="text-red">${esc(error.message)}</span></div></div>`; } }
   }
 
-  window.Admin = { state, esc, attr, fmt, inr, date, ago, tag, request, getSession, read, write, job, has, toast, dialog, shell, setContent, pagination, lineChart, stackedBars, download, parseCsv, run, pageUrl };
+  window.Admin = { state, esc, attr, fmt, inr, date, ago, tag, request, getSession, read, write, job, has, toast, dialog, shell, setContent, pagination, lineChart, stackedBars, download, parseCsv, run, pageUrl, ai, aiGet };
   document.addEventListener("DOMContentLoaded", boot);
 })();

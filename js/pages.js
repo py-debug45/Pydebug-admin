@@ -125,7 +125,7 @@
   async function problems() {
     A.shell("Problem library", "Draft, publish, archive and measure every practice problem.", `${A.state.session.role==="superadmin"?'<button class="btn" id="trigger-rebuild">↻ Rebuild user site</button>':""}${A.has("problems","create")?'<a class="btn btn-primary" href="/problem-edit.html">+ New problem</a>':""}`);
     const state={page:1,page_size:50,search:"",type:"",difficulty:"",status:"",access:""};
-    const load=async()=>{setLoading();try{const data=await A.read("problems","list",state);const rows=data.rows.map((row)=>`<tr><td><a class="cell-title text-cyan" href="/problem-edit.html?id=${encodeURIComponent(row.id)}">${A.esc(row.title)}</a><span class="cell-sub">${A.esc(row.topic)}</span></td><td>${A.tag(row.type)}</td><td>${A.tag(row.difficulty)}</td><td>${row.is_premium?A.tag("premium"):A.tag("free")}</td><td>${A.tag(row.status)}</td><td><strong>${A.fmt(row.solve_count)}</strong> / ${A.fmt(row.attempt_count)}<span class="cell-sub">${Number(row.success_rate||0).toFixed(1)}% success</span></td><td><div class="actions"><a class="btn btn-sm" href="/problem-edit.html?id=${encodeURIComponent(row.id)}">Open</a>${A.has("problems","edit")?`<button class="btn btn-sm" data-duplicate="${rowId(row.id)}">Duplicate</button>`:""}${A.has("problems","delete")?`<button class="btn btn-sm btn-danger" data-delete="${rowId(row.id)}" data-title="${A.attr(row.title)}">Delete</button>`:""}</div></td></tr>`).join("");A.setContent(`<form class="toolbar" id="filters"><div class="field field-grow"><label>Search</label><input name="search" value="${A.attr(state.search)}" placeholder="Title or topic"></div>${[["type",["bug","question"]],["difficulty",["easy","medium","hard"]],["status",["draft","published","archived"]],["access",["free","premium"]]].map(([name,options])=>`<div class="field"><label>${name}</label><select name="${name}"><option value="">All</option>${options.map((value)=>`<option ${state[name]===value?"selected":""}>${value}</option>`).join("")}</select></div>`).join("")}<button class="btn btn-primary">Apply</button><button class="btn btn-quiet" type="reset">Reset</button></form>${table(["Problem","Type","Difficulty","Access","Status","Performance",""],rows,"Problems")}${A.pagination(data)}`);bindFilterForm($("#filters"),state,load);bindPagination(load,state);$$('[data-duplicate]').forEach((button)=>button.addEventListener("click",async()=>{await A.run(button,()=>A.write("problems","duplicate",{id:button.dataset.duplicate},"Content variant created"),"Draft copy created");load();}));$$('[data-delete]').forEach((button)=>button.addEventListener("click",async()=>{const values=await A.dialog({title:"Delete problem",message:button.dataset.title,reason:true,requireText:"DELETE",danger:true});if(!values)return;await A.run(button,()=>A.write("problems","delete",{id:button.dataset.delete},values.reason),"Problem deleted");load();}));}catch(error){showError(error);}};$("#trigger-rebuild")?.addEventListener("click",async(event)=>{const values=await A.dialog({title:"Trigger user-site rebuild",message:"Dispatch the configured main-repository workflow after content changes.",reason:true});if(!values)return;await A.run(event.currentTarget,()=>A.job("rebuild",{},values.reason),"Rebuild dispatched");});await load();
+    const load=async()=>{setLoading();try{const data=await A.read("problems","list",state);const rows=data.rows.map((row)=>`<tr><td><a class="cell-title text-cyan" href="/problem-edit.html?id=${encodeURIComponent(row.id)}">${A.esc(row.title)}</a><span class="cell-sub">${A.esc(row.topic)}</span></td><td>${A.tag(row.type)}</td><td>${A.tag(row.difficulty)}</td><td>${row.is_premium?A.tag("premium"):A.tag("free")}</td><td>${A.tag(row.status)}</td><td><strong>${A.fmt(row.solve_count)}</strong> / ${A.fmt(row.attempt_count)}<span class="cell-sub">${Number(row.success_rate||0).toFixed(1)}% success</span></td><td><div class="actions"><a class="btn btn-sm" href="/problem-edit.html?id=${encodeURIComponent(row.id)}">Open</a>${A.has("problems","edit")?`<button class="btn btn-sm" data-duplicate="${rowId(row.id)}">Duplicate</button>`:""}${A.has("ai","control")&&A.has("problems","create")?`<button class="btn btn-sm btn-quiet" data-variation="${rowId(row.id)}" title="AI: generate variations of this problem">✦ AI</button>`:""}${A.has("problems","delete")?`<button class="btn btn-sm btn-danger" data-delete="${rowId(row.id)}" data-title="${A.attr(row.title)}">Delete</button>`:""}</div></td></tr>`).join("");A.setContent(`<form class="toolbar" id="filters"><div class="field field-grow"><label>Search</label><input name="search" value="${A.attr(state.search)}" placeholder="Title or topic"></div>${[["type",["bug","question"]],["difficulty",["easy","medium","hard"]],["status",["draft","published","archived"]],["access",["free","premium"]]].map(([name,options])=>`<div class="field"><label>${name}</label><select name="${name}"><option value="">All</option>${options.map((value)=>`<option ${state[name]===value?"selected":""}>${value}</option>`).join("")}</select></div>`).join("")}<button class="btn btn-primary">Apply</button><button class="btn btn-quiet" type="reset">Reset</button></form>${table(["Problem","Type","Difficulty","Access","Status","Performance",""],rows,"Problems")}${A.pagination(data)}`);bindFilterForm($("#filters"),state,load);bindPagination(load,state);$$('[data-duplicate]').forEach((button)=>button.addEventListener("click",async()=>{await A.run(button,()=>A.write("problems","duplicate",{id:button.dataset.duplicate},"Content variant created"),"Draft copy created");load();}));$$('[data-variation]').forEach((button)=>button.addEventListener("click",async()=>{const values=await A.dialog({title:"AI variations",message:"Generate 3 new variations of this problem (same topic, type and difficulty). Every variation is validated and duplicate-checked before insert.",reason:true,danger:true,confirmLabel:"Generate"});if(!values)return;await A.run(button,()=>A.ai("variations",{problem_id:button.dataset.variation,count:3},values.reason),"Variations generated");load();}));$$('[data-delete]').forEach((button)=>button.addEventListener("click",async()=>{const values=await A.dialog({title:"Delete problem",message:button.dataset.title,reason:true,requireText:"DELETE",danger:true});if(!values)return;await A.run(button,()=>A.write("problems","delete",{id:button.dataset.delete},values.reason),"Problem deleted");load();}));}catch(error){showError(error);}};$("#trigger-rebuild")?.addEventListener("click",async(event)=>{const values=await A.dialog({title:"Trigger user-site rebuild",message:"Dispatch the configured main-repository workflow after content changes.",reason:true});if(!values)return;await A.run(event.currentTarget,()=>A.job("rebuild",{},values.reason),"Rebuild dispatched");});await load();
   }
 
   async function problemEdit() {
@@ -201,89 +201,476 @@
 
   async function audit() {
     A.shell("Audit log", "Immutable history of every privileged admin mutation.", '<button class="btn" id="export-audit">⇩ Export CSV</button>');const state={page:1,page_size:50,admin:"",log_resource:"",log_action:"",from:"",to:""};
-    const load=async()=>{setLoading();try{const data=await A.read("audit","list",state);const rows=data.rows.map((row)=>`<tr><td>${A.date(row.created_at)}</td><td><span class="cell-title mono">${A.esc(row.admin_id)}</span><span class="cell-sub">${A.esc(row.admin_role)}</span></td><td>${A.esc(row.resource)} · <strong>${A.esc(row.action)}</strong><span class="cell-sub">${A.esc(row.target_id||"—")}</span></td><td>${A.esc(row.reason||"—")}</td><td><details><summary>Diff</summary><pre class="code">${A.esc(JSON.stringify({old:row.old_value,new:row.new_value},null,2))}</pre></details></td><td class="mono">${A.esc(row.ip||"—")}</td></tr>`).join("");A.setContent(`<form class="toolbar" id="filters"><div class="field"><label>Resource</label><input name="log_resource" value="${A.attr(state.log_resource)}" placeholder="users, problems, auth…"></div><div class="field"><label>Action</label><input name="log_action" value="${A.attr(state.log_action)}" placeholder="ai_create, edit, login…"></div><div class="field"><label>Admin UUID</label><input name="admin" value="${A.attr(state.admin)}"></div><div class="field"><label>From</label><input type="date" name="from" value="${A.attr(state.from)}"></div><div class="field"><label>To</label><input type="date" name="to" value="${A.attr(state.to)}"></div><button class="btn btn-primary">Apply</button></form>${table(["Time","Admin","Action","Reason","Values","IP"],rows,"Audit log")}${A.pagination(data)}`);bindFilterForm($("#filters"),state,load);bindPagination(load,state);}catch(error){showError(error);}};$("#export-audit")?.addEventListener("click",async(event)=>A.run(event.currentTarget,async()=>{const result=await A.job("export",{resource:"audit"});A.download(result.csv,result.filename);},"Audit export ready"));await load();
+    const load=async()=>{setLoading();try{const data=await A.read("audit","list",state);const rows=data.rows.map((row)=>`<tr><td>${A.date(row.created_at)}</td><td><span class="cell-title mono">${A.esc(row.admin_id)}</span><span class="cell-sub">${A.esc(row.admin_role)}</span></td><td>${A.esc(row.resource)} · <strong>${A.esc(row.action)}</strong><span class="cell-sub">${A.esc(row.target_id||"—")}</span></td><td>${A.esc(row.reason||"—")}</td><td><details><summary>Diff</summary><pre class="code">${A.esc(JSON.stringify({old:row.old_value,new:row.new_value},null,2))}</pre></details></td><td class="mono">${A.esc(row.ip||"—")}</td></tr>`).join("");A.setContent(`<form class="toolbar" id="filters"><div class="field"><label>Resource</label><input name="log_resource" value="${A.attr(state.log_resource)}" placeholder="users, problems, auth…"></div><div class="field"><label>Action</label><input name="log_action" value="${A.attr(state.log_action)}" placeholder="generate, scan, edit, login…"></div><div class="field"><label>Admin UUID</label><input name="admin" value="${A.attr(state.admin)}"></div><div class="field"><label>From</label><input type="date" name="from" value="${A.attr(state.from)}"></div><div class="field"><label>To</label><input type="date" name="to" value="${A.attr(state.to)}"></div><button class="btn btn-primary">Apply</button></form>${table(["Time","Admin","Action","Reason","Values","IP"],rows,"Audit log")}${A.pagination(data)}`);bindFilterForm($("#filters"),state,load);bindPagination(load,state);}catch(error){showError(error);}};$("#export-audit")?.addEventListener("click",async(event)=>A.run(event.currentTarget,async()=>{const result=await A.job("export",{resource:"audit"});A.download(result.csv,result.filename);},"Audit export ready"));await load();
   }
 
-  async function aiStudio() {
-    A.shell("AI problem studio", "Generate real bug-hunt and output-prediction problems on this server. No AI API key, no external calls.", '<a class="btn" href="/problems.html">← Library</a>');
-    if(!A.has("problems","read"))return showError(new Error("You do not have access"));
-    const state={type:"any",difficulty:"any",count:5,premium:"none",status:"draft",notify:false};
-    let preview=null; let skip=new Set(); let result=null; let busy=false;
-    const canCreate=A.has("problems","create");
+  /* ============================================================
+     AI Control Center — port of the legacy admin panel's Own-AI
+     (js/ai-brain.js + admin-ai.js). The engine runs entirely on the
+     server (api/ai.js -> lib/server/own-ai.js); this page is the
+     control surface: master switch, module toggles, factory,
+     guards, growth/safety/content runners, reports and the lab.
+     ============================================================ */
+  async function aiControl() {
+    const control = A.has("ai", "control");
+    A.shell("AI Control Center", "Your own AI — no API key, no external calls. Moderation, a verified problem factory, growth nudges and reports, all running on this server.", '<button class="btn btn-sm" id="ai-btn-refresh">↻ Refresh</button>');
+    const sw = (key, label, desc, opts = "") => `<div class="ai-module"><label class="switch" title="${A.attr(label)}"><input type="checkbox" data-setting="${key}" ${control ? "" : "disabled"}><span class="knob"></span></label><div class="ai-module__copy"><strong>${label}</strong><span>${desc}</span></div>${opts}</div>`;
+    const runBtn = (id, label, title) => control ? `<button class="btn btn-sm" id="${id}" title="${A.attr(title)}">${label}</button>` : "";
+    A.setContent(`
+      <div class="card ai-master ${""}" id="ai-master-card">
+        <div class="ai-master__row">
+          <label class="switch switch--lg" title="Master switch"><input type="checkbox" id="ai-master" ${control ? "" : "disabled"}><span class="knob"></span></label>
+          <div class="ai-master__copy">
+            <h2>🤖 AI Control Center <span class="tag tag-muted" id="ai-master-tag">OFF</span></h2>
+            <p>One master switch. When ON, the guard watches discussions, keeps the library duplicate-free, runs the problem factory on schedule and sends growth nudges. Background runs happen while this page is open — the server enforces the schedule.</p>
+          </div>
+        </div>
+      </div>
 
-    const problemCard=(p,i)=>{
-      const excluded=skip.has(i);
-      return `<section class="card ai-problem${excluded?" is-excluded":""}" data-index="${i}">
-        <div class="card-head"><div>
-          <h2 class="cell-title">${A.esc(p.title)}</h2>
-          <p>${A.tag(p.type==="bug"?"bug hunt":"output")}${A.tag(p.difficulty)}${A.tag(p.topic)}${p.is_premium?A.tag("premium"):A.tag("free")}${p.type==="bug"?A.tag(p.battle_error):A.tag("runs clean")}</p>
-        </div>${canCreate?`<div class="actions"><button class="btn btn-sm" data-skip="${i}">${excluded?"Include again":"Exclude"}</button></div>`:""}</div>
-        <p class="muted">${A.esc(p.description)}</p>
-        <pre class="code">${A.esc(p.starter_code)}</pre>
-        ${p.type==="bug"
-          ?`<div class="alert alert-danger"><strong>Real runtime error:</strong> ${A.esc(p.expected_output)}</div>`
-          :`<div class="alert empty-alert"><strong>Real program output:</strong> ${A.esc(p.expected_output)}</div>`}
-        <details><summary>Hints (${p.hints.length})</summary><ol class="hint-list">${p.hints.map((hint)=>`<li>${A.esc(hint)}</li>`).join("")}</ol></details>
-      </section>`;
+      <div class="kpi-grid">
+        <div class="kpi"><span>Comments removed</span><strong id="ai-stat-removed">0</strong><em>abusive deleted</em></div>
+        <div class="kpi kpi-amber"><span>Warnings sent</span><strong id="ai-stat-warned">0</strong><em>offender notices</em></div>
+        <div class="kpi kpi-green"><span>Problems added</span><strong id="ai-stat-added">0</strong><em>by the factory</em></div>
+        <div class="kpi kpi-purple"><span>Duplicates removed</span><strong id="ai-stat-dups">0</strong><em>auto-dedup</em></div>
+        <div class="kpi kpi-cyan"><span>Bug guard</span><strong id="ai-stat-errguard">0</strong><em>error-free bugs deleted</em></div>
+        <div class="kpi"><span>Premium added</span><strong id="ai-stat-premium">0</strong><em>⭐ marked</em></div>
+      </div>
+      <div class="ai-stat-strip muted">
+        <span id="ai-last-mod">Moderation: never</span><span id="ai-last-dedup">Dedup: never</span><span id="ai-last-errguard">Error guard: never</span><span id="ai-last-gen">Factory: never</span><span id="ai-last-welcome">Welcome: never</span>
+        <span id="ai-watch-note">Watch: idle</span>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>AI modules</h2><p>What the guard does when the master switch is ON.</p></div>
+          ${sw("moderation", "Discussion moderation", "Scans comments (English + Hindi/Hinglish), deletes abusive ones and warns the offender.", runBtn("ai-btn-scan", "Scan now", "Scan the latest comments"))}
+          ${sw("dedup", "Duplicate guard", "Never inserts a duplicate; scans the library and deletes newer duplicates with their submissions and discussions.", runBtn("ai-btn-dedup", "Run", "Find and delete duplicates"))}
+          ${sw("error_guard", "Bug error-guard", "Deletes Fix-the-Bug problems whose starter code runs WITHOUT raising any Python error.", runBtn("ai-btn-errguard", "Run", "Scan for error-free bug code"))}
+          ${sw("auto_problems", "Auto problem factory", "Generates problems on a schedule (below) — every problem is validated before insert.", runBtn("ai-btn-generate", "Generate", "Generate a batch now"))}
+          ${sw("welcome", "Welcome new users", "Sends a friendly welcome notification to users who joined in the last 24h.", runBtn("ai-btn-welcome", "Run", "Welcome new users"))}
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Factory settings</h2><p>What and how often the factory generates.</p></div>
+          <div class="form-grid">
+            <div class="field"><label>Problems per run</label><input type="number" min="1" max="20" data-factory="per_run" ${control ? "" : "disabled"}></div>
+            <div class="field"><label>Auto-run every (hours)</label><input type="number" min="1" max="72" data-factory="auto_hours" ${control ? "" : "disabled"}></div>
+            <div class="field"><label>Mix</label><select data-factory="mix" ${control ? "" : "disabled"}><option value="both">Bug + Question</option><option value="bug">Bug only</option><option value="question">Question only</option></select></div>
+            <div class="field"><label>Difficulty</label><select data-factory="difficulty" ${control ? "" : "disabled"}><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div>
+          </div>
+          ${sw("announce", "Announce new problems", "Broadcasts a notification to all users when the AI adds problems.")}
+          ${sw("premium_mix", "Premium mix", "Marks a share of factory problems as Premium-only.")}
+          <div class="form-grid">
+            <div class="field"><label>Premium percent (0-90)</label><input type="number" min="0" max="90" data-factory="premium_percent" ${control ? "" : "disabled"}></div>
+            <div class="field"><label>&nbsp;</label><button class="btn btn-block" id="ai-btn-preview" ${control ? "" : "disabled"}>👁 Preview one problem</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Growth &amp; retention</h2><p>Nudges that bring users back. All are rate-limited per user.</p></div>
+          ${sw("expiry", "Premium expiry reminders", "Reminds users whose premium expires within 3 days (and expired within 2).", `${runBtn("ai-btn-exp", "Run", "Send expiry reminders")}<span class="ai-last" id="ai-last-exp">never</span>`)}
+          ${sw("winback", "Win-back inactive users", "Nudges users inactive for 7+ days with a personal note.", `${runBtn("ai-btn-winback", "Run", "Send win-back nudges")}<span class="ai-last" id="ai-last-winback">never</span>`)}
+          ${sw("stuck", "Stuck-user encouragement", "Helps users with 5+ failed attempts and no solve on one problem.", `${runBtn("ai-btn-stuck", "Run", "Send stuck-user help")}<span class="ai-last" id="ai-last-stuck">never</span>`)}
+          ${sw("leaderboard", "Leaderboard alerts", "Congratulates top-25 XP users who enter the top 10 or climb 3+ spots.", `${runBtn("ai-btn-lead", "Run", "Send leaderboard alerts")}<span class="ai-last" id="ai-last-lead">never</span>`)}
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Safety+</h2><p>Extra shields beyond the core guard.</p></div>
+          ${sw("hindi", "Hindi / Hinglish filter", "Adds Devanagari + Hinglish abuse patterns to the comment scanner. English is always on.")}
+          ${sw("faq", "FAQ auto-helper", "Replies to top-level questions older than 24h that have no answer yet.", `${runBtn("ai-btn-faq", "Run", "Reply to waiting questions")}<span class="ai-last" id="ai-last-faq">never</span>`)}
+          <div class="ai-module"><div class="ai-module__copy"><strong>Copy-paste cheat scan</strong><span>Finds the same submission code (normalized) from 3+ different users on one problem in the last 30 days. Report only — a human reviews.</span></div>${runBtn("ai-btn-cheat", "Scan", "Scan submissions for copied code")}</div>
+          <div class="ai-result" id="ai-cheat-body" hidden></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Content AI</h2><p>Keep the library complete, consistent and high-quality.</p></div>
+        <div class="grid-3">
+          <div class="ai-module"><div class="ai-module__copy"><strong>Topic gap filler</strong><span>Finds the thinnest topic × difficulty cells and generates problems for them.</span></div>${runBtn("ai-btn-gap", "Fill gaps", "Generate for the thinnest cells")}</div>
+          <div class="ai-module"><div class="ai-module__copy"><strong>Variations</strong><span>Generate 3 variations of any problem from the <a class="text-cyan" href="/problems.html">problem library</a> (✦ AI button on a row).</span></div></div>
+          <div class="ai-module"><div class="ai-module__copy"><strong>Quality report</strong><span>Flags short titles, weak descriptions, missing code/output, thin hints, duplicate numbers and error-free bug code.</span></div>${runBtn("ai-btn-quality", "Scan", "Run the quality report")}</div>
+          <div class="ai-module"><div class="ai-module__copy"><strong>Auto hint repair</strong><span>Tops problems up to exactly 3 hints using the topic hint bank.</span></div>${runBtn("ai-btn-hints", "Fix hints", "Top up hints to 3")}</div>
+        </div>
+        <div class="ai-result" id="ai-gap-result" hidden></div>
+        <div class="ai-result" id="ai-quality-body" hidden></div>
+        <div class="ai-result" id="ai-hints-result" hidden></div>
+        <h3 class="ai-subhead">Bulk import</h3>
+        <p class="muted">Paste a JSON array of problems, or CSV with a header row: <code>type,title,difficulty,topic,starter_code,expected_output</code> (+ optional <code>hint1,hint2,hint3</code> or hints joined with <code>|</code>, <code>is_premium</code>). Every row is validated before anything is inserted.</p>
+        <div class="toolbar">
+          <div class="field"><label>Format</label><select id="ai-bulk-format" ${control ? "" : "disabled"}><option value="json">JSON array</option><option value="csv">CSV</option></select></div>
+        </div>
+        <div class="field"><label>Rows</label><textarea id="ai-bulk-text" rows="7" spellcheck="false" placeholder='[{"type":"bug","title":"…","difficulty":"easy","topic":"lists","starter_code":"…","expected_output":"…","hints":["…","…","…"]}]' ${control ? "" : "disabled"}></textarea></div>
+        <div class="actions">
+          <button class="btn" id="ai-btn-bulk-check" ${control ? "" : "disabled"}>Validate only</button>
+          <button class="btn btn-primary" id="ai-btn-bulk-import" ${control ? "" : "disabled"}>Import valid rows</button>
+        </div>
+        <div class="ai-result" id="ai-bulk-body" hidden></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Daily digest</h2><p>One-glance summary of users, problems, submissions and AI activity.</p></div>
+          <div id="ai-digest-body"><div class="empty-alert">No digest yet — build one.</div></div>
+          <div class="actions"><button class="btn" id="ai-btn-digest" ${control ? "" : "disabled"}>Build digest</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Panel health</h2><p>Score 0–100 with actionable findings. Fix buttons run the matching AI action.</p></div>
+          <div id="ai-health-body"><div class="empty-alert">Run the health check from the activity log card.</div></div>
+          <div class="actions"><button class="btn" id="ai-btn-health" ${control ? "" : "disabled"}>Run health check</button></div>
+          <div class="ai-checks" id="ai-health-list"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Difficulty calibration</h2><p>Reads real solve rates (min 8 attempts) and suggests easier/harder difficulties. Apply changes one by one or all at once.</p></div>
+        <div id="ai-calib-body"><div class="empty-alert">Run the calibration to load suggestions.</div></div>
+        <div class="actions">
+          <button class="btn" id="ai-btn-calib" ${control ? "" : "disabled"}>Run calibration</button>
+          <button class="btn btn-primary" id="ai-btn-calib-apply" ${control ? "" : "disabled"}>Apply selected</button>
+          <button class="btn" id="ai-btn-calib-apply-all" ${control ? "" : "disabled"}>Apply all</button>
+        </div>
+      </div>
+
+      <div class="card" id="ai-preview-card" hidden>
+        <div class="card-head"><h2>👁 Problem preview</h2><p>One fully validated problem — nothing was inserted. Generate a batch from the factory settings above.</p></div>
+        <div id="ai-preview-body"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Local diagnostic lab</h2><p>Paste Python code — the local checker (never executes it) reports the first likely error and common mistakes.</p></div>
+          <div class="field"><label>Code</label><textarea id="ai-diag-code" rows="6" spellcheck="false" placeholder="items = [3, 1, 2]&#10;ordered = items.sort()&#10;print(ordered)" ${control ? "" : "disabled"}></textarea></div>
+          <div class="actions"><button class="btn" id="ai-btn-diag" ${control ? "" : "disabled"}>Diagnose</button></div>
+          <div class="ai-result" id="ai-diag-body" hidden></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Moderation tester</h2><p>Test the exact filter the guard uses on comments (English + Hindi when enabled).</p></div>
+          <div class="field"><label>Text</label><textarea id="ai-test-text" rows="4" placeholder="Type a comment to test…" ${control ? "" : "disabled"}></textarea></div>
+          <div class="actions"><button class="btn" id="ai-btn-test" ${control ? "" : "disabled"}>Test text</button></div>
+          <div class="ai-result" id="ai-test-result" hidden></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>AI activity log</h2><p>Everything the AI did, newest first. Stored in <code>ai_logs</code> — it follows you across devices.</p></div>
+        <div class="table-wrap"><table class="table" id="ai-log-table"><thead><tr><th>When</th><th>Level</th><th>Action</th><th>Detail</th></tr></thead><tbody id="ai-log-tbody"></tbody></table></div>
+        <div class="actions"><button class="btn btn-danger" id="ai-btn-clear-logs" ${control ? "" : "disabled"}>Clear log</button></div>
+      </div>
+    `);
+
+    /* ---------------- state + painting ---------------- */
+    let settings = null;
+    let calib = null;
+    const $id = (id) => document.getElementById(id);
+    const paintMaster = () => {
+      const on = settings?.master === true;
+      const master = $id("ai-master");
+      if (master) master.checked = on;
+      const tag = $id("ai-master-tag");
+      if (tag) { tag.textContent = on ? "ON" : "OFF"; tag.className = `tag ${on ? "tag-green" : "tag-muted"}`; }
+      const card = $id("ai-master-card");
+      if (card) card.classList.toggle("ai-master--on", on);
     };
-
-    const render=()=>{
-      const statsCard=`<section class="card"><div class="card-head"><div><h2>How this works</h2><p>PyDebug Local AI · ${A.esc(preview?preview.engine:"pydebug-local-ai/v1")}</p></div><span class="tag tag-green">NO API KEY</span></div>
-        <p class="muted">Every <strong>bug hunt</strong> problem ships code that really raises a Python exception (IndexError, ValueError, TypeError, KeyError, …) — verified against a real interpreter. Every <strong>output</strong> problem runs cleanly and its listed output is the program's true stdout. When you add problems, titles and code are compared with your existing library, so the same problem is never inserted twice. Pick a premium mix and exactly that many generated problems become premium-only.</p>
-        <form class="toolbar" id="ai-form">
-          <div class="field"><label>Type</label><select name="type"><option value="any" ${state.type==="any"?"selected":""}>Mixed (bugs + output)</option><option value="bug" ${state.type==="bug"?"selected":""}>Bug hunt (real errors)</option><option value="question" ${state.type==="question"?"selected":""}>Output prediction</option></select></div>
-          <div class="field"><label>Difficulty</label><select name="difficulty"><option value="any" ${state.difficulty==="any"?"selected":""}>Mixed (all levels)</option><option value="easy" ${state.difficulty==="easy"?"selected":""}>Easy only</option><option value="medium" ${state.difficulty==="medium"?"selected":""}>Medium only</option><option value="hard" ${state.difficulty==="hard"?"selected":""}>Hard only</option></select></div>
-          <div class="field"><label>Premium mix</label><select name="premium"><option value="none" ${state.premium==="none"?"selected":""}>All free</option><option value="quarter" ${state.premium==="quarter"?"selected":""}>≈1 in 4 premium (2-3 of 10)</option><option value="third" ${state.premium==="third"?"selected":""}>≈1 in 3 premium (3 of 10)</option><option value="half" ${state.premium==="half"?"selected":""}>Half premium (5 of 10)</option></select></div>
-          <div class="field"><label>How many</label><input type="number" name="count" min="1" max="10" value="${state.count}" required></div>
-          <div class="field"><label>Add as</label><select name="status"><option value="draft" ${state.status==="draft"?"selected":""}>Draft</option><option value="published" ${state.status==="published"?"selected":""}>Published</option></select></div>
-          <div class="field"><label>Notify users</label><select name="notify"><option value="off" ${state.notify?"":"selected"}>Off (quiet add)</option><option value="on" ${state.notify?"selected":""}>On (publish notification)</option></select></div>
-          <button class="btn btn-primary" id="ai-generate" ${canCreate?"":"disabled title=\"You need problem create access\""}>✦ Generate problems</button>
-        </form>
-        ${preview?`<div class="alert-strip"><div class="alert empty-alert">✓ ${preview.count} problem${preview.count===1?"":"s"} generated on-server · ${preview.premium_count} premium · seed <span class="mono">${preview.seed}</span> · signature <span class="mono">${A.esc(preview.signature.slice(0,10))}…</span></div></div>`:""}</section>`;
-
-      const resultCard=result?`<section class="card"><div class="card-head"><div><h2>Add result</h2><p>Seed <span class="mono">${result.seed}</span> · ${A.esc(result.engine)}</p></div></div>
-        ${result.inserted_count?`<div class="alert empty-alert">✓ ${result.inserted_count} problem${result.inserted_count===1?"":"s"} added as ${A.esc(result.status)} · ${result.premium_count} premium · ${result.inserted_count-result.premium_count} free — <a class="text-cyan" href="/problems.html">open the problem library</a></div>`:""}
-        ${result.skipped_count?`<div class="alert alert-danger">↷ ${result.skipped_count} skipped: ${result.skipped.map((row)=>`${A.esc(row.title)} (${row.reason==="duplicate"?"already in your library — duplicate blocked":row.reason==="excluded_by_admin"?"excluded by you":A.esc(row.reason)})`).join(" · ")}</div>`:""}
-        ${!result.inserted_count&&!result.skipped_count?'<div class="alert">Nothing was added</div>':""}
-      </section>`:"";
-
-      const cards=preview?preview.problems.map(problemCard).join(""):"";
-      A.setContent(`<div class="grid grid-2">${statsCard}${resultCard}</div>
-        ${preview?`<div class="page-actions-bar"><div class="actions">${canCreate?`<button class="btn btn-primary" id="ai-publish">＋ Add ${preview.count-skip.size} to library</button>`:""}<button class="btn" id="ai-regenerate">↻ Regenerate</button></div></div><div class="grid grid-2">${cards}</div>`:'<div class="alert-strip"><div class="alert">Generate a batch to preview real problems here. Nothing is written to the library until you add it.</div></div>'}`);
-
-      $("#ai-form")?.addEventListener("submit",(event)=>{event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget).entries());state.type=values.type;state.difficulty=values.difficulty;state.premium=values.premium;state.count=Math.min(10,Math.max(1,Number(values.count)||5));state.status=values.status;state.notify=values.notify==="on";generate();});
-      $$("[data-skip]").forEach((button)=>button.addEventListener("click",()=>{const index=Number(button.dataset.skip);if(skip.has(index))skip.delete(index);else skip.add(index);render();}));
-      $("#ai-regenerate")?.addEventListener("click",()=>{generate();});
-      $("#ai-publish")?.addEventListener("click",async(event)=>{
-        const button=event.currentTarget;
-        if(busy||!preview)return;
-        const values=await A.dialog({title:"Add AI problems to the library",message:`${preview.count-skip.size} problem(s) will be inserted as ${state.status}. Duplicates in your library are skipped automatically.`,reason:true});
-        if(!values)return;
-        busy=true;button.disabled=true;
-        try{
-          result=await A.ai("publish",{seed:preview.seed,signature:preview.signature,count:preview.count,type:state.type,difficulty:state.difficulty,premium:state.premium,status:state.status,notify_users:state.notify,skip:[...skip]},values.reason);
-          A.toast(`${result.inserted_count} problem(s) added`);
-        }catch(error){A.toast(error.message,"error");}
-        finally{busy=false;}
-        render();
+    const paintSettings = () => {
+      if (!settings) return;
+      $$("[data-setting]").forEach((input) => { input.checked = settings[input.dataset.setting] === true; });
+      $$("[data-factory]").forEach((input) => {
+        const key = input.dataset.factory;
+        if (input.tagName === "SELECT") input.value = settings[key] ?? input.value;
+        else input.value = settings[key] ?? "";
       });
+      paintMaster();
     };
-
-    const generate=async()=>{
-      if(busy)return;busy=true;
-      const button=$("#ai-generate");if(button){button.disabled=true;button.textContent="Generating…";}
-      try{
-        preview=await A.ai("preview",{type:state.type,difficulty:state.difficulty,premium:state.premium,count:state.count});
-        skip=new Set();result=null;
-        A.toast(`${preview.count} problem(s) generated · ${preview.premium_count} premium`);
-      }catch(error){A.toast(error.message,"error");}
-      finally{busy=false;}
-      render();
+    const paintStats = (stats, lastRuns) => {
+      const set = (id, value) => { const el = $id(id); if (el) el.textContent = A.fmt(value ?? 0); };
+      set("ai-stat-removed", stats?.commentsRemoved);
+      set("ai-stat-warned", stats?.warningsSent);
+      set("ai-stat-added", stats?.problemsAdded);
+      set("ai-stat-dups", stats?.duplicatesRemoved);
+      set("ai-stat-errguard", stats?.bugGuardRemoved);
+      set("ai-stat-premium", stats?.premiumAdded);
+      const last = (id, key) => { const el = $id(id); if (el) el.textContent = `${key}: ${lastRuns?.[keyMap(key)] ? A.ago(new Date(lastRuns[keyMap(key)]).toISOString()) : "never"}`; };
+      const keyMap = (label) => ({ Moderation: "moderation", Dedup: "dedup", "Error guard": "errguard", Factory: "problems", Welcome: "welcome", Expiry: "expiry", Winback: "winback", Stuck: "stuck", Leaderboard: "lead", FAQ: "faq" }[label] || label);
+      last("ai-last-mod", "Moderation"); last("ai-last-dedup", "Dedup"); last("ai-last-errguard", "Error guard");
+      last("ai-last-gen", "Factory"); last("ai-last-welcome", "Welcome");
+      last("ai-last-exp", "Expiry"); last("ai-last-winback", "Winback"); last("ai-last-stuck", "Stuck");
+      last("ai-last-lead", "Leaderboard"); last("ai-last-faq", "FAQ");
     };
+    const renderLogs = (logs) => {
+      const tbody = $id("ai-log-tbody");
+      if (!tbody) return;
+      tbody.innerHTML = !logs?.length
+        ? '<tr><td colspan="4" class="muted">No activity yet — turn the AI ON and run something.</td></tr>'
+        : logs.map((entry) => `<tr><td class="mono muted">${A.esc(A.date(entry.t))}</td><td>${A.tag(entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : entry.level === "success" ? "solved" : "muted")}</td><td><strong>${A.esc(entry.action)}</strong></td><td class="muted">${A.esc(entry.detail)}</td></tr>`).join("");
+    };
+    const renderDigest = (digest) => {
+      const body = $id("ai-digest-body");
+      if (!body) return;
+      if (!digest) { body.innerHTML = '<div class="empty-alert">No digest yet — build one.</div>'; return; }
+      const s = digest.stats || {};
+      const chip = (label, value, tone = "") => `<span class="ai-chip ${tone}"><strong>${A.fmt(value)}</strong> ${label}</span>`;
+      body.innerHTML = `
+        <div class="ai-digest-chips">
+          ${chip("users", s.totalUsers)}${chip("new today", s.newUsers, "tag-green")}${chip("problems", s.totalProblems)}
+          ${chip("new problems", s.newProblems, "tag-green")}${chip("submissions 24h", s.subs24)}${chip("solve rate", s.solveRate === null || s.solveRate === undefined ? "—" : `${s.solveRate}%`, s.solveRate !== null && s.solveRate !== undefined && s.solveRate < 35 ? "tag-red" : "")}
+          ${chip("comments 24h", s.comments24)}${chip("removed 24h", s.removed24, "tag-amber")}${chip("AI added 24h", s.added24, "tag-cyan")}
+        </div>
+        <ul class="hint-list">${(digest.highlights || []).map((h) => `<li>${A.esc(h)}</li>`).join("")}</ul>
+        <p class="muted">Generated ${A.ago(digest.generated_at)} · top problem (7d): ${A.esc(s.topProblem?.title || "—")} (${A.fmt(s.topProblem?.attempts || 0)} attempts)</p>`;
+    };
+    const renderHealth = (health) => {
+      const body = $id("ai-health-body");
+      const list = $id("ai-health-list");
+      if (!body || !list) return;
+      if (!health) { body.innerHTML = '<div class="empty-alert">Run the health check.</div>'; list.innerHTML = ""; return; }
+      const score = Math.max(0, Math.min(100, Number(health.score) || 0));
+      body.innerHTML = `<div class="ai-scorebar"><div class="ai-scorebar__fill ${score < 50 ? "ai-scorebar__fill--bad" : score < 80 ? "ai-scorebar__fill--warn" : "ai-scorebar__fill--good"}" style="width:${score}%"></div></div><p><strong class="ai-score">${score}</strong><span class="muted">/100 · ${health.checks?.length || 0} checks · ${A.ago(health.generated_at)}</span></p>`;
+      list.innerHTML = (health.checks || []).map((check) => `
+        <div class="ai-check ai-check--${check.status}">
+          <span class="ai-check__dot">${check.status === "ok" ? "✓" : "✗"}</span>
+          <div class="ai-check__copy"><strong>${A.esc(check.label)}</strong><span>${A.esc(check.detail)}</span></div>
+          ${check.fix?.id ? `<button class="btn btn-sm" data-fix="${A.attr(check.fix.id)}">Fix</button>` : ""}
+        </div>`).join("");
+    };
+    const renderCalib = () => {
+      const body = $id("ai-calib-body");
+      if (!body) return;
+      if (!calib) { body.innerHTML = '<div class="empty-alert">Run the calibration to load suggestions.</div>'; return; }
+      if (!calib.suggestions?.length) { body.innerHTML = `<div class="empty-alert">No suggestions — ${A.fmt(calib.judged)} problem(s) judged, solve rates look balanced.</div>`; return; }
+      body.innerHTML = `<div class="table-wrap"><table class="table"><thead><tr><th></th><th>Problem</th><th>Now</th><th>Suggested</th><th>Solve rate</th><th>Why</th><th></th></tr></thead><tbody>${calib.suggestions.map((s, i) => `<tr>
+        <td><input type="checkbox" data-calib-check="${i}" checked></td>
+        <td><a class="cell-title text-cyan" href="/problem-edit.html?id=${encodeURIComponent(s.problem_id)}">${A.esc(s.title)}</a></td>
+        <td>${A.tag(s.current)}</td><td>${A.tag(s.suggested)}</td>
+        <td><strong>${s.rate}%</strong><span class="cell-sub">${A.fmt(s.attempts)} attempts</span></td>
+        <td class="muted">${A.esc(s.reason)}</td>
+        <td><button class="btn btn-sm" data-calib-one="${i}">Apply</button></td>
+      </tr>`).join("")}</tbody></table></div>`;
+    };
+    const renderPreview = (preview) => {
+      const card = $id("ai-preview-card");
+      const body = $id("ai-preview-body");
+      if (!card || !body) return;
+      card.hidden = false;
+      const p = preview.problem || {};
+      body.innerHTML = `
+        <div class="ai-digest-chips">${A.tag(p.type)}${A.tag(p.difficulty)}${A.tag(p.topic)}${p.is_premium ? A.tag("premium") : A.tag("free")}</div>
+        <h3>${A.esc(p.title)}</h3>
+        <p>${A.esc(p.description)}</p>
+        <div class="grid-2">
+          <div><h4 class="ai-subhead">Starter code</h4><pre class="code">${A.esc(p.starter_code)}</pre></div>
+          <div><h4 class="ai-subhead">Expected output</h4><pre class="code">${A.esc(p.expected_output)}</pre></div>
+        </div>
+        <h4 class="ai-subhead">Hints (${(p.hints || []).length})</h4>
+        <ul class="hint-list">${(p.hints || []).map((h) => `<li>${A.esc(h)}</li>`).join("")}</ul>
+        <h4 class="ai-subhead">Validation checklist</h4>
+        <div class="ai-checks">${(preview.checks || []).map((c) => `<div class="ai-check ai-check--${c.pass ? "ok" : "bad"}"><span class="ai-check__dot">${c.pass ? "✓" : "✗"}</span><div class="ai-check__copy"><strong>${A.esc(c.label)}</strong></div></div>`).join("")}</div>
+        <p class="muted">Template <code>${A.esc(preview.template_id)}</code> · nothing was inserted — use “Generate” in the factory card to add a batch.</p>`;
+    };
+    const renderResult = (id, html) => { const el = $id(id); if (el) { el.hidden = false; el.innerHTML = html; } };
 
-    render();
+    /* ---------------- actions ---------------- */
+    const refreshAll = async () => {
+      try {
+        const [settingsData, logsData, digestData] = await Promise.all([
+          A.aiGet("settings"), A.aiGet("logs", { limit: 100 }), A.aiGet("digest"),
+        ]);
+        settings = settingsData?.settings || settings;
+        paintSettings();
+        paintStats(settingsData?.stats, settingsData?.last_runs);
+        renderLogs(logsData?.logs);
+        renderDigest(digestData?.digest);
+      } catch (error) { A.toast(error.message, "error"); }
+    };
+    const save = async (patch) => {
+      try {
+        const data = await A.ai("save_settings", { patch });
+        settings = data.settings;
+        paintSettings();
+        A.toast("Settings saved");
+      } catch (error) { A.toast(error.message, "error"); }
+    };
+    const act = async (button, action, payload = {}, options = {}) => {
+      if (!control) return;
+      let reason = "";
+      if (options.ask) {
+        const values = await A.dialog({
+          title: options.title || "Run AI action",
+          message: options.message || "",
+          reason: true,
+          danger: options.danger !== false,
+          confirmLabel: options.confirmLabel || "Run",
+        });
+        if (!values) return;
+        reason = values.reason;
+      }
+      const result = await A.run(button, () => A.ai(action, payload, reason), options.success || "Done");
+      await refreshAll();
+      return result;
+    };
+    const loadHealth = async (button) => {
+      const health = await A.run(button, () => A.ai("health"), "Health check done");
+      renderHealth(health);
+    };
+    const loadCalib = async (button) => {
+      calib = await A.run(button, () => A.ai("calibrate"), "Calibration done");
+      renderCalib();
+    };
+    const applyCalib = async (button, selectedOnly) => {
+      if (!calib?.suggestions?.length) return;
+      const chosen = selectedOnly
+        ? calib.suggestions.filter((_, i) => document.querySelector(`[data-calib-check="${i}"]`)?.checked)
+        : calib.suggestions;
+      if (!chosen.length) return A.toast("Select at least one suggestion", "error");
+      const values = await A.dialog({ title: "Apply difficulty changes", message: `Apply ${chosen.length} suggestion(s)? This edits those problems.`, reason: true, danger: true, confirmLabel: "Apply" });
+      if (!values) return;
+      const items = chosen.map((s) => ({ problem_id: s.problem_id, suggested: s.suggested, title: s.title, reason: s.reason }));
+      await A.run(button, () => A.ai("calibrate_apply", { items }, values.reason), "Difficulty updated");
+      await loadCalib($id(selectedOnly ? "ai-btn-calib-apply" : "ai-btn-calib-apply-all"));
+      await refreshAll();
+    };
+    const FIX_ACTIONS = {
+      dedup: { action: "dedup", title: "Delete duplicate problems", message: "The AI scans the library and deletes newer duplicates (keeping the oldest), including their submissions and discussions.", confirmLabel: "Delete duplicates" },
+      errguard: { action: "errguard", title: "Run the bug error-guard", message: "Deletes Fix-the-Bug problems whose starter code runs WITHOUT raising any Python error.", confirmLabel: "Delete error-free bugs" },
+      moderation: { action: "scan", title: "Run discussion moderation", message: "Scans the latest comments, deletes abusive ones and warns the offenders.", confirmLabel: "Scan now" },
+      factory: { action: "generate", title: "Run the problem factory", message: "Generates a validated batch of problems (mix/difficulty from the factory settings).", confirmLabel: "Generate" },
+      "factory-hard": { action: "generate", payload: { difficulty: "hard" }, title: "Run the problem factory (hard)", message: "Generates a validated batch of HARD problems.", confirmLabel: "Generate" },
+      hints: { action: "hints", title: "Auto-fix weak hints", message: "Tops problems up to exactly 3 hints using the topic hint bank.", confirmLabel: "Fix hints" },
+    };
+    const FIX_LINKS = { discussions: "/moderation.html", broadcast: "/push.html" };
+
+    /* ---------------- bindings ---------------- */
+    $id("ai-btn-refresh")?.addEventListener("click", refreshAll);
+    const master = $id("ai-master");
+    master?.addEventListener("change", () => save({ master: master.checked }));
+    $$("[data-setting]").forEach((input) => input.addEventListener("change", () => save({ [input.dataset.setting]: input.checked })));
+    $$("[data-factory]").forEach((input) => input.addEventListener("change", () => save({ [input.dataset.factory]: input.tagName === "SELECT" ? input.value : Number(input.value) })));
+
+    $id("ai-btn-scan")?.addEventListener("click", (e) => act(e.currentTarget, "scan", {}, { ask: true, title: "Run discussion moderation", message: "Scans the latest comments, deletes abusive ones and warns the offenders.", confirmLabel: "Scan now", success: "Moderation scan done" }));
+    $id("ai-btn-dedup")?.addEventListener("click", (e) => act(e.currentTarget, "dedup", {}, { ask: true, title: "Delete duplicate problems", message: "The AI scans the library and deletes newer duplicates (keeping the oldest), including their submissions and discussions.", confirmLabel: "Delete duplicates", success: "Dedup done" }));
+    $id("ai-btn-errguard")?.addEventListener("click", (e) => act(e.currentTarget, "errguard", {}, { ask: true, title: "Run the bug error-guard", message: "Deletes Fix-the-Bug problems whose starter code runs WITHOUT raising any Python error.", confirmLabel: "Delete error-free bugs", success: "Error guard done" }));
+    $id("ai-btn-generate")?.addEventListener("click", (e) => act(e.currentTarget, "generate", {}, { ask: true, title: "Run the problem factory", message: "Generates a validated batch of problems (mix/difficulty from the factory settings above).", confirmLabel: "Generate", success: "Problems generated" }));
+    $id("ai-btn-welcome")?.addEventListener("click", (e) => act(e.currentTarget, "welcome", {}, { ask: true, title: "Welcome new users", message: "Sends a welcome notification to users who joined in the last 24h.", confirmLabel: "Send welcomes", success: "Welcomes sent" }));
+    $id("ai-btn-preview")?.addEventListener("click", async (e) => {
+      const preview = await A.run(e.currentTarget, () => A.ai("preview"), "Preview ready");
+      renderPreview(preview);
+    });
+    $id("ai-btn-exp")?.addEventListener("click", (e) => act(e.currentTarget, "expiry", {}, { ask: true, title: "Premium expiry reminders", message: "Reminds users whose premium expires within 3 days (and expired within 2).", confirmLabel: "Send reminders", success: "Reminders sent" }));
+    $id("ai-btn-winback")?.addEventListener("click", (e) => act(e.currentTarget, "winback", {}, { ask: true, title: "Win-back inactive users", message: "Nudges users inactive for 7+ days with a personal note.", confirmLabel: "Send nudges", success: "Win-back done" }));
+    $id("ai-btn-stuck")?.addEventListener("click", (e) => act(e.currentTarget, "stuck", {}, { ask: true, title: "Stuck-user encouragement", message: "Helps users with 5+ failed attempts and no solve on one problem.", confirmLabel: "Send help", success: "Stuck help sent" }));
+    $id("ai-btn-lead")?.addEventListener("click", (e) => act(e.currentTarget, "leaderboard", {}, { ask: true, title: "Leaderboard alerts", message: "Congratulates top-25 XP users who enter the top 10 or climb 3+ spots.", confirmLabel: "Send alerts", success: "Leaderboard alerts sent" }));
+    $id("ai-btn-faq")?.addEventListener("click", (e) => act(e.currentTarget, "faq", { limit: 10 }, { ask: true, title: "FAQ auto-helper", message: "Replies to top-level questions older than 24h that have no answer yet (posted as you).", confirmLabel: "Reply to questions", success: "FAQ replies posted" }));
+    $id("ai-btn-cheat")?.addEventListener("click", async (e) => {
+      const report = await A.run(e.currentTarget, () => A.ai("cheat"), "Cheat scan done");
+      renderResult("ai-cheat-body", !report.hits?.length
+        ? `<div class="alert">✅ Checked ${A.fmt(report.checked)} submissions — no copy-paste rings found.</div>`
+        : `<div class="alert alert-danger">⚠️ ${report.hits.length} shared-code group(s) need review (same code from 3+ users on one problem):</div><div class="table-wrap"><table class="table"><thead><tr><th>Problem</th><th>Users</th><th>Copies</th></tr></thead><tbody>${report.hits.map((h) => `<tr><td>${A.esc(h.problemTitle)}</td><td>${h.userNames.map((n) => A.esc(n)).join(", ")}</td><td><strong>${h.users.length}</strong></td></tr>`).join("")}</tbody></table></div>`);
+    });
+    $id("ai-btn-gap")?.addEventListener("click", async (e) => {
+      const result = await act(e.currentTarget, "gap", { count: 3 }, { ask: true, title: "Fill topic gaps", message: "Finds the thinnest topic × difficulty cells and generates problems for them.", confirmLabel: "Fill gaps", success: "Gaps filled" });
+      if (result) renderResult("ai-gap-result", `<div class="alert">✅ Added ${A.fmt(result.added?.length || 0)} problem(s), skipped ${A.fmt(result.skipped || 0)} duplicate(s). Thinnest cells: ${(result.cells || []).map((c) => `${c.topic}/${c.diff} (${c.count})`).join(", ") || "—"}</div>`);
+    });
+    $id("ai-btn-quality")?.addEventListener("click", async (e) => {
+      const report = await A.run(e.currentTarget, () => A.ai("quality"), "Quality report done");
+      renderResult("ai-quality-body", !report.issues?.length
+        ? `<div class="alert">✅ All ${A.fmt(report.total)} problems passed every quality check.</div>`
+        : `<div class="alert alert-danger">⚠️ ${report.issues.length} of ${A.fmt(report.total)} problems flagged:</div><div class="table-wrap"><table class="table"><thead><tr><th>Problem</th><th>Flags</th></tr></thead><tbody>${report.issues.map((p) => `<tr><td><a class="cell-title text-cyan" href="/problem-edit.html?id=${encodeURIComponent(p.id)}">${A.esc(p.title)}</a></td><td>${p.flags.map((f) => A.tag("warn")).join("")}</td></tr>`).join("")}</tbody></table></div>`);
+    });
+    $id("ai-btn-hints")?.addEventListener("click", async (e) => {
+      const result = await act(e.currentTarget, "hints", {}, { ask: true, title: "Auto-fix weak hints", message: "Tops problems up to exactly 3 hints using the topic hint bank.", confirmLabel: "Fix hints", success: "Hints repaired" });
+      if (result) renderResult("ai-hints-result", `<div class="alert">✅ Checked ${A.fmt(result.checked)} problem(s), topped up ${A.fmt(result.fixed)}.</div>`);
+    });
+    $id("ai-btn-bulk-check")?.addEventListener("click", async (e) => {
+      const text = $id("ai-bulk-text")?.value || "";
+      const format = $id("ai-bulk-format")?.value || "json";
+      const report = await A.run(e.currentTarget, () => A.ai("bulk_validate", { text, format }), "Validation done");
+      const rows = (report.verdicts || []).map((v, i) => `<tr><td>${i + 1}</td><td>${v.ok ? A.tag("solved") : A.tag("deleted")}</td><td class="muted">${A.esc(v.errors?.join("; ") || v.warnings?.join("; ") || "ok")}</td></tr>`).join("");
+      renderResult("ai-bulk-body", `<div class="alert">${report.valid} of ${report.total} rows valid${report.errors?.length ? ` · parse errors: ${report.errors.map((x) => A.esc(x.error || x)).join("; ")}` : ""}.</div>${rows ? `<div class="table-wrap"><table class="table"><thead><tr><th>#</th><th>Verdict</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}`);
+    });
+    $id("ai-btn-bulk-import")?.addEventListener("click", async (e) => {
+      const text = $id("ai-bulk-text")?.value || "";
+      const format = $id("ai-bulk-format")?.value || "json";
+      if (!text.trim()) return A.toast("Paste rows first", "error");
+      const values = await A.dialog({ title: "Bulk import problems", message: "Valid rows are inserted as published problems (validated and duplicate-checked). Invalid rows are skipped.", reason: true, danger: true, confirmLabel: "Import" });
+      if (!values) return;
+      const result = await A.run(e.currentTarget, () => A.ai("bulk_import", { text, format }, values.reason), "Import done");
+      renderResult("ai-bulk-body", `<div class="alert">✅ Imported ${A.fmt(result.added)} problem(s).</div>`);
+      await refreshAll();
+    });
+    $id("ai-btn-digest")?.addEventListener("click", async (e) => {
+      const digest = await act(e.currentTarget, "digest", { build: true }, { ask: true, title: "Build the daily digest", message: "Reads users, problems, submissions, comments and AI activity, then writes the digest.", confirmLabel: "Build digest", success: "Digest built" });
+      if (digest) renderDigest(digest);
+    });
+    $id("ai-btn-health")?.addEventListener("click", (e) => loadHealth(e.currentTarget));
+    $id("ai-btn-calib")?.addEventListener("click", (e) => loadCalib(e.currentTarget));
+    $id("ai-btn-calib-apply")?.addEventListener("click", (e) => applyCalib(e.currentTarget, true));
+    $id("ai-btn-calib-apply-all")?.addEventListener("click", (e) => applyCalib(e.currentTarget, false));
+    document.addEventListener("click", async (event) => {
+      const fixButton = event.target.closest?.("[data-fix]");
+      if (fixButton) {
+        const fixId = fixButton.dataset.fix;
+        if (FIX_LINKS[fixId]) { location.href = FIX_LINKS[fixId]; return; }
+        const config = FIX_ACTIONS[fixId];
+        if (config) await act(fixButton, config.action, config.payload || {}, { ask: true, ...config, success: "Fixed" });
+        return;
+      }
+      const one = event.target.closest?.("[data-calib-one]");
+      if (one && calib?.suggestions?.length) {
+        const item = calib.suggestions[Number(one.dataset.calibOne)];
+        if (!item) return;
+        const values = await A.dialog({ title: "Apply difficulty change", message: `“${item.title}”: ${item.current} → ${item.suggested} (${item.reason}).`, reason: true, confirmLabel: "Apply" });
+        if (!values) return;
+        await A.run(one, () => A.ai("calibrate_apply", { items: [{ problem_id: item.problem_id, suggested: item.suggested, title: item.title, reason: item.reason }] }, values.reason), "Applied");
+        await loadCalib($id("ai-btn-calib"));
+        await refreshAll();
+      }
+    });
+    $id("ai-btn-diag")?.addEventListener("click", async (e) => {
+      const code = $id("ai-diag-code")?.value || "";
+      if (!code.trim()) return A.toast("Paste some code first", "error");
+      const report = await A.run(e.currentTarget, () => A.ai("diagnose", { code }), "Diagnosis ready");
+      renderResult("ai-diag-body", report.report?.diagnostics?.length
+        ? `<div class="ai-checks">${report.report.diagnostics.map((d) => `<div class="ai-check ai-check--${d.severity === "error" ? "bad" : d.severity === "warn" ? "warn" : "ok"}"><span class="ai-check__dot">${d.severity === "error" ? "✗" : d.severity === "warn" ? "!" : "✓"}</span><div class="ai-check__copy"><strong>${A.esc(d.message)}</strong><span>line ${d.line}${d.hint ? ` — ${A.esc(d.hint)}` : ""}</span></div></div>`).join("")}</div>`
+        : '<div class="alert">✅ No issues found by the local checker.</div>');
+    });
+    $id("ai-btn-test")?.addEventListener("click", async (e) => {
+      const text = $id("ai-test-text")?.value || "";
+      if (!text.trim()) return A.toast("Type some text first", "error");
+      const { scan } = await A.run(e.currentTarget, () => A.ai("test_text", { text }), "Test done");
+      const tone = scan.flagged ? (scan.severity === "severe" ? "deleted" : scan.severity === "spam" ? "warn" : "warn") : "solved";
+      renderResult("ai-test-result", scan.flagged
+        ? `<div class="alert alert-danger">🚫 Flagged as <strong>${A.esc(scan.severity)}</strong> — hits: ${scan.hits.map((h) => A.esc(h)).join(", ")}. The guard would delete this comment${settings?.warn_user === true ? " and warn the author" : ""}.</div>`
+        : '<div class="alert">✅ Clean — the guard would keep this comment.</div>');
+    });
+    $id("ai-btn-clear-logs")?.addEventListener("click", async (e) => {
+      const values = await A.dialog({ title: "Clear the AI activity log", message: "Deletes every row in ai_logs. This cannot be undone.", reason: true, requireText: "CLEAR", danger: true, confirmLabel: "Clear log" });
+      if (!values) return;
+      await A.run(e.currentTarget, () => A.ai("clear_logs", {}, values.reason), "Log cleared");
+      await refreshAll();
+    });
+
+    /* ---------------- background watch (while this page is open) ---------------- */
+    const watchNote = $id("ai-watch-note");
+    if (watchNote && control) {
+      const tick = async () => {
+        try {
+          const result = await A.ai("watch");
+          if (result.ran) {
+            const names = (result.results || []).map((r) => r.name).join(", ");
+            watchNote.textContent = `Watch: tick ${A.ago(new Date().toISOString())}${names ? ` — ran ${names}` : " — nothing due"}`;
+            if (result.results?.length) await refreshAll();
+          } else {
+            watchNote.textContent = `Watch: ${result.reason === "master_off" ? "master OFF" : "rate-limited"}`;
+          }
+        } catch { /* watch is best-effort */ }
+        setTimeout(tick, 60000);
+      };
+      setTimeout(tick, 5000);
+    }
+
+    if (!control) A.toast("Read-only: your role can view the AI Control Center but not run actions.", "error");
+    await refreshAll();
   }
 
-  const handlers={dashboard,users,user:userDetail,problems,"problem-edit":problemEdit,ai:aiStudio,payments,referrals,battles,moderation,push,emails,reports,settings,audit};
+  const handlers={dashboard,users,user:userDetail,problems,"problem-edit":problemEdit,ai:aiControl,payments,referrals,battles,moderation,push,emails,reports,settings,audit};
   window.AdminPages={init:async(page)=>{const handler=handlers[page];if(!handler)throw new Error(`Unknown page: ${page}`);await handler();}};
 })();
