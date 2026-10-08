@@ -6,8 +6,8 @@
  * in a Node vm context with a minimal DOM shim and a capturing fetch stub.
  *
  * These tests pin down two production incidents:
- *  1. The sidebar never linked to the AI studio (/ai.html) even though the
- *     page, its handler and /api/ai all existed.
+ *  1. The sidebar never linked to the AI Control page (/ai.html) even though
+ *     the page, its handler and /api/ai all existed.
  *  2. An older pages.js built the audit page's read URL from page state that
  *     contained `resource`/`action` keys, which emptied the router params and
  *     made /api/read answer "Missing resource parameter — the request reached
@@ -33,6 +33,7 @@ const PAYMENTS_FIXTURE = {
     amount_paise: 7900,
     list_price_paise: 9900,
     discount_paise: 2000,
+    discount_source: "signup_offer",
     expires_at: "2026-11-06T00:00:00.000Z",
     created_at: "2026-10-01T00:00:00.000Z",
     source: "razorpay",
@@ -116,17 +117,17 @@ function readCalls(requests) {
     });
 }
 
-test("sidebar renders an AI studio link for roles with problems read", async () => {
+test("sidebar renders an AI Control link for roles with ai read", async () => {
   const { AdminPages, app } = loadPanel("content_editor");
   await AdminPages.init("audit");
   assert.ok(app.innerHTML.includes('href="/ai.html"'), "sidebar should link to /ai.html");
-  assert.ok(app.innerHTML.includes("AI studio"), "sidebar should label the link AI studio");
+  assert.ok(app.innerHTML.includes("AI Control"), "sidebar should label the link AI Control");
 });
 
-test("sidebar hides the AI studio link for roles without problems read", async () => {
+test("sidebar hides the AI Control link for roles without ai read", async () => {
   const { AdminPages, app } = loadPanel("finance");
   await AdminPages.init("audit");
-  assert.ok(!app.innerHTML.includes('href="/ai.html"'), "finance has no problems access, so no AI studio link");
+  assert.ok(!app.innerHTML.includes('href="/ai.html"'), "finance has no ai access, so no AI Control link");
 });
 
 test("audit page reads /api/read with resource=audit and action=list", async () => {
@@ -154,11 +155,12 @@ test("read() always sends resource/action even when page state contains those ke
   assert.equal(call.params.get("admin"), null, "empty filter values are omitted from the query string");
 });
 
-test("AI studio page renders for roles with problems read", async () => {
+test("AI Control page renders for roles with ai read", async () => {
   const panel = loadPanel("content_editor", "ai");
   await panel.AdminPages.init("ai");
-  assert.ok(panel.app.innerHTML.includes("AI problem studio"), "AI studio shell should render");
-  assert.equal(readCalls(panel.requests).length, 0, "AI studio makes no read call on load");
+  assert.ok(panel.app.innerHTML.includes("AI Control Center"), "AI Control shell should render");
+  assert.ok(panel.pageContent.innerHTML.includes("AI modules"), "the Own-AI module toggles should render");
+  assert.equal(readCalls(panel.requests).length, 0, "AI Control loads everything through /api/ai, not /api/read");
 });
 
 test("payments page shows income, the purchase ledger and the actual amount paid", async () => {
@@ -168,6 +170,7 @@ test("payments page shows income, the purchase ledger and the actual amount paid
   assert.ok(html.includes("Total income"), "total income KPI should render");
   assert.ok(html.includes("₹79"), "the actual discounted amount paid (₹79) should render, not the ₹99 list price");
   assert.ok(html.includes("list ₹99"), "the list price should be shown next to a discounted purchase");
+  assert.ok(html.includes("20% signup offer"), "the signup-offer source should be labelled on the row");
   assert.ok(html.includes("Test User"), "the buying user should be shown");
   assert.ok(html.includes("Active premium users"), "the active premium users section should render");
   assert.ok(html.includes("Premium purchases"), "the purchase ledger table should render");
@@ -175,4 +178,32 @@ test("payments page shows income, the purchase ledger and the actual amount paid
   assert.ok(call, "payments page should call /api/read");
   assert.equal(call.params.get("resource"), "payments");
   assert.equal(call.params.get("action"), "list");
+});
+
+/*
+ * CSS regression guard for the "page scroll stuck over data tables" bug.
+ * overscroll-behavior: contain is only correct on scrollers that actually
+ * scroll in the gesture's axis. On horizontal-only scrollers (.table-wrap,
+ * .tabs, .alert-strip) its vertical scroll range is zero, so a vertical
+ * wheel/touch pan over them is swallowed and the page refuses to scroll —
+ * tables cover most of every data page, so scrolling felt completely stuck.
+ */
+test("horizontal-only scrollers must not contain overscroll-behavior", () => {
+  const css = fs.readFileSync(path.join(ROOT, "css/admin.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const blocks = [];
+  const rule = /([^{}]+)\{([^{}]*)\}/g;
+  let match;
+  while ((match = rule.exec(css))) {
+    const selectors = match[1].split(",").map((part) => part.trim().split(/\s+/).pop()).filter(Boolean);
+    blocks.push({ selectors, body: match[2] });
+  }
+  const appliesTo = (selector) => blocks.filter((block) => block.selectors.includes(selector));
+  for (const selector of [".table-wrap", ".tabs", ".alert-strip"]) {
+    const offenders = appliesTo(selector).filter((block) => /overscroll-behavior/.test(block.body));
+    assert.deepEqual(offenders.map((block) => block.selectors), [], `${selector} must not set overscroll-behavior — it blocks page scrolling over tables`);
+    assert.ok(appliesTo(selector).some((block) => /touch-action:\s*pan-x/.test(block.body)), `${selector} should declare touch-action: pan-x so vertical pans reach the page`);
+  }
+  for (const selector of [".code", ".search-results", ".nav"]) {
+    assert.ok(appliesTo(selector).some((block) => /overscroll-behavior:\s*contain/.test(block.body)), `${selector} is a real vertical scroller and should keep its contained scroll`);
+  }
 });

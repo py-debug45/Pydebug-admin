@@ -8,9 +8,10 @@
  *   node scripts/smoke-panel.js [baseUrl]    # terminal 2 (default http://localhost:3000)
  *
  * Logs in as the content editor AND as the superadmin (completing the real
- * TOTP enrollment flow), then exercises every read endpoint, the AI studio
- * preview/publish flow with duplicate assertions, jobs (CSV exports) and a
- * representative set of writes. Exits 1 if anything fails.
+ * TOTP enrollment flow), then exercises every read endpoint, the Own-AI
+ * Control Center (settings, factory, guards, moderation, growth, reports and
+ * the watch tick), jobs (CSV exports) and a representative set of writes.
+ * Exits 1 if anything fails.
  */
 
 const crypto = require("node:crypto");
@@ -104,6 +105,15 @@ async function resetRootTotp() {
   if (!response.ok) throw new Error(`could not reset dev TOTP state via the mock (${response.status})`);
 }
 
+// Reset the Own-AI state (settings, watch lock, activity log) so the smoke run
+// is deterministic even against a dev server that already served a smoke pass.
+async function resetAiState() {
+  for (const table of ["ai_settings", "ai_logs"]) {
+    const response = await fetch(`${mockUrl()}/rest/v1/${table}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(`could not reset ${table} via the mock (${response.status})`);
+  }
+}
+
 function sessionParts(response) {
   const cookie = response.setCookie.split(";")[0];
   return { cookie, csrf: response.data.csrf };
@@ -135,23 +145,35 @@ async function main() {
   await expectOk("global search", await api(`/api/read?resource=search&action=list&q=bug`, { cookie: editor.cookie }));
   await expectStatus("editor blocked from users read (RBAC)", await api(`/api/read?resource=users&action=list`, { cookie: editor.cookie }), 403);
   await expectStatus("editor blocked from payments read (RBAC)", await api(`/api/read?resource=payments&action=list`, { cookie: editor.cookie }), 403);
-  await expectStatus("editor blocked from AI GET stats is allowed (problems read)", await api(`/api/ai?action=stats`, { cookie: editor.cookie }), 200);
+  await resetAiState();
 
-  /* AI flow with premium mix */
-  const preview = await expectOk("AI preview (10, quarter premium)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "preview", payload: { type: "any", difficulty: "any", premium: "quarter", count: 10 } } }));
-  const premiumInPreview = preview?.problems?.filter((p) => p.is_premium).length ?? -1;
-  record("AI premium mix ≈1 in 4 (10 → 2-3)", premiumInPreview >= 2 && premiumInPreview <= 3, `got ${premiumInPreview}`);
-  const firstPublish = await expectOk("AI publish", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "publish", payload: { seed: preview.seed, signature: preview.signature, count: 10, type: "any", difficulty: "any", premium: "quarter", status: "draft" }, reason: "smoke test batch" } }));
-  const premiumInserted = firstPublish?.inserted?.filter((p) => p.is_premium).length ?? -1;
-  const premiumSkipped = firstPublish?.skipped?.filter((p) => p.is_premium).length ?? 0;
-  record("AI publish premium matches preview", premiumInserted + premiumSkipped === premiumInPreview, `preview ${premiumInPreview} vs inserted ${premiumInserted} + skipped ${premiumSkipped}`);
-  const republish = await expectOk("AI republish same seed", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "publish", payload: { seed: preview.seed, signature: preview.signature, count: 10, type: "any", difficulty: "any", premium: "quarter" }, reason: "duplicate check" } }));
-  record("AI republish blocked all as duplicates", republish?.inserted_count === 0 && republish?.skipped_count === 10, `inserted ${republish?.inserted_count} skipped ${republish?.skipped_count}`);
-  const seed4242 = await expectOk("AI preview seed 4242 (seeded problems)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "preview", payload: { type: "any", difficulty: "any", premium: "quarter", count: 4, seed: 4242 } } }));
-  const seeded = await expectOk("AI publish seed 4242 (duplicates refused)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "publish", payload: { seed: 4242, signature: seed4242.signature, count: 4, type: "any", difficulty: "any", premium: "quarter" }, reason: "seed duplicate check" } }));
-  record("seed 4242 fully blocked as duplicate", seeded?.inserted_count === 0 && seeded?.skipped_count === 4, `inserted ${seeded?.inserted_count}`);
-  await expectStatus("AI publish without seed rejected", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "publish", payload: { count: 3, signature: "x" }, reason: "no seed" } }), 400);
-  await expectStatus("AI publish with stale signature rejected", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "publish", payload: { seed: 12345, signature: "deadbeef", count: 3 }, reason: "stale" } }), 409);
+  /* Own-AI Control Center flow (content editor: ai.control + problems.create) */
+  const aiSettings = await expectOk("AI Control settings read", await api(`/api/ai?action=settings`, { cookie: editor.cookie }));
+  record("AI settings expose master switch + module toggles", !!(aiSettings?.settings && "master" in aiSettings.settings && "moderation" in aiSettings.settings), "settings shape wrong");
+  await expectOk("AI master switch + factory settings saved", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "save_settings", payload: { patch: { master: true, per_run: 3, auto_hours: 12, mix: "both", difficulty: "mixed", dedup: true } } } }));
+  const testText = await expectOk("AI moderation tester flags abuse", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "test_text", payload: { text: "you fucking idiot" } } }));
+  record("AI tester flags severe abuse", testText?.scan?.flagged === true && testText?.scan?.severity === "severe", JSON.stringify(testText?.scan));
+  const diagnosed = await expectOk("AI diagnostic lab", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "diagnose", payload: { code: "n = '5'\nfor i in range(n):\n    print(i)" } } }));
+  record("AI lab detects the TypeError", !!(diagnosed?.report?.diagnostics || []).some((d) => /TypeError/.test(d.message)), "no TypeError diagnostic");
+  const preview = await expectOk("AI factory preview (validates, inserts nothing)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "preview" } }));
+  record("AI preview passes every check", (preview?.checks || []).length > 0 && (preview.checks || []).every((c) => c.pass), "preview has failing checks");
+  const generated = await expectOk("AI factory generate (3 problems)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "generate", payload: { count: 3 }, reason: "smoke test batch" } }));
+  record("AI factory added 3 problems", (generated?.added?.length ?? 0) === 3, `added ${generated?.added?.length}`);
+  await expectOk("AI quality report", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "quality" } }));
+  await expectOk("AI health check", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "health" } }));
+  await expectOk("AI calibration", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "calibrate" } }));
+  const gap = await expectOk("AI topic gap filler", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "gap", payload: { count: 2 }, reason: "smoke gap fill" } }));
+  record("AI gap filler added problems", (gap?.added?.length ?? 0) >= 1, `added ${gap?.added?.length}`);
+  const watch = await expectOk("AI watch tick", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "watch" } }));
+  record("AI watch tick ran with master ON", watch?.ran === true, JSON.stringify(watch).slice(0, 140));
+  const watchAgain = await expectOk("AI watch tick rate-limited", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "watch" } }));
+  record("second tick is rate-limited", watchAgain?.ran === false && watchAgain?.reason === "rate_limited", JSON.stringify(watchAgain).slice(0, 140));
+  await expectOk("AI logs read", await api(`/api/ai?action=logs&limit=20`, { cookie: editor.cookie }));
+  await expectOk("AI digest read", await api(`/api/ai?action=digest`, { cookie: editor.cookie }));
+  await expectOk("AI bell read", await api(`/api/ai?action=bell`, { cookie: editor.cookie }));
+  await expectStatus("AI scan blocked for content editor (moderation.delete)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "scan", reason: "should be blocked" } }), 403);
+  await expectStatus("AI welcome blocked for content editor (ai.notify)", await api("/api/ai", { method: "POST", cookie: editor.cookie, csrf: editor.csrf, body: { action: "welcome", reason: "should be blocked" } }), 403);
+  await expectStatus("AI POST without a session rejected", await api("/api/ai", { method: "POST", body: { action: "health" } }), 401);
 
   /* editor writes */
   if (firstProblem) {
@@ -173,6 +195,10 @@ async function main() {
   const paymentsData = await expectOk("payments ledger", await api(`/api/read?resource=payments&action=list`, { cookie: root.cookie }));
   record("payments ledger shows verified purchases", (paymentsData?.rows?.length ?? 0) > 0, "no ledger rows");
   record("payments summary counts income", (paymentsData?.summary?.total_paise ?? 0) > 0, "income total is zero");
+  const offerRow = (paymentsData?.rows || []).find((row) => row.payment_id === "pay_dev_1008");
+  record("signup-offer purchase shows the discounted ₹79, not the ₹99 list price", Boolean(offerRow) && offerRow.amount_paise === 7900 && offerRow.discount_paise === 2000 && offerRow.discount_source === "signup_offer", JSON.stringify(offerRow));
+  const fullPriceRow = (paymentsData?.rows || []).find((row) => row.payment_id === "pay_dev_1009");
+  record("purchase after the 48h signup window shows the list price", Boolean(fullPriceRow) && fullPriceRow.amount_paise === 9900 && !fullPriceRow.discount_source, JSON.stringify(fullPriceRow));
   record("payments page lists active premium users", (paymentsData?.active_premium?.length ?? 0) > 0, "no active premium users");
   await expectOk("referrals list", await api(`/api/read?resource=referrals&action=list`, { cookie: root.cookie }));
   await expectOk("battles list", await api(`/api/read?resource=battles&action=list`, { cookie: root.cookie }));
@@ -182,10 +208,28 @@ async function main() {
   await expectOk("emails log", await api(`/api/read?resource=emails&action=list`, { cookie: root.cookie }));
   await expectOk("reports overview", await api(`/api/read?resource=reports&action=overview&from=2020-01-01&to=2030-01-01`, { cookie: root.cookie }));
   await expectOk("settings + team", await api(`/api/read?resource=settings&action=list`, { cookie: root.cookie }));
-  await expectOk("audit read_all with column filters", await api(`/api/read?resource=audit&action=list&log_resource=problems&log_action=ai_create`, { cookie: root.cookie }));
+  await expectOk("audit read_all with column filters", await api(`/api/read?resource=audit&action=list&log_resource=ai&log_action=generate`, { cookie: root.cookie }));
   const afterAudit = await api(`/api/read?resource=audit&action=list`, { cookie: root.cookie });
   const auditTotal = await expectOk("audit list shows rows (old zero-row bug)", afterAudit);
   record("audit rows present", (auditTotal?.total ?? 0) > 0, "audit list returned 0 rows");
+
+  /* Own-AI moderation, guards and user-facing runs (superadmin) */
+  const scan = await expectOk("AI moderation scan (superadmin)", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "scan", reason: "smoke moderation scan" } }));
+  record("AI scan reports a scanned count", (scan?.scanned ?? -1) >= 0, JSON.stringify(scan).slice(0, 140));
+  await expectOk("AI welcome run (superadmin)", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "welcome", reason: "smoke welcome run" } }));
+  const dedup = await expectOk("AI duplicate guard", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "dedup", reason: "smoke dedup" } }));
+  record("AI dedup scanned the library", (dedup?.scanned ?? -1) >= 3, `scanned ${dedup?.scanned}`);
+  await expectOk("AI bug error-guard (dry run)", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "errguard", payload: { dry_run: true } } }));
+  await expectOk("AI daily digest build", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "digest", payload: { build: true }, reason: "smoke digest build" } }));
+  // A unique nonce per run keeps the row valid on re-runs (the duplicate
+  // guard correctly refuses to import the same problem twice).
+  const nonce = Date.now().toString(36);
+  const bulkRow = { type: "question", title: `Smoke imported question ${nonce}`, description: "Predict what this program prints.", difficulty: "easy", topic: "strings", starter_code: `print('smoke import ok ${nonce}')`, expected_output: `smoke import ok ${nonce}`, hints: ["Use the print function.", "Strings are quoted text.", "Check the exact output."] };
+  const bulk = await expectOk("AI bulk import (1 valid row)", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "bulk_import", payload: { format: "json", text: JSON.stringify([bulkRow]) }, reason: "smoke bulk import" } }));
+  record("AI bulk import added 1 problem", (bulk?.added ?? 0) === 1, `added ${bulk?.added}`);
+  await expectOk("AI bell mark read", await api("/api/ai", { method: "POST", cookie: root.cookie, csrf: root.csrf, body: { action: "bell_read" } }));
+  const aiAudit = await expectOk("audit read_all filters AI actions", await api(`/api/read?resource=audit&action=list&log_resource=ai`, { cookie: root.cookie }));
+  record("audit log has ai rows", (aiAudit?.total ?? 0) > 0, "no ai audit rows");
 
   /* jobs */
   for (const resource of ["users", "payments", "audit", "problems", "referrals", "reports"]) {

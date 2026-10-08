@@ -7,7 +7,9 @@
 --
 --   1. amount_paise — the ACTUAL amount the user paid (discount-aware). The
 --      panel prefers this column, then a matching Razorpay `payments` row,
---      then the plan list price (monthly ₹99 / six-month ₹499 / yearly ₹799).
+--      then the user app's 20% signup offer when the purchase happened within
+--      48h of the buyer's signup (₹79 / ₹399 / ₹639, whole rupees), then the
+--      plan list price (monthly ₹99 / six-month ₹499 / yearly ₹799).
 --      Update the user app's verify-payment API to write the Razorpay
 --      captured amount here so discounted checkouts show the real price paid.
 --   2. a created_at index for the ledger reads.
@@ -21,12 +23,14 @@
 -- Idempotent: safe to re-run.
 
 -- 1. Actual amount paid per verified purchase (nullable: legacy rows keep
---    null and fall back to the plan list price / matching Razorpay payment).
+--    null and fall back to the matching Razorpay payment, then the 20%
+--    signup offer for purchases within 48h of the buyer's signup, then the
+--    plan list price).
 alter table public.payment_grants
   add column if not exists amount_paise bigint;
 
 comment on column public.payment_grants.amount_paise is
-  'Actual amount the user paid for this premium purchase, in paise (discount-aware). Null on legacy rows — the admin panel then falls back to the matching Razorpay payment or the plan list price.';
+  'Actual amount the user paid for this premium purchase, in paise (discount-aware). Null on legacy rows — the admin panel then falls back to the matching Razorpay payment, the 20% signup offer (purchase within 48h of signup), or the plan list price.';
 
 -- 2. Ledger reads are newest-first.
 create index if not exists payment_grants_created_idx
