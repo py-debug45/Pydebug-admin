@@ -4,7 +4,7 @@ const db = require("./_db");
 const { requireAdmin } = require("../lib/server/admin-auth");
 const { assertCan, can, maskEmail, canSeeEmail } = require("../lib/server/permissions");
 const { withAudit } = require("../lib/server/audit");
-const { inFilter, safe, boundedList, profilesByIds } = require("../lib/server/data");
+const { inFilter, safe, boundedList, profilesByIds, signupDatesByIds } = require("../lib/server/data");
 const { buildPaymentLedger, unmatchedPayments } = require("../lib/server/payments");
 const { send, method, readJson, clientIp, assertSameOrigin, cleanText, requiredText, handleError } = require("../lib/server/http");
 const { uuid, oneOf } = require("../lib/server/validate");
@@ -183,7 +183,10 @@ async function exportData(admin, payload, reason, ip) {
     // the actual amount paid, plus captured-but-not-credited Razorpay rows.
     const grants = await safe(() => boundedList("payment_grants", { select: "*", order: "created_at.desc" }, limit), { rows: [] });
     const razorpay = await safe(() => boundedList("payments", { select: "*", order: "created_at.desc" }, limit), { rows: [] });
-    const ledger = buildPaymentLedger(grants.rows, razorpay.rows);
+    // Signup dates reconstruct the 20% signup-offer price for legacy rows that
+    // carry no recorded amount (purchase within 48h of the buyer's signup).
+    const signups = await safe(() => signupDatesByIds([...grants.rows, ...razorpay.rows].map((row) => row.user_id)), new Map());
+    const ledger = buildPaymentLedger(grants.rows, razorpay.rows, signups);
     const unmatched = unmatchedPayments(grants.rows, razorpay.rows);
     const profiles = await profilesByIds([...ledger, ...unmatched].map((row) => row.user_id), admin.role);
     rows = [
@@ -196,6 +199,7 @@ async function exportData(admin, payload, reason, ip) {
         amount_paise: row.amount_paise,
         list_price_paise: row.list_price_paise,
         discount_paise: row.discount_paise,
+        discount_source: row.discount_source || "",
         premium_until: row.expires_at,
         created_at: row.created_at,
       })),

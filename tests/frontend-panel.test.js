@@ -33,6 +33,7 @@ const PAYMENTS_FIXTURE = {
     amount_paise: 7900,
     list_price_paise: 9900,
     discount_paise: 2000,
+    discount_source: "signup_offer",
     expires_at: "2026-11-06T00:00:00.000Z",
     created_at: "2026-10-01T00:00:00.000Z",
     source: "razorpay",
@@ -169,6 +170,7 @@ test("payments page shows income, the purchase ledger and the actual amount paid
   assert.ok(html.includes("Total income"), "total income KPI should render");
   assert.ok(html.includes("₹79"), "the actual discounted amount paid (₹79) should render, not the ₹99 list price");
   assert.ok(html.includes("list ₹99"), "the list price should be shown next to a discounted purchase");
+  assert.ok(html.includes("20% signup offer"), "the signup-offer source should be labelled on the row");
   assert.ok(html.includes("Test User"), "the buying user should be shown");
   assert.ok(html.includes("Active premium users"), "the active premium users section should render");
   assert.ok(html.includes("Premium purchases"), "the purchase ledger table should render");

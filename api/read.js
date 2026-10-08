@@ -5,7 +5,7 @@ const { requireAdmin } = require("../lib/server/admin-auth");
 const { assertCan, can, canSeeEmail, maskEmail } = require("../lib/server/permissions");
 const { send, method, query, pagination, cleanText, handleError } = require("../lib/server/http");
 const {
-  isoDaysAgo, safe, inFilter, profilesByIds, maskProfile, boundedList, aggregateDaily, revenueByPlan, dayKey,
+  isoDaysAgo, safe, inFilter, profilesByIds, signupDatesByIds, maskProfile, boundedList, aggregateDaily, revenueByPlan, dayKey,
 } = require("../lib/server/data");
 const {
   buildPaymentLedger, unmatchedPayments, summariseLedger, toPlanRow,
@@ -73,7 +73,13 @@ async function dashboard(admin) {
   const revenueAllowed = can(admin.role, "payments", "read");
   // Revenue comes from the verified-payment ledger (payment_grants), enriched
   // with the actual amount paid from the Razorpay `payments` table when present.
-  const ledger = buildPaymentLedger(grantsAll.rows, razorpayAll.rows);
+  // Legacy rows with no recorded amount fall back to the 20% signup offer when
+  // the purchase happened within 48h of the buyer's signup.
+  const ledgerUserIds = [...new Set([...grantsAll.rows, ...razorpayAll.rows].map((row) => row.user_id).filter(Boolean))];
+  const signups = revenueAllowed && ledgerUserIds.length
+    ? await safe(() => signupDatesByIds(ledgerUserIds), new Map())
+    : new Map();
+  const ledger = buildPaymentLedger(grantsAll.rows, razorpayAll.rows, signups);
   const cutoffFor = (days) => days === 1
     ? new Date(`${today}T00:00:00.000Z`).getTime()
     : Date.now() - days * 86400000;
@@ -110,7 +116,7 @@ async function dashboard(admin) {
       revenue: revenueAllowed ? revenueByPlan(ledger.map(toPlanRow), 30) : [],
     },
     alerts: [
-      ...(reminderAgeHours === null || reminderAgeHours > 25 ? [{ level: "warning", text: reminderAgeHours === null ? "No streak reminder run was found" : `Streak reminder cron last ran ${Math.floor(reminderAgeHours)}h ago` }] : []),
+      ...(reminderAgeHours === null || reminderAgeHours > 25 ? [{ level: "warning", text: reminderAgeHours === null ? "No streak reminder run was found (expected from the user app's cron)" : `Streak reminder cron (user app) last ran ${Math.floor(reminderAgeHours)}h ago` }] : []),
       ...(failureCount >= 10 ? [{ level: "danger", text: `${failureCount} push failures were logged in the last 24h` }] : []),
     ],
     recent,
@@ -210,8 +216,12 @@ async function payments(admin, q) {
       order: "premium_expires_at.asc", limit: 100,
     }), { rows: [] }),
   ]);
-  const ledger = buildPaymentLedger(result.rows, razorpay.rows);
-  const fullLedger = buildPaymentLedger(allGrants.rows, razorpay.rows);
+  // Signup dates let the ledger reconstruct the 20% signup-offer price for
+  // legacy rows that carry no recorded amount (purchase within 48h of signup).
+  const signupIds = [...new Set([...result.rows, ...allGrants.rows, ...razorpay.rows].map((row) => row.user_id).filter(Boolean))];
+  const signups = await safe(() => signupDatesByIds(signupIds), new Map());
+  const ledger = buildPaymentLedger(result.rows, razorpay.rows, signups);
+  const fullLedger = buildPaymentLedger(allGrants.rows, razorpay.rows, signups);
   const unmatched = unmatchedPayments(allGrants.rows, razorpay.rows);
   const profiles = await profilesByIds([...ledger, ...unmatched].map((row) => row.user_id), admin.role);
   const summary = summariseLedger(fullLedger);
@@ -339,8 +349,11 @@ async function reports(admin, q) {
   });
   const content = [...stats.values()].filter((row) => row.attempts).map((row) => ({ ...row, success_rate: Math.round(row.solves * 1000 / row.attempts) / 10 })).sort((a, b) => a.success_rate - b.success_rate);
   // Revenue = verified-payment ledger (payment_grants) joined with the actual
-  // captured amounts from the Razorpay `payments` table when available.
-  const ledger = buildPaymentLedger(grantsAll.rows, razorpayAll.rows)
+  // captured amounts from the Razorpay `payments` table when available, with
+  // the 20% signup-offer fallback for legacy rows with no recorded amount.
+  const reportSignupIds = [...new Set([...grantsAll.rows, ...razorpayAll.rows].map((row) => row.user_id).filter(Boolean))];
+  const reportSignups = await safe(() => signupDatesByIds(reportSignupIds), new Map());
+  const ledger = buildPaymentLedger(grantsAll.rows, razorpayAll.rows, reportSignups)
     .filter((row) => {
       const at = new Date(row.created_at || 0).getTime();
       return Number.isFinite(at) && at >= new Date(from).getTime() && at <= new Date(to).getTime();

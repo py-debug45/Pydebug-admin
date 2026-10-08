@@ -195,6 +195,10 @@ async function main() {
   const paymentsData = await expectOk("payments ledger", await api(`/api/read?resource=payments&action=list`, { cookie: root.cookie }));
   record("payments ledger shows verified purchases", (paymentsData?.rows?.length ?? 0) > 0, "no ledger rows");
   record("payments summary counts income", (paymentsData?.summary?.total_paise ?? 0) > 0, "income total is zero");
+  const offerRow = (paymentsData?.rows || []).find((row) => row.payment_id === "pay_dev_1008");
+  record("signup-offer purchase shows the discounted ₹79, not the ₹99 list price", Boolean(offerRow) && offerRow.amount_paise === 7900 && offerRow.discount_paise === 2000 && offerRow.discount_source === "signup_offer", JSON.stringify(offerRow));
+  const fullPriceRow = (paymentsData?.rows || []).find((row) => row.payment_id === "pay_dev_1009");
+  record("purchase after the 48h signup window shows the list price", Boolean(fullPriceRow) && fullPriceRow.amount_paise === 9900 && !fullPriceRow.discount_source, JSON.stringify(fullPriceRow));
   record("payments page lists active premium users", (paymentsData?.active_premium?.length ?? 0) > 0, "no active premium users");
   await expectOk("referrals list", await api(`/api/read?resource=referrals&action=list`, { cookie: root.cookie }));
   await expectOk("battles list", await api(`/api/read?resource=battles&action=list`, { cookie: root.cookie }));
