@@ -14,25 +14,41 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // the local bundle had to fall back to the CDN.
 var sb = window.sb || null;
 
+// Baseline options for every client this app builds.
+const SUPABASE_CLIENT_OPTIONS = {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    // The admin panel never receives magic links for normal login, so nothing
+    // is parsed from the URL on page load. The password-recovery page is the
+    // one exception and asks for its own client with this switched on.
+    detectSessionInUrl: false,
+  },
+  // The dashboard only needs a trickle of presence events; throttling the
+  // socket keeps a busy site from flooding the admin tab with re-renders.
+  realtime: { params: { eventsPerSecond: 4 } },
+};
+
+// Builds an additional client (e.g. the recovery page needs
+// detectSessionInUrl: true). Returns null when the SDK is unavailable instead
+// of throwing, so the caller can show a readable message.
+function createSupabaseClient(overrides) {
+  if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
+  const options = Object.assign({}, SUPABASE_CLIENT_OPTIONS, overrides || {});
+  return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, options);
+}
+
 function initSupabaseClient() {
   if (window.sb) {
     sb = window.sb;
     return sb;
   }
-  if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-    },
-    // The dashboard only needs a trickle of presence events; throttling the
-    // socket keeps a busy site from flooding the admin tab with re-renders.
-    realtime: { params: { eventsPerSecond: 4 } },
-  });
+  sb = createSupabaseClient();
+  if (!sb) return null;
   window.sb = sb;
   return sb;
 }
 
+window.createSupabaseClient = createSupabaseClient;
 window.initSupabaseClient = initSupabaseClient;
 initSupabaseClient();
