@@ -1,0 +1,33 @@
+[build]
+  publish = "."
+
+# ---------------------------------------------------------------------------
+# Caching
+# The panel is plain static files, so the browser can keep them instead of
+# re-downloading every script on every page change. App code is revalidated
+# (a 304 is instant but never serves a stale deploy); the version-pinned
+# vendor bundle may be cached for a day.
+# ---------------------------------------------------------------------------
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/js/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
