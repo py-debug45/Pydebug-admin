@@ -80,6 +80,42 @@ is true, so admin-panel premium grants/revokes keep working.
 2. In Supabase → **Table Editor → profiles**, find your row and set `is_admin` to `true`.
 3. That's the only account that can log into this admin app.
 
+## 🚑 "Login nahi ho raha" — 2-minute fix
+
+Work through these in order. Each step removes one cause; the login page now
+also tells you *which* one you hit.
+
+1. **Two different passwords.** The login form wants your **PyDebug account**
+   password (the one from the user app / Supabase Auth). The string
+   `imtiyaj khan 9329` is the **panel** password — it is only asked *after*
+   login, on the dashboard. Typing it into the login form can never work, and
+   the page now says so explicitly.
+2. **Run [`supabase-admin-login-fix.sql`](supabase-admin-login-fix.sql)** in
+   Supabase → SQL Editor. Edit the two config values at the top (email +
+   new password) and run everything. It confirms the email, sets the account
+   password, creates the missing `profiles` row, sets `is_admin = true`, and
+   adds the own-row `profiles` RLS policy. The last query prints a table —
+   `email_confirmed`, `has_password`, `has_profile_row`, `is_admin` must all
+   be `true`.
+3. **Or fix it by hand:** Supabase → Authentication → Users →
+   `avenjr80@gmail.com` → *Reset password* (or *Add user* + *Auto Confirm* if
+   the account does not exist), then Table Editor → `profiles` →
+   `is_admin = true`, then log in.
+4. **Forgot the password?** Use **Send a reset link** on the login page —
+   it opens `reset-password.html`, where a new password can be set. Add
+   `https://your-admin-site/reset-password.html` to Supabase →
+   Authentication → **URL Configuration → Redirect URLs** once, otherwise the
+   email link falls back to the project's Site URL.
+5. **Still failing?** On the login page open **“Still stuck? Run a
+   connection & permission check”** → **Run check**. It tests reachability,
+   session, the `profiles` row, `is_admin()`, and the panel-password RPC, then
+   **Copy report** gives you everything needed to diagnose it.
+
+> The login page now keeps the error on screen with the exact fix instead of a
+> 3-second toast, and the admin gate falls back to the `is_admin()`
+> `SECURITY DEFINER` function — so a missing `profiles` SELECT policy can no
+> longer log a real admin straight back out.
+
 ## 3. Keys — already filled in
 
 `js/supabaseClient.js` already has your Supabase URL + anon key (same project
@@ -100,7 +136,16 @@ guessable from the main user-facing URL.
 
 ## What's included
 
-- `index.html` — Admin login (only `is_admin = true` accounts get in)
+- `index.html` — Admin login (only `is_admin = true` accounts get in).
+  Every failure — wrong password, unconfirmed email, rate limit, blocked
+  network, missing admin flag — stays on screen with the exact fix, plus a
+  built-in connection/permission check that can copy a report.
+- `reset-password.html` — the landing page for Supabase's recovery email
+  (“Send a reset link” on the login page), so a forgotten account password no
+  longer means a dead end.
+- `supabase-admin-login-fix.sql` — one-shot SQL that repairs a login: confirms
+  the email, sets a known password, creates the `profiles` row, grants
+  `is_admin`, and adds the own-row read policy.
 - Every protected page adds a second DB-backed mobile-style lock. The default
   panel password is `imtiyaj khan 9329`; it is stored as a bcrypt hash in
   `admin_panel_security`. It is requested once per admin visit, shared while

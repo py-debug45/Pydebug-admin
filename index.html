@@ -13,24 +13,56 @@
 <body>
 
 <div class="auth-page">
-  <div class="auth-card">
+  <div class="auth-card auth-card--wide">
     <h1>PyDebug Admin</h1>
     <p class="subtitle">Restricted access — admin accounts only.</p>
 
-    <form id="admin-login-form">
+    <!-- Every failure is rendered here and STAYS on screen (with the exact
+         fix), instead of a 3-second toast the admin can miss on a phone. -->
+    <div class="auth-alert" id="login-alert" role="alert" aria-live="assertive" hidden>
+      <strong class="auth-alert__title" id="login-alert-title"></strong>
+      <p class="auth-alert__message" id="login-alert-message"></p>
+      <ul class="auth-alert__steps" id="login-alert-steps"></ul>
+      <pre class="auth-alert__code" id="login-alert-code" hidden></pre>
+      <button type="button" class="auth-alert__copy" id="login-alert-copy" hidden>Copy SQL</button>
+    </div>
+
+    <form id="admin-login-form" novalidate>
       <div class="field">
         <label for="admin-email">Email</label>
-        <input type="email" id="admin-email" required placeholder="admin@example.com">
+        <input type="email" id="admin-email" name="email" required autocomplete="username"
+               inputmode="email" autocapitalize="none" spellcheck="false"
+               placeholder="admin@example.com">
       </div>
       <div class="field">
         <label for="admin-password">Password</label>
         <div class="password-field">
-          <input type="password" id="admin-password" required placeholder="Your password">
+          <input type="password" id="admin-password" name="password" required
+                 autocomplete="current-password" placeholder="Your admin account password">
           <button type="button" class="password-toggle-btn" data-toggle-password aria-label="Show password">Show</button>
         </div>
+        <p class="field-hint">This is your <strong>PyDebug account</strong> password — not the panel password asked after login.</p>
       </div>
-      <button type="submit" class="btn btn--primary btn--full">Log in</button>
+
+      <button type="submit" class="btn btn--primary btn--full" id="login-submit">Log in</button>
     </form>
+
+    <p class="auth-switch">
+      Password not working?
+      <button type="button" class="auth-linkbtn" id="forgot-password-btn">Send a reset link</button>
+    </p>
+
+    <details class="auth-diag" id="login-diag">
+      <summary>Still stuck? Run a connection &amp; permission check</summary>
+      <div class="auth-diag__body">
+        <button type="button" class="btn btn--secondary btn--full" id="run-diagnostics">Run check</button>
+        <p class="auth-diag__hint">Checks whether this browser can reach your Supabase project, whether the account is confirmed, and whether it really has <code>is_admin = true</code>.</p>
+        <ul class="auth-diag__results" id="diag-results"></ul>
+        <div class="auth-diag__actions">
+          <button type="button" class="btn btn--secondary btn--sm" id="copy-diag" hidden>Copy report</button>
+        </div>
+      </div>
+    </details>
   </div>
 </div>
 

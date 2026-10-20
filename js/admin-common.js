@@ -269,31 +269,84 @@ async function requireAdmin() {
   let profile = null;
   let error = null;
   try {
+    // maybeSingle(): 0 rows is a normal answer, not an exception, so a user
+    // whose profiles row is missing no longer surfaces as "PGRST116 error".
     ({ data: profile, error } = await sb
       .from("profiles")
       .select("*")
       .eq("id", session.user.id)
-      .single());
+      .maybeSingle());
   } catch (err) {
     error = err;
   }
 
-  // PGRST116 = no row found (user not in profiles, or RLS blocked the read).
-  // Any other error means the schema/RLS setup itself is broken — send the
-  // user to a dedicated message instead of telling them they're "not an admin".
-  if (error && error.code !== "PGRST116") {
-    window.location.href = "index.html?setup=1";
-    return null;
+  // `.select("*")` can be refused by RLS even for a real admin (profiles may
+  // only expose a whitelist of columns, or the own-row policy is missing).
+  // public.is_admin() is SECURITY DEFINER, so ask it directly before deciding
+  // the account isn't allowed in — otherwise a policy gap logs a genuine
+  // admin straight back out to the login page.
+  let isAdminFlag = !!(profile && profile.is_admin);
+  let rpcChecked = false;
+  let rpcError = null;
+  if (!isAdminFlag) {
+    try {
+      const { data: rpcData, error: rpcErr } = await sb.rpc("is_admin");
+      if (!rpcErr) {
+        rpcChecked = true;
+        isAdminFlag = rpcData === true;
+      } else {
+        rpcError = rpcErr;
+      }
+    } catch (err) {
+      rpcError = err;
+    }
   }
 
-  if (!profile || !profile.is_admin) {
+  if (isAdminFlag && !profile) {
+    // RLS hid the row: fetch just the label we display, ignoring failures.
+    try {
+      const { data: nameRow } = await sb
+        .from("profiles")
+        .select("display_name, full_name, email")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (nameRow) profile = nameRow;
+    } catch (e) {}
+  }
+
+  if (isAdminFlag) {
+    // ok — continue below
+  } else if (rpcChecked) {
+    // Confirmed: this account really is not an admin.
+    await sb.auth.signOut();
+    window.location.href = "index.html?denied=1";
+    return null;
+  } else {
+    // Could not verify at all (broken schema, missing is_admin column, RLS).
+    const brokenSchema = !!error || !!rpcError;
+    if (brokenSchema) {
+      console.error("[admin] admin check failed:", error || rpcError);
+      window.location.href = "index.html?setup=1";
+      return null;
+    }
     await sb.auth.signOut();
     window.location.href = "index.html?denied=1";
     return null;
   }
 
+  // `is_admin` may have been true only via the RPC, so normalise the flag.
+  if (profile) profile.is_admin = true;
+
+  // Callers rely on the returned value being non-null (and on `.id`), so when
+  // RLS hid the row build the minimum object from the session instead.
+  if (!profile) {
+    profile = { id: session.user.id, email: session.user.email, is_admin: true };
+  }
+
   const nameEl = document.getElementById("admin-name");
-  if (nameEl) nameEl.textContent = profile.display_name || profile.full_name || profile.email;
+  if (nameEl) {
+    nameEl.textContent = profile.display_name || profile.full_name || profile.email || "admin";
+  }
 
   document.body.classList.add("admin-panel-locked");
   const unlocked = await requirePanelPassword();
