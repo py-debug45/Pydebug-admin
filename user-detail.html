@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d111a">
+<meta name="robots" content="noindex, nofollow">
+<title>User Detail — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav>
+      <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
+      <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
+      <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
+      <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
+      <a href="notifications.html" data-admin-nav="notifications.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Notifications</a>
+      <a href="ai.html" data-admin-nav="ai.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="8" height="8" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg> AI Control</a>
+<a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
+      <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
+    </nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <h1>User detail</h1>
+      <div class="admin-topbar__actions">
+        <a href="users.html" class="btn btn--secondary btn--sm">← Back to users</a>
+      </div>
+    </div>
+
+    <div class="detail-head">
+      <div class="avatar-lg" id="detail-avatar">?</div>
+      <div class="detail-head__info">
+        <h2 id="detail-name">Loading...</h2>
+        <div class="email" id="detail-email"></div>
+        <div class="email muted" id="detail-joined" style="font-size:0.78rem"></div>
+      </div>
+      <div class="detail-head__badges" id="detail-badges"></div>
+    </div>
+
+    <div class="admin-stats-row">
+      <div class="stat-card"><div class="value value--mint" id="detail-xp">0</div><div class="label">Total XP</div></div>
+      <div class="stat-card"><div class="value value--mint" id="detail-monthly-xp">0</div><div class="label">Monthly XP</div></div>
+      <div class="stat-card"><div class="value" id="detail-streak">0</div><div class="label">Day streak</div><div class="sub" id="detail-last-active"></div></div>
+      <div class="stat-card"><div class="value" id="detail-freezes">0</div><div class="label">Streak freezes</div></div>
+      <div class="stat-card"><div class="value value--green" id="detail-submissions">0</div><div class="label">Problems tried</div></div>
+      <div class="stat-card"><div class="value value--green" id="detail-solved">0</div><div class="label">Solved</div></div>
+    </div>
+
+    <div class="detail-grid">
+      <div>
+        <div class="manage-card">
+          <h3>Display name</h3>
+          <div class="field">
+            <input type="text" id="display-name-input" maxlength="60" placeholder="Public name on leaderboard & discussions">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn--secondary btn--sm" id="display-name-save-btn">Save name</button>
+          </div>
+          <div class="manage-note">Shown publicly. Empty = app falls back to email prefix.</div>
+        </div>
+
+        <div class="manage-card">
+          <h3>Adjust XP</h3>
+          <div class="field">
+            <input type="number" id="xp-amount" placeholder="e.g. 100" step="1">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn--secondary btn--sm" id="xp-add-btn">Add XP</button>
+            <button class="btn btn--secondary btn--sm" id="xp-set-btn">Set XP to…</button>
+          </div>
+          <div class="manage-note">Add updates total + monthly XP (like a real solve). Set changes total XP only.</div>
+        </div>
+
+        <div class="manage-card">
+          <h3>Streak freezes ❄️</h3>
+          <div class="btn-row">
+            <button class="btn btn--secondary btn--sm" id="freeze-add-btn">+1 freeze</button>
+            <button class="btn btn--secondary btn--sm" id="freeze-remove-btn">−1 freeze</button>
+          </div>
+          <div class="manage-note">Freezes protect a streak for a missed day.</div>
+        </div>
+
+        <div class="manage-card">
+          <h3>Premium access</h3>
+          <div class="manage-note" id="premium-current" style="margin:0 0 10px"></div>
+          <div class="field">
+            <select id="premium-duration">
+              <option value="lifetime">Lifetime (manual grant)</option>
+              <option value="1mo">1 month</option>
+              <option value="3mo">3 months</option>
+              <option value="1yr">1 year</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn--primary btn--sm" id="premium-grant-btn">Grant premium</button>
+            <button class="btn btn--secondary btn--sm" id="premium-revoke-btn">Revoke</button>
+          </div>
+        </div>
+
+        <div class="manage-card">
+          <h3>Role</h3>
+          <div class="btn-row">
+            <button class="btn btn--secondary btn--sm" id="admin-toggle-btn">Make admin</button>
+          </div>
+          <div class="manage-note">Admins can log into this panel. You can't remove your own admin access here.</div>
+        </div>
+
+        <div class="manage-card manage-card--danger">
+          <h3>Reset progress</h3>
+          <div class="btn-row">
+            <button class="btn btn--danger btn--sm" id="reset-progress-btn">Reset XP &amp; streak</button>
+          </div>
+          <div class="manage-note">Sets total + monthly XP and streak back to 0. Submissions and badges are kept.</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="admin-section-title" style="margin-top:0">Achievements <span class="count" id="detail-badge-count"></span></div>
+        <div class="badge-grid" id="detail-badges-grid"><div class="chart-empty">Loading...</div></div>
+
+        <div class="admin-section-title">Recent submissions <span class="count" id="detail-sub-count"></span></div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Started</th>
+                <th>Problem</th>
+                <th>Status</th>
+                <th>Solved</th>
+              </tr>
+            </thead>
+            <tbody id="detail-submissions-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/vendor/supabase.min.js" defer></script>
+<script src="js/admin-boot.js" defer></script>
+<script src="js/supabaseClient.js" defer></script>
+<script src="js/utils.js" defer></script>
+<script src="js/admin-icons.js" defer></script>
+<script src="js/admin-common.js" defer></script>
+<script src="js/admin-user-detail.js" defer></script>
+</body>
+</html>
