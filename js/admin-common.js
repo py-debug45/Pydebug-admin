@@ -421,3 +421,24 @@ if (document.readyState === "loading") {
 } else {
   bootAdminChrome();
 }
+
+// PostgREST caps each response (usually 1,000 rows), even with .limit(20000).
+// Page deterministically so analytics never silently reports only the first page.
+async function fetchAdminRows(table, columns, orderColumn = "id") {
+  const rows = [];
+  const size = 500;
+  for (let offset = 0; ; offset += size) {
+    const { data, error } = await sb.from(table).select(columns)
+      .order(orderColumn, { ascending: true }).range(offset, offset + size - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < size) return rows;
+  }
+}
+
+function grantAmountPaise(grant) {
+  // Verified charged amount is authoritative, including discounts/old prices.
+  const amount = grant.amount_paise;
+  return amount !== null && amount !== undefined && Number.isFinite(Number(amount))
+    ? Number(amount) : planAmountPaise(grant.plan_key);
+}

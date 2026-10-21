@@ -155,7 +155,7 @@ async function togglePremium(btn) {
     ? { is_premium: false, premium_expires_at: null }
     : { is_premium: true, premium_expires_at: null }; // null = manual/lifetime grant
 
-  const { error } = await sb.from("profiles").update(updates).eq("id", id);
+  const { error } = await sb.rpc("admin_panel_update_profile", { target_user: id, patch: updates });
   if (error) {
     showToast("Could not update: " + error.message, "error");
     btn.disabled = false;
