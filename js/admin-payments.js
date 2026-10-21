@@ -42,16 +42,10 @@ async function loadGrants() {
   const tbody = document.getElementById("payments-tbody");
   tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Loading payments...</td></tr>`;
 
-  // Ask only for the columns this page reads. Older databases may not have
-  // every column, so fall back to "*" when Postgres says "undefined column".
-  const GRANT_COLS = "id, user_id, plan_key, order_id, payment_id, amount_inr, created_at, expires_at";
-  const query = (cols) =>
-    sb.from("payment_grants").select(cols).order("created_at", { ascending: false }).limit(1000);
-
-  let { data, error } = await query(GRANT_COLS);
-  if (error && (error.code === "42703" || /column .* does not exist/i.test(error.message || ""))) {
-    ({ data, error } = await query("*"));
-  }
+  let data, error;
+  try {
+    data = await fetchAdminRows("payment_grants", "*", "payment_id");
+  } catch (e) { error = e; }
 
   if (error) {
     tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Could not load payments.</td></tr>`;
@@ -78,10 +72,10 @@ async function loadGrants() {
 
 function renderPaymentStats() {
   const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const total = allGrants.reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
+  const total = allGrants.reduce((s, g) => s + grantAmountPaise(g), 0);
   const monthTotal = allGrants
     .filter((g) => new Date(g.created_at).getTime() >= monthAgo)
-    .reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
+    .reduce((s, g) => s + grantAmountPaise(g), 0);
 
   document.getElementById("pay-total-revenue").textContent = fmtINR(total / 100);
   document.getElementById("pay-month-revenue").textContent = fmtINR(monthTotal / 100);
@@ -95,7 +89,7 @@ function renderPlanCharts() {
     const k = g.plan_key || "unknown";
     byPlan[k] = byPlan[k] || { count: 0, revenue: 0 };
     byPlan[k].count++;
-    byPlan[k].revenue += planAmountPaise(g.plan_key);
+    byPlan[k].revenue += grantAmountPaise(g);
   });
   const colors = [CHART_COLORS.mint, CHART_COLORS.amber, CHART_COLORS.purple, CHART_COLORS.blue];
   const keys = Object.keys(byPlan);
@@ -142,7 +136,7 @@ function renderPayments() {
       <td class="muted" title="${escapeHtml(fmtDateTime(g.created_at))}">${escapeHtml(timeAgo(g.created_at))}</td>
       <td>${escapeHtml(displayNameOf(u))}<div class="muted" style="font-size:0.75rem">${escapeHtml(u.email || "")}</div></td>
       <td><span class="tag tag--premium">${escapeHtml(planLabel(g.plan_key))}</span></td>
-      <td><strong>${escapeHtml(fmtINR(planAmountPaise(g.plan_key) / 100))}</strong></td>
+      <td><strong>${escapeHtml(fmtINR(grantAmountPaise(g) / 100))}</strong></td>
       <td class="muted" title="${escapeHtml(fmtDateTime(g.expires_at))}">${expired ? "Expired" : escapeHtml(timeAgo(g.expires_at)).replace(" ago", " left")}</td>
       <td class="mono muted" title="Order: ${escapeHtml(g.order_id || "")}">${escapeHtml((g.payment_id || "").slice(0, 14))}</td>
     </tr>`;
@@ -159,7 +153,7 @@ function exportPayments() {
     date: g.created_at,
     user: (payUserMap[g.user_id] || {}).email || g.user_id,
     plan: g.plan_key,
-    amount_inr: (planAmountPaise(g.plan_key) / 100).toFixed(2),
+    amount_inr: (grantAmountPaise(g) / 100).toFixed(2),
     premium_until: g.expires_at,
   }));
   downloadCSV("pydebug-payments.csv", rows);

@@ -329,3 +329,24 @@ Shared helpers: `js/admin-common.js` (auth gate + formatting + plan prices),
   automatically (it reads the DB), but the prerendered SEO pages under
   `problems/*.html` need the user repo's `scripts/prerender-problems.mjs`
   re-run to include the new content.
+
+## Admin data access repair (2026-10-21)
+
+For an existing live database, run these **in order**, rather than resetting
+learner-table grants or disabling RLS:
+
+1. `db/migrations/20261021_restore_admin_access.sql`
+2. `db/migrations/20261021_admin_compatibility.sql`
+
+These have already been applied to the connected production project. They
+restore authenticated **admin-only** policies for panel queries; anonymous
+visitors and ordinary learners cannot read answer keys, the payment ledger,
+or admin logs. Existing learner policies are preserved. Sensitive profile
+edits use `admin_panel_update_profile`, with a server-side admin check and
+an explicit field allowlist, not unrestricted profile UPDATE grants.
+
+Insights and payment totals now paginate past PostgREST's response cap.
+Revenue uses the ledger's actual `amount_paise`, falling back to plan prices
+only for historical rows without an amount. Audit displays both server and
+panel ledger formats. Run regression checks with
+`node --test tests/admin-data.test.cjs`.

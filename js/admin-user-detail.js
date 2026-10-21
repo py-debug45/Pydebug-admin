@@ -169,7 +169,7 @@ async function renderUserSubmissions() {
 
 async function updateProfile(updates, successMsg, btn) {
   if (btn) btn.disabled = true;
-  const { error } = await sb.from("profiles").update(updates).eq("id", detailUserId);
+  const { error } = await sb.rpc("admin_panel_update_profile", { target_user: detailUserId, patch: updates });
   if (btn) btn.disabled = false;
   if (error) {
     showToast("Could not update: " + error.message, "error");

@@ -194,22 +194,21 @@ async function loadStats() {
   // Revenue from the payment_grants ledger (the user app's real payment
   // record — every row is a verified successful payment).
   try {
-    const { data, error } = await sb.from("payment_grants").select("plan_key, created_at").limit(5000);
-    if (error) throw error;
+    const data = await fetchAdminRows("payment_grants", "payment_id, plan_key, amount_paise, created_at", "payment_id");
     const rows = data || [];
-    const total = rows.reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
+    const total = rows.reduce((s, g) => s + grantAmountPaise(g), 0);
     const now = Date.now();
     const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
     const previousMonthAgo = now - 60 * 24 * 60 * 60 * 1000;
     const monthTotal = rows
       .filter((g) => new Date(g.created_at).getTime() >= monthAgo)
-      .reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
+      .reduce((s, g) => s + grantAmountPaise(g), 0);
     const previousMonthTotal = rows
       .filter((g) => {
         const t = new Date(g.created_at).getTime();
         return t >= previousMonthAgo && t < monthAgo;
       })
-      .reduce((s, g) => s + planAmountPaise(g.plan_key), 0);
+      .reduce((s, g) => s + grantAmountPaise(g), 0);
     document.getElementById("stat-revenue").textContent = fmtINR(total / 100);
     document.getElementById("stat-month-revenue").textContent = fmtINR(monthTotal / 100);
     setTrend("stat-month-revenue-trend", monthTotal / 100, previousMonthTotal, "₹");
