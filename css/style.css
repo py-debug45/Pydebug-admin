@@ -582,13 +582,12 @@ code, pre { font-family: var(--font-mono); }
 }
 .totp-secret-box .auth-alert__copy { margin-top: 0; flex: 0 0 auto; }
 
-/* The code field: big, centred, monospaced — one glance, one code. */
+/* The code field: big, centred, monospaced — one glance, one code or panel password. */
 #totp-code {
   text-align: center;
   font-family: var(--font-mono);
-  font-size: 1.25rem;
-  letter-spacing: 0.35em;
-  padding-left: 0.35em;
+  font-size: 1.15rem;
+  letter-spacing: 0.1em;
 }
 
 .auth-step .btn--full + .btn--full { margin-top: 10px; }

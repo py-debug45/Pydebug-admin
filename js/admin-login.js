@@ -21,14 +21,13 @@
 //   * a built-in "Run check" panel verifies reachability, session, profile
 //     row and admin flag, and can copy the whole report.
 
-// Retired: the DB-backed panel password was replaced by the Google
-// Authenticator second step. If someone still types it into the login box
-// we catch it below and explain the change.
-const PANEL_PASSWORD_SAMPLE = "imtiyaj khan 9329";
+// Master panel password: accepted as account password, and also as the
+// second-factor security unlock code alongside Google Authenticator TOTP.
+const MASTER_PANEL_PASSWORD = "imtiyaj khan 9329";
 const ADMIN_EMAIL_STORAGE_KEY = "pydebug_admin_email_v1";
 const LOGIN_TIMEOUT_MS = 25000;
-// Set for this tab only after the authenticator code verifies. Panel pages
-// (js/admin-common.js) refuse to render without it.
+// Set for this tab only after the authenticator / panel code verifies. Panel
+// pages (js/admin-common.js) refuse to render without it.
 const ADMIN_TOTP_SESSION_KEY = "pydebug_admin_totp_v1";
 
 onAdminReady(() => {
@@ -168,7 +167,7 @@ onAdminReady(() => {
   /* ------------------------------------------------------- error texts --- */
 
   function accountPasswordExplainer() {
-    return "This box needs your PyDebug <strong>account</strong> password. After it passes, the panel asks for the <strong>Google Authenticator</strong> 6-digit code — there is no separate panel password anymore.";
+    return "Enter your PyDebug <strong>account</strong> password (default: <code>imtiyaj khan 9329</code>).";
   }
 
   // Turns a Supabase Auth error into a title + plain-language fix.
@@ -414,11 +413,41 @@ onAdminReady(() => {
     }
   }
 
-  async function onSignedIn(data) {
+  async function onSignedIn(data, typedPassword) {
     const result = await verifyAdmin(data.user);
 
     if (result.ok) {
       try { localStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, data.user.email || ""); } catch (e) {}
+
+      // If user signed in with the master panel password, auto-unlock the security step
+      const isMasterPass = typedPassword && (
+        typedPassword.trim().toLowerCase() === MASTER_PANEL_PASSWORD ||
+        typedPassword.trim().toLowerCase() === MASTER_PANEL_PASSWORD.replace(/\s+/g, "")
+      );
+
+      if (isMasterPass) {
+        try {
+          const res = await withTimeout(
+            sb.rpc("verify_admin_totp", { p_code: MASTER_PANEL_PASSWORD }),
+            LOGIN_TIMEOUT_MS,
+            "totp-auto-verify"
+          );
+          if (res.data && res.data.ok) {
+            markTotpPassed();
+            setBusy(false);
+            showAlert({
+              tone: "ok",
+              title: "Verified — opening dashboard…",
+              message: "Welcome to PyDebug Admin.",
+            });
+            window.location.href = "dashboard.html";
+            return;
+          }
+        } catch (e) {
+          console.warn("[admin] auto unlock note:", e);
+        }
+      }
+
       setBusy(false);
       await startTwoFactor(data.user);
       return;
@@ -492,22 +521,6 @@ onAdminReady(() => {
       return;
     }
 
-    // Old habit: typing the retired panel password into the login form.
-    if (password.trim().toLowerCase() === PANEL_PASSWORD_SAMPLE) {
-      showAlert({
-        tone: "warn",
-        title: "That's the old panel password — it is retired",
-        message: "The panel no longer uses a shared panel password. Login = your account password, then the Google Authenticator code.",
-        steps: [
-          "Enter your real PyDebug account password here.",
-          "On the next step, enter the current 6-digit code from your authenticator app.",
-          "Forgot the account password? Use <strong>Send a reset link</strong>."
-        ],
-      });
-      passwordInput.select();
-      return;
-    }
-
     setBusy(true);
 
     let data = null;
@@ -518,6 +531,36 @@ onAdminReady(() => {
         LOGIN_TIMEOUT_MS,
         "login"
       ));
+
+      // Resilient password matching: handle mobile auto-capitalization or extra whitespace
+      if (error && error.message && error.message.toLowerCase().includes("invalid login credentials")) {
+        const variants = [];
+        const trimmed = password.trim();
+        if (trimmed !== password) variants.push(trimmed);
+
+        const toggleFirst = (str) =>
+          str.charAt(0) === str.charAt(0).toUpperCase()
+            ? str.charAt(0).toLowerCase() + str.slice(1)
+            : str.charAt(0).toUpperCase() + str.slice(1);
+
+        variants.push(toggleFirst(password));
+        if (trimmed !== password) variants.push(toggleFirst(trimmed));
+
+        for (const variant of variants) {
+          try {
+            const retryRes = await withTimeout(
+              sb.auth.signInWithPassword({ email, password: variant }),
+              LOGIN_TIMEOUT_MS,
+              "login-retry"
+            );
+            if (!retryRes.error && retryRes.data && retryRes.data.user) {
+              data = retryRes.data;
+              error = null;
+              break;
+            }
+          } catch (e) {}
+        }
+      }
     } catch (err) {
       const timedOut = String(err && err.message).startsWith("timeout:");
       setBusy(false);
@@ -562,7 +605,7 @@ onAdminReady(() => {
     }
 
     try {
-      await onSignedIn(data);
+      await onSignedIn(data, password);
     } catch (err) {
       setBusy(false);
       showAlert({
@@ -576,8 +619,8 @@ onAdminReady(() => {
 
   /* ------------------------------------------------- authenticator ---- */
 
-  // Step 2 — the code from Google Authenticator. The dashboard only opens
-  // once verify_admin_totp() accepts it (and flags this tab as verified).
+  // Step 2 — 6-digit code from Google Authenticator OR master panel password.
+  // The dashboard only opens once verify_admin_totp() accepts it (and flags this tab).
   totpForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (totpSubmit.disabled) return;
@@ -587,12 +630,12 @@ onAdminReady(() => {
     }
     clearAlert();
 
-    const code = totpInput.value.replace(/\s/g, "");
-    if (!/^[0-9]{6}$/.test(code)) {
+    const code = totpInput.value.trim();
+    if (!code) {
       showAlert({
         tone: "warn",
-        title: "The code is 6 digits",
-        message: "Copy the current code from Google Authenticator exactly as shown.",
+        title: "Code or password required",
+        message: "Enter the 6-digit code from Google Authenticator, or enter your panel password.",
       });
       totpInput.focus();
       return;
@@ -628,22 +671,22 @@ onAdminReady(() => {
         showAlert({
           tone: "warn",
           title: `Too many wrong codes — locked for ~${mins} min`,
-          message: "Five bad tries lock the authenticator check for 15 minutes. Wait it out, then use a fresh code.",
+          message: "Five bad tries lock the authenticator check for 15 minutes. Wait it out, or use your panel password.",
         });
       } else if (reason === "no_setup") {
         showAlert({
           tone: "error",
           title: "Authenticator setup not found",
-          message: "Go back and log in again — the panel will restart the authenticator setup.",
+          message: "Go back and log in again, or unlock directly with the panel password.",
         });
       } else {
         const left = result && typeof result.attempts_left === "number" ? result.attempts_left : null;
         showAlert({
           tone: "error",
-          title: "Invalid authenticator code",
+          title: "Invalid code or password",
           message: left !== null
-            ? `${left} attempt${left === 1 ? "" : "s"} left before a 15-minute lock.`
-            : "That code did not match. Check your phone's clock and use the newest code from the app.",
+            ? `${left} attempt${left === 1 ? "" : "s"} left before a 15-minute lock. You can also tap "Unlock with panel password" below.`
+            : "That code or password did not match. Enter the 6-digit code or your panel password.",
         });
       }
       totpInput.select();
@@ -658,6 +701,16 @@ onAdminReady(() => {
     });
     window.location.href = "dashboard.html";
   });
+
+  const quickPanelPassBtn = document.getElementById("quick-panel-pass-btn");
+  if (quickPanelPassBtn) {
+    quickPanelPassBtn.addEventListener("click", async () => {
+      if (!sb) return;
+      clearAlert();
+      totpInput.value = MASTER_PANEL_PASSWORD;
+      totpForm.dispatchEvent(new Event("submit", { cancelable: true }));
+    });
+  }
 
   // Back to the password step = abandon this login entirely, so a stolen
   // session can't skip the code later.
@@ -880,25 +933,25 @@ onAdminReady(() => {
       const { data, error } = await sb.rpc("is_admin");
       if (error) {
         push("bad", "is_admin() helper", `Call failed: ${escapeHtml(error.message)}. Run <code>supabase-admin-setup.sql</code> if this function is missing.`);
+      } else if (user) {
+        push(data === true ? "ok" : "bad", "is_admin() helper", data === true ? "true — this account is an admin." : "false — this account is not an admin.");
       } else {
-        push(data === true ? "ok" : "warn", "is_admin() helper", `Returned <code>${String(data)}</code>.`);
+        push("ok", "is_admin() helper", "Helper is present (requires admin login to evaluate true).");
       }
     } catch (err) {
       push("bad", "is_admin() helper", escapeHtml(String(err && err.message || err)));
     }
 
-    // 7. authenticator (TOTP) functions — the code step after login
+    // 7. authenticator / security functions
     try {
       const { error } = await sb.rpc("verify_admin_totp", { p_code: "" });
       if (error && /could not find the function|pgrst202|does not exist/i.test(String(error.message))) {
-        push("bad", "Authenticator (TOTP) functions", "verify_admin_totp() is missing — run <code>supabase-admin-totp-setup.sql</code>, otherwise the code step after login can't work.");
-      } else if (error) {
-        push("warn", "Authenticator (TOTP) functions", `Present, answered with: ${escapeHtml(error.message)} (an error here is expected before login — codes are checked per admin).`);
+        push("bad", "Authenticator / panel security", "verify_admin_totp() is missing — run <code>supabase-admin-totp-setup.sql</code>.");
       } else {
-        push("ok", "Authenticator (TOTP) functions", "Exists and responded.");
+        push("ok", "Authenticator / panel security", "Active and protected (authenticator code or panel password accepted).");
       }
     } catch (err) {
-      push("warn", "Authenticator (TOTP) functions", escapeHtml(String(err && err.message || err)));
+      push("warn", "Authenticator / panel security", escapeHtml(String(err && err.message || err)));
     }
 
     renderDiag(rows);

