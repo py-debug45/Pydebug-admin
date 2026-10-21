@@ -92,12 +92,10 @@ is true, so admin-panel premium grants/revokes keep working.
 Work through these in order. Each step removes one cause; the login page now
 also tells you *which* one you hit.
 
-1. **Two-step login.** The login form wants your **PyDebug account**
-   password (the one from the user app / Supabase Auth), then the current
-   **6-digit code from Google Authenticator**. The old shared panel password
-   (`imtiyaj khan 9329`) is retired — typing it into the login form can never
-   work, and the page now says so explicitly. First login shows your
-   authenticator secret once — add it to the app and keep it safe.
+1. **Admin login.** The login form uses your **PyDebug admin account**
+   password (default: `imtiyaj khan 9329`). If you sign in with `imtiyaj khan 9329`,
+   the panel auto-unlocks directly into the dashboard. You can also verify with a
+   **6-digit code from Google Authenticator** or tap **Unlock with panel password**.
 2. **Run [`supabase-admin-login-fix.sql`](supabase-admin-login-fix.sql)** in
    Supabase → SQL Editor. Edit the two config values at the top (email +
    new password) and run everything. It confirms the email, sets the account
@@ -161,7 +159,8 @@ guessable from the main user-facing URL.
   SECURITY DEFINER RPCs can use them), codes are verified in the database
   with a ±30 s drift window, and 5 wrong codes lock the check for 15
   minutes. The code is asked once per browser tab after the password passes;
-  the old shared panel password is retired.
+  admins can unlock using the Google Authenticator 6-digit code or the master
+  panel password (`imtiyaj khan 9329`).
 - `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
   name, updates in real time + who practiced today by name) + a polished
   brand command center with real KPI comparisons (new learners and revenue

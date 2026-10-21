@@ -43,7 +43,7 @@
                    autocomplete="current-password" placeholder="Your admin account password">
             <button type="button" class="password-toggle-btn" data-toggle-password aria-label="Show password">Show</button>
           </div>
-          <p class="field-hint">Your <strong>PyDebug account</strong> password — the Google Authenticator code is asked on the next step.</p>
+          <p class="field-hint">Your <strong>PyDebug account</strong> password (e.g. <code>imtiyaj khan 9329</code>).</p>
         </div>
 
         <button type="submit" class="btn btn--primary btn--full" id="login-submit">Log in</button>
@@ -55,14 +55,13 @@
       </p>
     </div>
 
-    <!-- Step 2: Google Authenticator code (the login the secure panel
-         used — the dashboard opens only after this verifies). -->
+    <!-- Step 2: Google Authenticator code or Panel Passcode -->
     <div class="auth-step" id="step-2fa" data-step="2fa" hidden>
-      <h2 class="auth-step__title">Authenticator code</h2>
-      <p class="auth-step__sub">Enter the current 6-digit code from Google Authenticator.</p>
+      <h2 class="auth-step__title">Security verification</h2>
+      <p class="auth-step__sub">Enter the 6-digit code from Google Authenticator, or use your panel password.</p>
 
       <div class="auth-note" id="totp-setup-note" hidden>
-        <p><strong>First-time setup:</strong> add this account to Google Authenticator (or any authenticator app), then enter one code below to verify it.</p>
+        <p><strong>First-time setup:</strong> add this account to Google Authenticator (or any authenticator app), then enter the code below. Or unlock directly with your panel password.</p>
         <div class="totp-secret-box">
           <code id="totp-secret"></code>
           <button type="button" class="auth-alert__copy" id="copy-totp-secret">Copy</button>
@@ -72,12 +71,13 @@
 
       <form id="admin-totp-form" novalidate>
         <div class="field">
-          <label for="totp-code">6-digit code</label>
-          <input type="text" id="totp-code" name="code" inputmode="numeric" required
-                 autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"
-                 autocapitalize="none" spellcheck="false" placeholder="123456">
+          <label for="totp-code">Authenticator code or panel password</label>
+          <input type="text" id="totp-code" name="code" required
+                 autocomplete="one-time-code" maxlength="40"
+                 autocapitalize="none" spellcheck="false" placeholder="6-digit code or imtiyaj khan 9329">
         </div>
         <button type="submit" class="btn btn--primary btn--full" id="totp-submit">Verify and enter</button>
+        <button type="button" class="btn btn--secondary btn--full" id="quick-panel-pass-btn">Unlock with panel password</button>
         <button type="button" class="btn btn--secondary btn--full" id="back-to-login">Back to login</button>
       </form>
     </div>
