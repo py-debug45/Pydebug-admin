@@ -27,30 +27,60 @@
       <button type="button" class="auth-alert__copy" id="login-alert-copy" hidden>Copy SQL</button>
     </div>
 
-    <form id="admin-login-form" novalidate>
-      <div class="field">
-        <label for="admin-email">Email</label>
-        <input type="email" id="admin-email" name="email" required autocomplete="username"
-               inputmode="email" autocapitalize="none" spellcheck="false"
-               placeholder="admin@example.com">
-      </div>
-      <div class="field">
-        <label for="admin-password">Password</label>
-        <div class="password-field">
-          <input type="password" id="admin-password" name="password" required
-                 autocomplete="current-password" placeholder="Your admin account password">
-          <button type="button" class="password-toggle-btn" data-toggle-password aria-label="Show password">Show</button>
+    <!-- Step 1: admin email + password -->
+    <div class="auth-step" id="step-login" data-step="login">
+      <form id="admin-login-form" novalidate>
+        <div class="field">
+          <label for="admin-email">Email</label>
+          <input type="email" id="admin-email" name="email" required autocomplete="username"
+                 inputmode="email" autocapitalize="none" spellcheck="false"
+                 placeholder="admin@example.com">
         </div>
-        <p class="field-hint">This is your <strong>PyDebug account</strong> password — not the panel password asked after login.</p>
+        <div class="field">
+          <label for="admin-password">Password</label>
+          <div class="password-field">
+            <input type="password" id="admin-password" name="password" required
+                   autocomplete="current-password" placeholder="Your admin account password">
+            <button type="button" class="password-toggle-btn" data-toggle-password aria-label="Show password">Show</button>
+          </div>
+          <p class="field-hint">Your <strong>PyDebug account</strong> password — the Google Authenticator code is asked on the next step.</p>
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--full" id="login-submit">Log in</button>
+      </form>
+
+      <p class="auth-switch">
+        Password not working?
+        <button type="button" class="auth-linkbtn" id="forgot-password-btn">Send a reset link</button>
+      </p>
+    </div>
+
+    <!-- Step 2: Google Authenticator code (the login the secure panel
+         used — the dashboard opens only after this verifies). -->
+    <div class="auth-step" id="step-2fa" data-step="2fa" hidden>
+      <h2 class="auth-step__title">Authenticator code</h2>
+      <p class="auth-step__sub">Enter the current 6-digit code from Google Authenticator.</p>
+
+      <div class="auth-note" id="totp-setup-note" hidden>
+        <p><strong>First-time setup:</strong> add this account to Google Authenticator (or any authenticator app), then enter one code below to verify it.</p>
+        <div class="totp-secret-box">
+          <code id="totp-secret"></code>
+          <button type="button" class="auth-alert__copy" id="copy-totp-secret">Copy</button>
+        </div>
+        <a class="btn btn--secondary btn--full" id="totp-app-link" href="#">Open authenticator app</a>
       </div>
 
-      <button type="submit" class="btn btn--primary btn--full" id="login-submit">Log in</button>
-    </form>
-
-    <p class="auth-switch">
-      Password not working?
-      <button type="button" class="auth-linkbtn" id="forgot-password-btn">Send a reset link</button>
-    </p>
+      <form id="admin-totp-form" novalidate>
+        <div class="field">
+          <label for="totp-code">6-digit code</label>
+          <input type="text" id="totp-code" name="code" inputmode="numeric" required
+                 autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"
+                 autocapitalize="none" spellcheck="false" placeholder="123456">
+        </div>
+        <button type="submit" class="btn btn--primary btn--full" id="totp-submit">Verify and enter</button>
+        <button type="button" class="btn btn--secondary btn--full" id="back-to-login">Back to login</button>
+      </form>
+    </div>
 
     <details class="auth-diag" id="login-diag">
       <summary>Still stuck? Run a connection &amp; permission check</summary>

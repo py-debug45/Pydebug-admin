@@ -1,5 +1,11 @@
 // admin-login.js — admin sign-in + the reasons it can fail.
 //
+// Second factor (restored from the earlier secure panel): after the
+// password passes, the panel asks for a Google Authenticator (TOTP) code —
+// the dashboard stays locked until verify_admin_totp() accepts one
+// (see supabase-admin-totp-setup.sql). First admin login shows the secret
+// once so it can be added to the authenticator app.
+//
 // History: this page used to hand every failure to showToast(), which hides
 // itself after 3 seconds. On a phone a failed login therefore looked exactly
 // like "button tap kiya, kuch hua hi nahi" — no way to tell whether the
@@ -15,9 +21,15 @@
 //   * a built-in "Run check" panel verifies reachability, session, profile
 //     row and admin flag, and can copy the whole report.
 
+// Retired: the DB-backed panel password was replaced by the Google
+// Authenticator second step. If someone still types it into the login box
+// we catch it below and explain the change.
 const PANEL_PASSWORD_SAMPLE = "imtiyaj khan 9329";
 const ADMIN_EMAIL_STORAGE_KEY = "pydebug_admin_email_v1";
 const LOGIN_TIMEOUT_MS = 25000;
+// Set for this tab only after the authenticator code verifies. Panel pages
+// (js/admin-common.js) refuse to render without it.
+const ADMIN_TOTP_SESSION_KEY = "pydebug_admin_totp_v1";
 
 onAdminReady(() => {
   const form = document.getElementById("admin-login-form");
@@ -108,10 +120,55 @@ onAdminReady(() => {
     submitBtn.textContent = next ? (label || "Logging in…") : "Log in";
   }
 
+  /* ---------------------------------------------------------- steps ---- */
+
+  const stepLogin = document.getElementById("step-login");
+  const step2fa = document.getElementById("step-2fa");
+  const totpForm = document.getElementById("admin-totp-form");
+  const totpInput = document.getElementById("totp-code");
+  const totpSubmit = document.getElementById("totp-submit");
+  const setupNote = document.getElementById("totp-setup-note");
+  const secretEl = document.getElementById("totp-secret");
+  const copySecretBtn = document.getElementById("copy-totp-secret");
+  const appLink = document.getElementById("totp-app-link");
+  const backBtn = document.getElementById("back-to-login");
+
+  function showStep(name) {
+    const isLogin = name === "login";
+    stepLogin.hidden = !isLogin;
+    step2fa.hidden = isLogin;
+    clearAlert();
+    (isLogin ? emailInput : totpInput).focus();
+  }
+
+  function setTotpBusy(next, label) {
+    totpSubmit.disabled = next;
+    totpSubmit.setAttribute("aria-busy", next ? "true" : "false");
+    totpSubmit.textContent = next ? (label || "Verifying…") : "Verify and enter";
+  }
+
+  function markTotpPassed() {
+    try { sessionStorage.setItem(ADMIN_TOTP_SESSION_KEY, "true"); } catch (e) {}
+  }
+
+  function hasTotpPassed() {
+    try { return sessionStorage.getItem(ADMIN_TOTP_SESSION_KEY) === "true"; } catch (e) { return false; }
+  }
+
+  function clearTotpPass() {
+    try { sessionStorage.removeItem(ADMIN_TOTP_SESSION_KEY); } catch (e) {}
+  }
+
+  // Same URL the old panel issued — opens Google Authenticator directly.
+  function otpauthUrl(secret, email) {
+    const label = encodeURIComponent(`PyDebug Admin:${email || "admin"}`);
+    return `otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${encodeURIComponent("PyDebug Admin")}&algorithm=SHA1&digits=6&period=30`;
+  }
+
   /* ------------------------------------------------------- error texts --- */
 
-  function panelPasswordExplainer() {
-    return `The panel password (<code>${escapeHtml(PANEL_PASSWORD_SAMPLE)}</code>) is only asked <strong>after</strong> you log in. This box needs your PyDebug <strong>account</strong> password.`;
+  function accountPasswordExplainer() {
+    return "This box needs your PyDebug <strong>account</strong> password. After it passes, the panel asks for the <strong>Google Authenticator</strong> 6-digit code — there is no separate panel password anymore.";
   }
 
   // Turns a Supabase Auth error into a title + plain-language fix.
@@ -125,9 +182,9 @@ onAdminReady(() => {
       return {
         tone: "error",
         title: "Email or password is wrong",
-        message: "Supabase rejected this email/password pair. Logging in does not use the panel password.",
+        message: "Supabase rejected this email/password pair. Logging in does not use the authenticator code — that comes after the password passes.",
         steps: [
-          panelPasswordExplainer(),
+          accountPasswordExplainer(),
           "Tap <strong>Send a reset link</strong> below, or set a new password in Supabase → <strong>Authentication → Users → your user → Reset password</strong>.",
           "If this account was never created, create it in the user app (Sign up) or in Supabase → Authentication → Users → <strong>Add user</strong> (tick <em>Auto Confirm</em>).",
           "Still stuck? Run <code>supabase-admin-login-fix.sql</code> from this repository — it confirms the email, sets a known password and grants <code>is_admin</code>."
@@ -278,21 +335,97 @@ onAdminReady(() => {
     return { ok: false, reason: "not_admin", profile, rpcAdmin, userId: user.id };
   }
 
+  /* ---------------------------------------------------- two-factor ---- */
+
+  // Returns true when the authenticator step was shown, false when the
+  // TOTP service itself failed (the caller then keeps the error alert).
+  async function startTwoFactor(user) {
+    let status = null;
+    let statusError = null;
+    try {
+      const res = await withTimeout(sb.rpc("admin_totp_status"), LOGIN_TIMEOUT_MS, "totp-status");
+      status = res.data;
+      statusError = res.error;
+    } catch (err) {
+      statusError = err;
+    }
+
+    if (statusError || !status) {
+      showTotpServiceError(statusError);
+      return false;
+    }
+
+    if (status.enabled) {
+      setupNote.hidden = true;
+      showStep("2fa");
+      return true;
+    }
+
+    // First login for this admin: fetch (or resume) the authenticator
+    // secret so it can be added to Google Authenticator once.
+    let setup = null;
+    let setupError = null;
+    try {
+      const res = await withTimeout(sb.rpc("admin_totp_begin_setup"), LOGIN_TIMEOUT_MS, "totp-setup");
+      setup = res.data;
+      setupError = res.error;
+    } catch (err) {
+      setupError = err;
+    }
+
+    if (setupError || !setup) {
+      showTotpServiceError(setupError);
+      return false;
+    }
+
+    if (setup.status === "enabled") {
+      // Another tab/device finished the setup meanwhile — just ask code.
+      setupNote.hidden = true;
+    } else {
+      secretEl.textContent = setup.secret || "";
+      appLink.href = otpauthUrl(setup.secret, setup.email || (user && user.email));
+      copySecretBtn.textContent = "Copy";
+      setupNote.hidden = false;
+    }
+    showStep("2fa");
+    return true;
+  }
+
+  function showTotpServiceError(err) {
+    const raw = String(err && err.message ? err.message : "");
+    const missing = /could not find the function|does not exist|pgrst202/i.test(raw);
+    if (missing) {
+      showAlert({
+        tone: "error",
+        title: "Authenticator check is not set up in the database yet",
+        message: "Your password was accepted, but the Google Authenticator functions are missing, so the panel cannot finish signing you in.",
+        steps: [
+          "Run <code>supabase-admin-totp-setup.sql</code> from this repository in the Supabase <strong>SQL Editor</strong> (one time, safe to re-run).",
+          "Then log in again — the authenticator step will appear.",
+        ],
+      });
+    } else {
+      showAlert({
+        tone: "error",
+        title: "Could not start the authenticator step",
+        message: raw || "The code-check service did not answer.",
+        steps: ["Reload and try again.", "Open <strong>Run check</strong> below and send the report if it repeats."],
+      });
+    }
+  }
+
   async function onSignedIn(data) {
     const result = await verifyAdmin(data.user);
 
     if (result.ok) {
       try { localStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, data.user.email || ""); } catch (e) {}
-      showAlert({
-        tone: "ok",
-        title: "Admin verified — opening the dashboard…",
-        message: "If nothing happens within a few seconds, tap the button again.",
-      });
-      window.location.href = "dashboard.html";
+      setBusy(false);
+      await startTwoFactor(data.user);
       return;
     }
 
     await sb.auth.signOut();
+    clearTotpPass();
     setBusy(false);
 
     if (result.reason === "not_admin") {
@@ -359,15 +492,15 @@ onAdminReady(() => {
       return;
     }
 
-    // Very common mix-up: typing the panel password into the login form.
+    // Old habit: typing the retired panel password into the login form.
     if (password.trim().toLowerCase() === PANEL_PASSWORD_SAMPLE) {
       showAlert({
         tone: "warn",
-        title: "That's the panel password, not the account password",
-        message: "Login checks your Supabase account password; the panel password is asked on the next screen.",
+        title: "That's the old panel password — it is retired",
+        message: "The panel no longer uses a shared panel password. Login = your account password, then the Google Authenticator code.",
         steps: [
           "Enter your real PyDebug account password here.",
-          `After login, use <code>${escapeHtml(PANEL_PASSWORD_SAMPLE)}</code> to unlock the panel.`,
+          "On the next step, enter the current 6-digit code from your authenticator app.",
           "Forgot the account password? Use <strong>Send a reset link</strong>."
         ],
       });
@@ -441,6 +574,107 @@ onAdminReady(() => {
     }
   });
 
+  /* ------------------------------------------------- authenticator ---- */
+
+  // Step 2 — the code from Google Authenticator. The dashboard only opens
+  // once verify_admin_totp() accepts it (and flags this tab as verified).
+  totpForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (totpSubmit.disabled) return;
+    if (!sb) {
+      showAlert({ tone: "error", title: "Supabase library did not load", message: "Reload the page and try again." });
+      return;
+    }
+    clearAlert();
+
+    const code = totpInput.value.replace(/\s/g, "");
+    if (!/^[0-9]{6}$/.test(code)) {
+      showAlert({
+        tone: "warn",
+        title: "The code is 6 digits",
+        message: "Copy the current code from Google Authenticator exactly as shown.",
+      });
+      totpInput.focus();
+      return;
+    }
+
+    setTotpBusy(true);
+
+    let result = null;
+    let error = null;
+    try {
+      const res = await withTimeout(
+        sb.rpc("verify_admin_totp", { p_code: code }),
+        LOGIN_TIMEOUT_MS,
+        "totp-verify"
+      );
+      result = res.data;
+      error = res.error;
+    } catch (err) {
+      error = err;
+    }
+
+    setTotpBusy(false);
+
+    if (error) {
+      showTotpServiceError(error);
+      return;
+    }
+
+    if (!result || result.ok !== true) {
+      const reason = result && result.error;
+      if (reason === "locked") {
+        const mins = Math.max(1, Math.ceil(Number(result.retry_after_seconds || 900) / 60));
+        showAlert({
+          tone: "warn",
+          title: `Too many wrong codes — locked for ~${mins} min`,
+          message: "Five bad tries lock the authenticator check for 15 minutes. Wait it out, then use a fresh code.",
+        });
+      } else if (reason === "no_setup") {
+        showAlert({
+          tone: "error",
+          title: "Authenticator setup not found",
+          message: "Go back and log in again — the panel will restart the authenticator setup.",
+        });
+      } else {
+        const left = result && typeof result.attempts_left === "number" ? result.attempts_left : null;
+        showAlert({
+          tone: "error",
+          title: "Invalid authenticator code",
+          message: left !== null
+            ? `${left} attempt${left === 1 ? "" : "s"} left before a 15-minute lock.`
+            : "That code did not match. Check your phone's clock and use the newest code from the app.",
+        });
+      }
+      totpInput.select();
+      return;
+    }
+
+    markTotpPassed();
+    showAlert({
+      tone: "ok",
+      title: "Verified — opening the dashboard…",
+      message: "If nothing happens within a few seconds, tap the button again.",
+    });
+    window.location.href = "dashboard.html";
+  });
+
+  // Back to the password step = abandon this login entirely, so a stolen
+  // session can't skip the code later.
+  backBtn.addEventListener("click", async () => {
+    clearTotpPass();
+    try { await sb.auth.signOut(); } catch (e) {}
+    totpInput.value = "";
+    setTotpBusy(false);
+    showStep("login");
+  });
+
+  copySecretBtn.addEventListener("click", async () => {
+    const ok = await copyText(secretEl.textContent || "");
+    copySecretBtn.textContent = ok ? "Copied ✓" : "Copy failed";
+    setTimeout(() => { copySecretBtn.textContent = "Copy"; }, 1600);
+  });
+
   /* ------------------------------------------------------ reset link ---- */
 
   const forgotBtn = document.getElementById("forgot-password-btn");
@@ -501,23 +735,36 @@ onAdminReady(() => {
 
   /* --------------------------------------------------- existing session - */
 
-  // A valid admin session shouldn't sit on the login page wondering what to do.
+  // A valid admin session shouldn't sit on the login page wondering what to
+  // do. But "signed in" and "authenticator passed" are different — a tab
+  // without the code is sent straight to the authenticator step (this is
+  // exactly where panel pages redirect to with index.html?2fa=1).
   (async () => {
     try {
       const { data } = await sb.auth.getSession();
       const user = data && data.session && data.session.user;
       if (!user) return;
       const result = await verifyAdmin(user);
-      if (result.ok) {
+      if (result.ok && hasTotpPassed()) {
         showAlert({
           tone: "ok",
           title: "Already signed in as " + (user.email || user.id),
-          message: "An admin session is active in this browser.",
+          message: "An admin session is active in this browser and this tab already passed the authenticator.",
           steps: ['<a href="dashboard.html" style="color:var(--accent-mint);font-weight:600">Continue to the dashboard →</a> or log in with another account below.'],
         });
+      } else if (result.ok) {
+        const ready = await startTwoFactor(user);
+        if (ready) {
+          showAlert({
+            tone: "warn",
+            title: "Enter your authenticator code",
+            message: "Your sign-in is still active — this tab just needs the current Google Authenticator code before the panel opens.",
+          });
+        }
       } else {
         // Stale/broken session would make the next login confusing — clear it.
         await sb.auth.signOut();
+        clearTotpPass();
       }
     } catch (e) {
       console.warn("[admin] session probe failed:", e);
@@ -640,18 +887,18 @@ onAdminReady(() => {
       push("bad", "is_admin() helper", escapeHtml(String(err && err.message || err)));
     }
 
-    // 7. panel password function (needed after login)
+    // 7. authenticator (TOTP) functions — the code step after login
     try {
-      const { error } = await sb.rpc("verify_admin_panel_password", { input_password: "" });
+      const { error } = await sb.rpc("verify_admin_totp", { p_code: "" });
       if (error && /could not find the function|pgrst202|does not exist/i.test(String(error.message))) {
-        push("bad", "Panel password function", "verify_admin_panel_password() is missing — run <code>supabase-admin-setup.sql</code>, otherwise the panel lock can't open after login.");
+        push("bad", "Authenticator (TOTP) functions", "verify_admin_totp() is missing — run <code>supabase-admin-totp-setup.sql</code>, otherwise the code step after login can't work.");
       } else if (error) {
-        push("warn", "Panel password function", `Answered with an error: ${escapeHtml(error.message)}`);
+        push("warn", "Authenticator (TOTP) functions", `Present, answered with: ${escapeHtml(error.message)} (an error here is expected before login — codes are checked per admin).`);
       } else {
-        push("ok", "Panel password function", "Exists and responded.");
+        push("ok", "Authenticator (TOTP) functions", "Exists and responded.");
       }
     } catch (err) {
-      push("warn", "Panel password function", escapeHtml(String(err && err.message || err)));
+      push("warn", "Authenticator (TOTP) functions", escapeHtml(String(err && err.message || err)));
     }
 
     renderDiag(rows);

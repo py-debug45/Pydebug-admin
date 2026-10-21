@@ -3,130 +3,17 @@
 // (same Supabase project as the user panel, so `sb` is already available).
 
 const ADMIN_PAGE_SIZE = 50;
+
+// Second factor (restored from the earlier secure panel): the login page
+// verifies a Google Authenticator (TOTP) code against the database
+// (verify_admin_totp(), supabase-admin-totp-setup.sql) and marks this tab.
+// Panel pages only check the mark and bounce to the login page without it.
+const ADMIN_TOTP_SESSION_KEY = "pydebug_admin_totp_v1";
+// Retired panel-password lock — cleared on logout so stale keys can't linger.
 const ADMIN_UNLOCK_SESSION_KEY = "pydebug_admin_panel_unlocked_v1";
 
-// Keep the unlock only for this browser tab. sessionStorage survives normal
-// navigation between the admin's HTML pages, but we explicitly clear it when
-// the browser tells us this document was loaded by a refresh. This gives us
-// the intended behaviour: one password check per visit, never once per page,
-// and a fresh check after reload/reopen.
-function isDocumentReload() {
-  const navigation = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
-  if (navigation) return navigation.type === "reload";
-  return performance.navigation && performance.navigation.type === 1;
-}
-
-function getPanelUnlockState() {
-  if (isDocumentReload()) {
-    try { sessionStorage.removeItem(ADMIN_UNLOCK_SESSION_KEY); } catch (e) {}
-    return false;
-  }
-  try { return sessionStorage.getItem(ADMIN_UNLOCK_SESSION_KEY) === "true"; } catch (e) { return false; }
-}
-
-let adminPanelUnlocked = getPanelUnlockState();
-let resolveUnlock = null;
-
-async function requirePanelPassword() {
-  if (adminPanelUnlocked) {
-    document.body.classList.remove("admin-panel-locked");
-    return true;
-  }
-
-  const overlay = document.createElement("div");
-  overlay.className = "admin-password-overlay";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-labelledby", "admin-password-title");
-  overlay.innerHTML = `
-    <div class="admin-password-card">
-      <div class="admin-password-icon">${window.adminIcon ? adminIcon("lock") : ""}</div>
-      <div class="admin-password-eyebrow">PRIVATE ADMIN AREA</div>
-      <h1 id="admin-password-title">Unlock PyDebug Admin</h1>
-      <p>Enter the panel password to continue. This lock returns every time the page is refreshed.</p>
-      <form id="admin-password-form" novalidate>
-        <label class="admin-password-label" for="admin-panel-password">Panel password</label>
-        <div class="admin-password-input-wrap">
-          <input id="admin-panel-password" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required autofocus placeholder="Enter your password">
-          <button type="button" class="admin-password-toggle" id="admin-password-toggle" aria-label="Show password" title="Show password">${window.adminIcon ? adminIcon("eye") : "Show"}</button>
-        </div>
-        <div class="admin-password-error" id="admin-password-error" role="alert" aria-live="polite"></div>
-        <button type="submit" class="btn btn--primary btn--full admin-password-submit" id="admin-password-submit">
-          ${window.adminIcon ? adminIcon("key") : ""}<span>Unlock panel</span>
-        </button>
-      </form>
-      <div class="admin-password-meta">${window.adminIcon ? adminIcon("shield") : ""}<span>Protected by your Supabase admin account</span></div>
-    </div>`;
-  document.body.appendChild(overlay);
-
-  const form = overlay.querySelector("#admin-password-form");
-  const input = overlay.querySelector("#admin-panel-password");
-  const errorEl = overlay.querySelector("#admin-password-error");
-  const submit = overlay.querySelector("#admin-password-submit");
-  const toggle = overlay.querySelector("#admin-password-toggle");
-  const setError = (message) => {
-    errorEl.textContent = message || "";
-    input.setAttribute("aria-invalid", message ? "true" : "false");
-    overlay.querySelector(".admin-password-card").classList.toggle("has-error", !!message);
-  };
-
-  toggle.addEventListener("click", () => {
-    const hidden = input.type === "password";
-    input.type = hidden ? "text" : "password";
-    toggle.innerHTML = window.adminIcon ? adminIcon(hidden ? "eyeOff" : "eye") : (hidden ? "Hide" : "Show");
-    toggle.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
-  });
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const password = input.value;
-    if (!password) {
-      setError("Enter the panel password to continue.");
-      input.focus();
-      return;
-    }
-    submit.disabled = true;
-    submit.classList.add("is-loading");
-    submit.querySelector("span").textContent = "Checking access…";
-    setError("");
-
-    let data = false;
-    let error = null;
-    try {
-      ({ data, error } = await sb.rpc("verify_admin_panel_password", { input_password: password }));
-    } catch (err) {
-      error = err;
-    }
-
-    if (error) {
-      console.error("Panel password check:", error);
-      setError("Password service is not ready. Run the latest supabase-admin-setup.sql migration first.");
-      submit.disabled = false;
-      submit.classList.remove("is-loading");
-      submit.querySelector("span").textContent = "Unlock panel";
-      return;
-    }
-    if (!data) {
-      setError("That password is incorrect. Try again.");
-      input.select();
-      submit.disabled = false;
-      submit.classList.remove("is-loading");
-      submit.querySelector("span").textContent = "Unlock panel";
-      return;
-    }
-
-    adminPanelUnlocked = true;
-    try { sessionStorage.setItem(ADMIN_UNLOCK_SESSION_KEY, "true"); } catch (e) {}
-    document.body.classList.remove("admin-panel-locked");
-    overlay.classList.add("is-unlocked");
-    window.setTimeout(() => overlay.remove(), 240);
-    if (resolveUnlock) { const done = resolveUnlock; resolveUnlock = null; done(true); }
-  });
-
-  window.setTimeout(() => input.focus(), 80);
-  // Resolve straight from the submit handler. (This used to be a 50ms
-  // setInterval poll that kept running for the whole unlock screen.)
-  return new Promise((resolve) => { resolveUnlock = resolve; });
+function hasTotpPass() {
+  try { return sessionStorage.getItem(ADMIN_TOTP_SESSION_KEY) === "true"; } catch (e) { return false; }
 }
 
 const ADMIN_AI_FILES = [
@@ -348,9 +235,15 @@ async function requireAdmin() {
     nameEl.textContent = profile.display_name || profile.full_name || profile.email || "admin";
   }
 
-  document.body.classList.add("admin-panel-locked");
-  const unlocked = await requirePanelPassword();
-  if (!unlocked) return null;
+  // Second factor: this tab must have passed the Google Authenticator code
+  // on the login page. Without it, go back there — the login page jumps
+  // straight to the code step when a session already exists.
+  if (!hasTotpPass()) {
+    document.body.classList.add("admin-panel-locked"); // stay hidden during the redirect
+    window.location.href = "index.html?2fa=1";
+    return null;
+  }
+  document.body.classList.remove("admin-panel-locked");
 
   // The AI bundle is still loaded on every admin page (the master switch
   // controls what it DOES, not whether it is available) — but it is now
@@ -367,7 +260,7 @@ async function requireAdmin() {
 }
 
 async function logoutAdmin() {
-  adminPanelUnlocked = false;
+  try { sessionStorage.removeItem(ADMIN_TOTP_SESSION_KEY); } catch (e) {}
   try { sessionStorage.removeItem(ADMIN_UNLOCK_SESSION_KEY); } catch (e) {}
   await sb.auth.signOut();
   window.location.href = "index.html";
