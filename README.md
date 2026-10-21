@@ -54,6 +54,13 @@ Open **`supabase-admin-setup.sql`** from this repo, paste it into
 Supabase → **SQL Editor**, and run it. It's idempotent, so it's safe to
 re-run after pulling new admin-panel upgrades.
 
+Then run **`supabase-admin-totp-setup.sql`** the same way (one time). It
+adds the Google Authenticator second login step: a per-admin secret table
+(locked behind RLS — even admins can't read it directly) and the
+`verify_admin_totp()` / `admin_totp_status()` / `admin_totp_begin_setup()`
+functions the login page calls. Login = admin email + password → 6-digit
+code from Google Authenticator; the panel opens only after both.
+
 What it does (assuming the user-panel tables already exist):
 
 - Adds the DB-backed admin panel password verifier and seeds the initial
@@ -85,11 +92,12 @@ is true, so admin-panel premium grants/revokes keep working.
 Work through these in order. Each step removes one cause; the login page now
 also tells you *which* one you hit.
 
-1. **Two different passwords.** The login form wants your **PyDebug account**
-   password (the one from the user app / Supabase Auth). The string
-   `imtiyaj khan 9329` is the **panel** password — it is only asked *after*
-   login, on the dashboard. Typing it into the login form can never work, and
-   the page now says so explicitly.
+1. **Two-step login.** The login form wants your **PyDebug account**
+   password (the one from the user app / Supabase Auth), then the current
+   **6-digit code from Google Authenticator**. The old shared panel password
+   (`imtiyaj khan 9329`) is retired — typing it into the login form can never
+   work, and the page now says so explicitly. First login shows your
+   authenticator secret once — add it to the app and keep it safe.
 2. **Run [`supabase-admin-login-fix.sql`](supabase-admin-login-fix.sql)** in
    Supabase → SQL Editor. Edit the two config values at the top (email +
    new password) and run everything. It confirms the email, sets the account
@@ -108,8 +116,8 @@ also tells you *which* one you hit.
    email link falls back to the project's Site URL.
 5. **Still failing?** On the login page open **“Still stuck? Run a
    connection & permission check”** → **Run check**. It tests reachability,
-   session, the `profiles` row, `is_admin()`, and the panel-password RPC, then
-   **Copy report** gives you everything needed to diagnose it.
+   session, the `profiles` row, `is_admin()`, and the authenticator (TOTP)
+   RPC, then **Copy report** gives you everything needed to diagnose it.
 
 > The login page now keeps the error on screen with the exact fix instead of a
 > 3-second toast, and the admin gate falls back to the `is_admin()`
@@ -136,7 +144,9 @@ guessable from the main user-facing URL.
 
 ## What's included
 
-- `index.html` — Admin login (only `is_admin = true` accounts get in).
+- `index.html` — Admin login (only `is_admin = true` accounts get in, and
+  only after the Google Authenticator code verifies — first login shows the
+  secret once so it can be added to the app).
   Every failure — wrong password, unconfirmed email, rate limit, blocked
   network, missing admin flag — stays on screen with the exact fix, plus a
   built-in connection/permission check that can copy a report.
@@ -146,11 +156,12 @@ guessable from the main user-facing URL.
 - `supabase-admin-login-fix.sql` — one-shot SQL that repairs a login: confirms
   the email, sets a known password, creates the `profiles` row, grants
   `is_admin`, and adds the own-row read policy.
-- Every protected page adds a second DB-backed mobile-style lock. The default
-  panel password is `imtiyaj khan 9329`; it is stored as a bcrypt hash in
-  `admin_panel_security`. It is requested once per admin visit, shared while
-  moving between admin pages in the same tab, and requested again after a
-  reload or a new visit.
+- `supabase-admin-totp-setup.sql` — the Google Authenticator (TOTP) login.
+  Secrets live in `public.admin_totp` (RLS on, no client access — only the
+  SECURITY DEFINER RPCs can use them), codes are verified in the database
+  with a ±30 s drift window, and 5 wrong codes lock the check for 15
+  minutes. The code is asked once per browser tab after the password passes;
+  the old shared panel password is retired.
 - `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
   name, updates in real time + who practiced today by name) + a polished
   brand command center with real KPI comparisons (new learners and revenue
@@ -241,7 +252,7 @@ stat card):
 This panel ships its own AI engine — pure in-browser JavaScript, no OpenAI /
 Gemini / external calls at all, so there is nothing to pay for and no key to
 leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (loaded on every protected admin page
-after the panel password is passed), control UI: `ai.html` + `js/admin-ai.js`.
+after the authenticator check is passed), control UI: `ai.html` + `js/admin-ai.js`.
 
 - **Discussion moderation** — scans English comments for abuse/gaali
   (incl. leetspeak like `sh1t`, `f*ck`, `fuuuck`, spaced-out `f u c k`),

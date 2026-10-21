@@ -540,3 +540,57 @@ code, pre { font-family: var(--font-mono); }
   font-size: 0.78rem;
   color: var(--text-muted);
 }
+
+/* ---------- Two-step login (Google Authenticator) ---------- */
+.auth-step[hidden] { display: none; }
+.auth-step__title { font-size: 1.15rem; color: var(--text-primary); margin: 0 0 4px; }
+.auth-step__sub { margin: 0 0 20px; color: var(--text-muted); font-size: 0.88rem; }
+
+.auth-note {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-amber);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(227, 179, 65, 0.08);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.auth-note[hidden] { display: none; }
+.auth-note p { margin: 0 0 10px; }
+.auth-note strong { color: var(--text-primary); font-weight: 600; }
+
+.totp-secret-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.totp-secret-box code {
+  flex: 1 1 auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--accent-mint);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  word-break: break-all;
+  user-select: all;
+}
+.totp-secret-box .auth-alert__copy { margin-top: 0; flex: 0 0 auto; }
+
+/* The code field: big, centred, monospaced — one glance, one code. */
+#totp-code {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  letter-spacing: 0.35em;
+  padding-left: 0.35em;
+}
+
+.auth-step .btn--full + .btn--full { margin-top: 10px; }
+a.btn { text-decoration: none; }
+#totp-app-link { justify-content: center; }
