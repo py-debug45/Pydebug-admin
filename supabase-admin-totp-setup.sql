@@ -261,14 +261,24 @@ begin
 end;
 $$;
 
--- 8. Only the three public RPCs are callable from the client -----
+-- 8. Only the three public RPCs are callable, and only by logged-in users --
 revoke execute on function public._totp_base32_encode(bytea) from public, anon, authenticated;
 revoke execute on function public._totp_base32_decode(text) from public, anon, authenticated;
 revoke execute on function public._totp_code(text, bigint) from public, anon, authenticated;
 revoke execute on function public._require_totp_admin() from public, anon, authenticated;
+revoke execute on function public.admin_totp_status() from public, anon;
+revoke execute on function public.admin_totp_begin_setup() from public, anon;
+revoke execute on function public.verify_admin_totp(text) from public, anon;
 grant execute on function public.admin_totp_status() to authenticated;
 grant execute on function public.admin_totp_begin_setup() to authenticated;
 grant execute on function public.verify_admin_totp(text) to authenticated;
+
+-- 9. Retire the v2 console's leftover blocker ---------------------
+-- The earlier secure panel left a trigger that force-resets
+-- profiles.is_admin to false on every write — with it, NO admin login
+-- can ever pass. Safe to drop: it only ever fought the panel's gate.
+drop trigger if exists profiles_disable_legacy_admin on public.profiles;
+drop function if exists public.disable_legacy_admin_flag();
 
 -- Done. Login flow after this migration:
 --   email + password  →  Google Authenticator 6-digit code  →  dashboard
