@@ -69,6 +69,18 @@ async function loadAllPaymentData() {
     return;
   }
 
+  const secondaryWarnings = [];
+  if (ordersRes.status === "rejected") {
+    secondaryWarnings.push(`payment_orders: ${ordersRes.reason?.message || "unavailable"}`);
+  }
+  if (entRes.status === "rejected") {
+    secondaryWarnings.push(`product_entitlements: ${entRes.reason?.message || "unavailable"}`);
+  }
+  if (secondaryWarnings.length) {
+    document.getElementById("payments-hint").innerHTML =
+      `<div class="admin-hint">Some payment tables could not be read (${escapeHtml(secondaryWarnings.join("; "))}). Run the latest SQL migration in Supabase.</div>`;
+  }
+
   allOrders = ordersRes.status === "fulfilled"
     ? ordersRes.value.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     : [];
