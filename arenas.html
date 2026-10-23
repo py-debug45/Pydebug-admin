@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d111a">
+<meta name="robots" content="noindex, nofollow">
+<title>Mocks &amp; Battles — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav></nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <div class="admin-eyebrow">TIMED ASSESSMENTS &amp; COMPETITIVE PLAY</div>
+        <h1>Mocks, Battles &amp; Study Plans</h1>
+      </div>
+      <div class="admin-topbar__actions">
+        <button class="btn btn--secondary btn--sm" id="refresh-arenas-btn">↻ Refresh</button>
+        <button class="btn btn--secondary btn--sm" id="export-arenas-btn">Export CSV</button>
+      </div>
+    </div>
+
+    <div id="arenas-hint"></div>
+
+    <div class="admin-tabs" role="tablist" aria-label="Assessment modes">
+      <button type="button" class="admin-tab is-active" data-arena-tab="mocks">📝 Mock Tests <span class="admin-tab__count" id="tab-count-mocks">0</span></button>
+      <button type="button" class="admin-tab" data-arena-tab="battles">⚔️ 1v1 Battles <span class="admin-tab__count" id="tab-count-battles">0</span></button>
+      <button type="button" class="admin-tab" data-arena-tab="plans">📅 45-Day Study Plans <span class="admin-tab__count" id="tab-count-plans">0</span></button>
+    </div>
+
+    <!-- TAB 1: MOCK TESTS -->
+    <section class="admin-tab-panel is-active" id="panel-mocks">
+      <div class="admin-stats-row">
+        <div class="stat-card"><div class="value" id="mock-total">0</div><div class="label">Total sittings</div><div class="sub">all 12 papers</div></div>
+        <div class="stat-card"><div class="value value--mint" id="mock-completed">0</div><div class="label">Graded sittings</div><div class="sub">with recorded score</div></div>
+        <div class="stat-card"><div class="value value--green" id="mock-passed">0</div><div class="label">70%+ Gold check</div><div class="sub">qualifies for Gold</div></div>
+        <div class="stat-card"><div class="value" id="mock-avg-score">—</div><div class="label">Average score</div><div class="sub">across graded attempts</div></div>
+        <div class="stat-card"><div class="value value--mint" id="mock-learners">0</div><div class="label">Unique test-takers</div></div>
+      </div>
+
+      <div class="admin-toolbar">
+        <input type="text" id="mock-search" placeholder="Search learner or paper (e.g. paper-1)...">
+        <select id="mock-filter-paper">
+          <option value="all">All 12 papers</option>
+          <option value="paper-1">Paper 1 (Free)</option>
+          <option value="paper-2">Paper 2</option>
+          <option value="paper-3">Paper 3</option>
+          <option value="paper-4">Paper 4</option>
+          <option value="paper-5">Paper 5</option>
+          <option value="paper-6">Paper 6</option>
+          <option value="paper-7">Paper 7</option>
+          <option value="paper-8">Paper 8</option>
+          <option value="paper-9">Paper 9</option>
+          <option value="paper-10">Paper 10</option>
+          <option value="paper-11">Paper 11</option>
+          <option value="paper-12">Paper 12</option>
+        </select>
+        <select id="mock-filter-status">
+          <option value="all">All statuses</option>
+          <option value="graded">Graded / Submitted</option>
+          <option value="in_progress">In progress</option>
+          <option value="expired">Expired / Late</option>
+        </select>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Started</th>
+              <th>Learner</th>
+              <th>Paper</th>
+              <th>Score</th>
+              <th>Percentile</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mocks-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 2: 1V1 BATTLES -->
+    <section class="admin-tab-panel" id="panel-battles">
+      <div class="admin-stats-row">
+        <div class="stat-card"><div class="value" id="battle-total">0</div><div class="label">Total duels</div></div>
+        <div class="stat-card"><div class="value value--green" id="battle-finished">0</div><div class="label">Finished duels</div></div>
+        <div class="stat-card"><div class="value value--mint" id="battle-draws">0</div><div class="label">Draws</div></div>
+        <div class="stat-card"><div class="value" id="battle-live">0</div><div class="label">Waiting / Active</div></div>
+      </div>
+
+      <div class="admin-toolbar">
+        <input type="text" id="battle-search" placeholder="Search challenger, opponent or battle id...">
+        <select id="battle-filter-diff">
+          <option value="all">All difficulties</option>
+          <option value="mixed">Mixed</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <select id="battle-filter-status">
+          <option value="all">All statuses</option>
+          <option value="finished">Finished</option>
+          <option value="active">Active / Waiting</option>
+          <option value="expired">Expired / Cancelled</option>
+        </select>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>Challenger</th>
+              <th>Opponent</th>
+              <th>Score</th>
+              <th>Difficulty</th>
+              <th>Outcome</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="battles-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 3: 45-DAY STUDY PLANS -->
+    <section class="admin-tab-panel" id="panel-plans">
+      <div class="admin-stats-row">
+        <div class="stat-card"><div class="value" id="plan-total">0</div><div class="label">Saved study plans</div></div>
+        <div class="stat-card"><div class="value value--mint" id="plan-with-exam">0</div><div class="label">Target exam date set</div></div>
+        <div class="stat-card"><div class="value value--green" id="plan-tz-count">0</div><div class="label">Distinct time zones</div></div>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Learner</th>
+              <th>Start Date</th>
+              <th>Target Exam Date</th>
+              <th>Time Zone</th>
+              <th>Curriculum</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="plans-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-overlay" id="arena-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <h2 id="arena-modal-title">Attempt Breakdown</h2>
+      <button class="modal__close" id="arena-modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal__meta" id="arena-modal-meta"></div>
+    <pre class="code-block" id="arena-modal-body" style="max-height:300px;overflow:auto"></pre>
+  </div>
+</div>
+
+<script src="js/vendor/supabase.min.js" defer></script>
+<script src="js/admin-boot.js" defer></script>
+<script src="js/supabaseClient.js" defer></script>
+<script src="js/utils.js" defer></script>
+<script src="js/admin-icons.js" defer></script>
+<script src="js/admin-common.js" defer></script>
+<script src="js/admin-export.js" defer></script>
+<script src="js/admin-arenas.js" defer></script>
+</body>
+</html>

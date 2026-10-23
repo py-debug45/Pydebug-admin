@@ -79,8 +79,8 @@ async function AI_runExpiryReminders(opts) {
       user_id: u.id,
       type: "announcement",
       title: `⏰ Premium expires in ${days} day${days === 1 ? "" : "s"}!`,
-      message: `Hi! Your PyDebug Premium ends on ${new Date(u.premium_expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}. Renew now to keep unlimited hints, hard problems and your streak going!`,
-      link: "/problems.html",
+      message: `Hi! Your PyDebug Pro ends on ${new Date(u.premium_expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}. Renew now to keep ad-free hints, all premium problems, 12 timed mock tests, and your streak going!`,
+      link: "/premium",
     });
   });
   expired.forEach((u) => {
@@ -89,8 +89,8 @@ async function AI_runExpiryReminders(opts) {
       user_id: u.id,
       type: "announcement",
       title: "😢 Your Premium has expired",
-      message: "Your PyDebug Premium just ended. Renew anytime to get back unlimited hints, hard problems and the full experience!",
-      link: "/problems.html",
+      message: "Your PyDebug Pro just ended. Renew anytime to unlock ad-free hints, hard problems, and all 12 timed mock tests!",
+      link: "/premium",
     });
   });
 
@@ -138,7 +138,7 @@ async function AI_runWinback(opts) {
         type: "announcement",
         title: "🥺 We miss you on PyDebug!",
         message: `Hi${name}! It's been a while since your last debug session.${xpBit} Solve one quick problem today and restart your streak!`,
-        link: "/problems.html",
+        link: "/problems",
       };
     });
   let sent = 0;
@@ -198,7 +198,7 @@ async function AI_runStuckHelp(opts) {
       type: "announcement",
       title: `💡 Stuck on "${title}"?`,
       message: `We noticed ${g.fails} attempts — don't give up! Tip: unlock Hint 1, re-read the failing line, and try a tiny example by hand. You are closer than you think!`,
-      link: "/problems.html",
+      link: "/problems",
     });
   });
   let sent = 0;
@@ -243,14 +243,14 @@ async function AI_runLeaderboardAlerts(opts) {
         user_id: r.id, type: "leaderboard_rank",
         title: `🏆 You entered the Top 10! (#${r.rank})`,
         message: `Amazing! You climbed into the Top 10 with ${r.xp.toLocaleString("en-IN")} XP. Keep solving to reach #1!`,
-        link: "/problems.html",
+        link: "/leaderboard",
       });
     } else if (before - r.rank >= 3) {
       items.push({
         user_id: r.id, type: "leaderboard_rank",
         title: `🚀 You climbed to #${r.rank}!`,
         message: `You jumped from #${before} to #${r.rank} with ${r.xp.toLocaleString("en-IN")} XP. The top is in sight — keep going!`,
-        link: "/problems.html",
+        link: "/leaderboard",
       });
     }
   });

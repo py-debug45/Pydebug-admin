@@ -308,22 +308,50 @@ function fmtINR(rupees) {
   return "₹" + Math.round(rupees || 0).toLocaleString("en-IN");
 }
 
-// Coloured badge for submission / payment statuses (tolerates unknown values).
+// Coloured badge for submission / payment / moderation / feature statuses.
 function statusBadge(status) {
   const s = String(status || "").toLowerCase();
   let cls = "tag--unknown";
-  if (["solved", "success", "succeeded", "captured", "paid", "completed"].includes(s)) cls = "tag--solved";
-  else if (["attempted", "pending", "created", "authorized"].includes(s)) cls = "tag--attempted";
-  else if (["failed", "error", "cancelled", "canceled", "refunded"].includes(s)) cls = "tag--failed";
+  if (["solved", "success", "succeeded", "captured", "paid", "completed", "active", "graded", "finished", "qualified", "rewarded", "approved", "pilot_active"].includes(s)) cls = "tag--solved";
+  else if (["attempted", "pending", "created", "authorized", "in_progress", "waiting", "submitted", "new", "contacted", "muted"].includes(s)) cls = "tag--attempted";
+  else if (["failed", "error", "cancelled", "canceled", "refunded", "revoked", "expired", "late", "rejected", "invalid", "suspended", "banned", "closed"].includes(s)) cls = "tag--failed";
   return `<span class="tag ${cls}">${escapeHtml(status || "—")}</span>`;
 }
 
-// Premium plans — MUST stay in sync with the user panel's api/_plans.js
-// (amount in paise). Used to derive revenue from the payment_grants ledger.
+// Account moderation badge (muted / suspended / banned, expiry-aware).
+function accountStatusBadge(profile) {
+  if (!profile) return "";
+  const st = String(profile.status || "active").toLowerCase();
+  if (st === "active") return "";
+  if (profile.status_until && new Date(profile.status_until) <= new Date()) {
+    return '<span class="tag tag--unknown" title="Restriction expired">Restriction ended</span>';
+  }
+  const tip = [
+    profile.status_reason ? `Reason: ${profile.status_reason}` : "",
+    profile.status_until ? `Until: ${fmtDateTime(profile.status_until)}` : "Permanent",
+  ].filter(Boolean).join(" · ");
+  const cls = st === "muted" ? "tag--attempted" : "tag--failed";
+  return `<span class="tag ${cls}" title="${escapeHtml(tip)}">${escapeHtml(st)}</span>`;
+}
+
+// Certificate tier badge (bronze / silver / gold / diamond).
+function tierBadge(tier) {
+  const t = String(tier || "").toLowerCase();
+  const labels = {
+    bronze: "🥉 Bronze",
+    silver: "🥈 Silver",
+    gold: "🥇 Gold",
+    diamond: "💎 Diamond",
+  };
+  return `<span class="tag tag--tier tag--tier-${escapeHtml(t)}">${escapeHtml(labels[t] || tier || "—")}</span>`;
+}
+
+// Premium plans — synced with pydebug.in/premium live founding prices (in paise).
 const PYDEBUG_PLANS = {
-  monthly: { label: "Monthly Premium", amount: 9900, days: 30 },
-  sixmonth: { label: "6-Month Premium", amount: 49900, days: 182 },
-  yearly: { label: "Yearly Premium", amount: 79900, days: 365 },
+  monthly: { label: "Pro Monthly", amount: 14900, days: 30 },
+  sixmonth: { label: "Pro 6-Month", amount: 49900, days: 182 },
+  yearly: { label: "Pro Yearly", amount: 99900, days: 365 },
+  exam_pack: { label: "Exam Pack", amount: 149900, days: 365 },
 };
 
 function planLabel(key) {
@@ -332,6 +360,31 @@ function planLabel(key) {
 
 function planAmountPaise(key) {
   return (PYDEBUG_PLANS[key] && PYDEBUG_PLANS[key].amount) || 0;
+}
+
+function slugifyProblemTitle(title) {
+  return String(title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "python-problem";
+}
+
+async function writeAdminAudit(action, entityType, entityId, metadata = {}) {
+  try {
+    if (typeof sb === "undefined" || !sb || !sb.auth) return;
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    await sb.from("admin_audit_log").insert({
+      admin_id: user.id,
+      action,
+      entity_type: entityType,
+      entity_id: String(entityId || ""),
+      target_id: String(entityId || ""),
+      metadata: metadata || {},
+    });
+  } catch (e) {
+    console.warn("[admin] audit log:", e.message);
+  }
 }
 
 // Pick the first key from `candidates` that exists on the sample row.
@@ -354,22 +407,48 @@ function markAdminActiveNav() {
   });
 }
 
-// Older admin pages intentionally keep their HTML compact. Add the two
-// strategic workspace links here so every page has the same navigation depth.
+// Older admin pages intentionally keep their HTML compact. Ensure every
+// page has the complete, consistently ordered workspace navigation.
+const ADMIN_NAV_ITEMS = [
+  ["dashboard.html", "▥  Dashboard"],
+  ["insights.html", "◈  Growth insights"],
+  ["certificates.html", "✦  Certificates"],
+  ["arenas.html", "⚔  Mocks & Battles"],
+  ["community.html", "💬  Community & Hub"],
+  ["submissions.html", "</> Submissions"],
+  ["payments.html", "₹  Payments"],
+  ["discussions.html", "◌  Discussions"],
+  ["notifications.html", "🔔  Notifications"],
+  ["ai.html", "🤖  AI Control"],
+  ["audit.html", "🛡  Audit log"],
+  ["problem-form.html", "＋  Add Problem"],
+  ["users.html", "👥  Users"],
+];
+
 function ensureAdminNavigation() {
   const nav = document.querySelector(".admin-sidebar nav");
   if (!nav) return;
-  const has = (page) => !!nav.querySelector(`a[href="${page}"]`);
-  const make = (page, label) => {
-    const link = document.createElement("a");
-    link.href = page;
-    link.dataset.adminNav = page;
-    link.textContent = label;
-    return link;
-  };
-  const dashboard = nav.querySelector('a[href="dashboard.html"]');
-  if (!has("insights.html")) nav.insertBefore(make("insights.html", "◈  Growth insights"), dashboard ? dashboard.nextSibling : nav.firstChild);
-  if (!has("audit.html")) nav.insertBefore(make("audit.html", "◌  Audit log"), nav.querySelector('a[href="submissions.html"]') || null);
+  const existing = new Map();
+  nav.querySelectorAll("a[href]").forEach((a) => {
+    const href = (a.getAttribute("href") || "").split("#")[0];
+    if (href) existing.set(href, a);
+  });
+  const frag = document.createDocumentFragment();
+  ADMIN_NAV_ITEMS.forEach(([href, label]) => {
+    let link = existing.get(href);
+    if (!link) {
+      link = document.createElement("a");
+      link.href = href;
+      link.textContent = label;
+    }
+    link.dataset.adminNav = href;
+    existing.delete(href);
+    frag.appendChild(link);
+  });
+  // Preserve any custom links not in the canonical list at the end.
+  existing.forEach((link) => frag.appendChild(link));
+  nav.innerHTML = "";
+  nav.appendChild(frag);
 }
 
 
@@ -437,8 +516,15 @@ async function fetchAdminRows(table, columns, orderColumn = "id") {
 }
 
 function grantAmountPaise(grant) {
-  // Verified charged amount is authoritative, including discounts/old prices.
+  // Verified charged amount is authoritative, including discounts/old prices;
+  // falls back to linked order amount (if fetched), then plan catalog price.
   const amount = grant.amount_paise;
-  return amount !== null && amount !== undefined && Number.isFinite(Number(amount))
-    ? Number(amount) : planAmountPaise(grant.plan_key);
+  if (amount !== null && amount !== undefined && Number.isFinite(Number(amount))) {
+    return Number(amount);
+  }
+  const orderAmount = grant.order_amount_paise;
+  if (orderAmount !== null && orderAmount !== undefined && Number.isFinite(Number(orderAmount))) {
+    return Number(orderAmount);
+  }
+  return planAmountPaise(grant.plan_key);
 }

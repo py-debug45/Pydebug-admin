@@ -1,5 +1,5 @@
-// admin-users.js — user list with plan/role filters, sorting, CSV export.
-// Row-level management (XP, premium with expiry, admin role) lives on user-detail.html.
+// admin-users.js — user list with plan/status/role filters, sorting, CSV export.
+// Row-level management (XP, premium with expiry, account moderation, admin role) lives on user-detail.html.
 
 let cachedUsers = [];
 let usersPage = 0;
@@ -13,6 +13,7 @@ onAdminReady(async () => {
 
   document.getElementById("user-search").addEventListener("input", debounce(() => loadUsers(0), 300));
   document.getElementById("user-filter-plan").addEventListener("change", () => loadUsers(0));
+  document.getElementById("user-filter-status").addEventListener("change", () => loadUsers(0));
   document.getElementById("user-filter-role").addEventListener("change", () => loadUsers(0));
   document.getElementById("user-sort").addEventListener("change", () => loadUsers(0));
   document.getElementById("export-users-btn").addEventListener("click", exportUsers);
@@ -22,6 +23,7 @@ function currentUserFilters() {
   return {
     search: sanitizeIlike(document.getElementById("user-search").value),
     plan: document.getElementById("user-filter-plan").value,
+    status: document.getElementById("user-filter-status").value,
     role: document.getElementById("user-filter-role").value,
     sort: document.getElementById("user-sort").value,
   };
@@ -33,6 +35,7 @@ function applyUserFilters(query, filters, includeOrder) {
   }
   if (filters.plan === "premium") query = query.eq("is_premium", true);
   if (filters.plan === "free") query = query.eq("is_premium", false);
+  if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
   if (filters.role === "admin") query = query.eq("is_admin", true);
   if (filters.role === "user") query = query.eq("is_admin", false);
   if (includeOrder) {
@@ -62,7 +65,6 @@ async function loadUsers(page = 0) {
   }
 
   let { data: users, error, count } = await run(true);
-  // 42703 = undefined_column — retry without created_at / xp ordering.
   if (error && error.code === "42703") {
     ({ data: users, error, count } = await run(false));
   }
@@ -86,11 +88,10 @@ async function loadUsers(page = 0) {
     return;
   }
 
-  // Single DOM write + one delegated listener (was: a createElement and a
-  // click listener per row, 50 of each on every filter keystroke).
   tbody.innerHTML = cachedUsers.map((u) => {
     const premium = isPremiumUser(u);
     const id = encodeURIComponent(u.id);
+    const roleBit = u.is_admin ? ' <span class="tag tag--info">Admin</span>' : "";
     return `<tr>
       <td>${escapeHtml(u.display_name || u.full_name || "-")}</td>
       <td>${escapeHtml(u.email || "-")}</td>
@@ -98,7 +99,7 @@ async function loadUsers(page = 0) {
       <td class="muted">${(u.monthly_xp ?? 0).toLocaleString("en-IN")}</td>
       <td>${u.streak ?? 0} 🔥</td>
       <td>${planTagHtml(u)}</td>
-      <td>${u.is_admin ? '<span class="tag tag--info">Admin</span>' : '<span class="muted">User</span>'}</td>
+      <td>${accountStatusBadge(u)}${roleBit}</td>
       <td class="muted" title="${escapeHtml(fmtDateTime(u.created_at))}">${escapeHtml(timeAgo(u.created_at))}</td>
       <td class="row-actions">
         <a href="user-detail.html?id=${id}" class="btn btn--secondary btn--sm">View / Manage</a>
@@ -141,19 +142,21 @@ async function exportUsers() {
     last_active_date: u.last_active_date || "",
     plan: isPremiumUser(u) ? "premium" : (u.is_premium ? "premium_expired" : "free"),
     premium_expires_at: u.premium_expires_at || "",
+    status: u.status || "active",
+    status_reason: u.status_reason || "",
     role: u.is_admin ? "admin" : "user",
     joined: u.created_at,
   })));
 }
 
 async function togglePremium(btn) {
-  const id = btn.dataset.togglePremium;
+  const id = decodeURIComponent(btn.dataset.togglePremium);
   const isCurrentlyPremium = btn.dataset.current === "true";
   btn.disabled = true;
 
   const updates = isCurrentlyPremium
     ? { is_premium: false, premium_expires_at: null }
-    : { is_premium: true, premium_expires_at: null }; // null = manual/lifetime grant
+    : { is_premium: true, premium_expires_at: null };
 
   const { error } = await sb.rpc("admin_panel_update_profile", { target_user: id, patch: updates });
   if (error) {

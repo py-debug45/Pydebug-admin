@@ -1,5 +1,89 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0d111a"><meta name="robots" content="noindex"><title>Audit log — PyDebug Admin</title><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="css/dashboard.css"><link rel="stylesheet" href="css/responsive.css"><link rel="stylesheet" href="css/admin.css"></head><body class="admin-protected admin-panel-locked"><div class="admin-shell"><aside class="admin-sidebar"><div class="admin-sidebar__logo">&gt;_ PyDebug</div><div class="admin-sidebar__tag">ADMIN PANEL</div><nav><a href="dashboard.html">▥ Dashboard</a><a href="insights.html">◈ Growth insights</a><a href="audit.html" class="active">◌ Audit log</a><a href="submissions.html">&lt;/&gt; Submissions</a><a href="payments.html">▣ Payments</a><a href="discussions.html">◌ Discussions</a><a href="notifications.html">♢ Notifications</a><a href="ai.html">✦ AI Control</a><a href="problem-form.html">＋ Add Problem</a><a href="users.html">♙ Users</a></nav><div class="admin-sidebar__account"><span id="admin-name">...</span><button data-admin-logout>⇥</button></div></aside><main class="admin-main"><div class="admin-topbar"><h1>Audit log</h1><button id="refresh-audit" class="btn btn--secondary">↻ Refresh</button></div><p class="page-intro">Sensitive admin actions, with timestamp and target, for accountability.</p><div class="admin-toolbar"><select id="audit-action"><option value="all">All actions</option><option value="premium_granted">Premium granted</option><option value="premium_revoked">Premium revoked</option><option value="problem_deleted">Problem deleted</option><option value="user_updated">User updated</option></select></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Target</th><th>Details</th></tr></thead><tbody id="audit-body"><tr><td colspan="5" class="empty-row">Loading…</td></tr></tbody></table></div></main></div><script src="js/vendor/supabase.min.js" defer></script>
+<meta name="theme-color" content="#0d111a">
+<meta name="robots" content="noindex, nofollow">
+<title>Audit Log — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav></nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
+    </div>
+  </aside>
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <div class="admin-eyebrow">SECURITY &amp; ACCOUNTABILITY</div>
+        <h1>Audit log</h1>
+      </div>
+      <div class="admin-topbar__actions">
+        <button id="refresh-audit" class="btn btn--secondary btn--sm">↻ Refresh</button>
+      </div>
+    </div>
+    <p class="page-intro">Every sensitive admin action across profiles, certificates, entitlements, community moderation, problems, and broadcasts.</p>
+    <div class="admin-toolbar">
+      <input type="text" id="audit-search" placeholder="Search action, target ID, resource, or JSON details...">
+      <select id="audit-action">
+        <option value="all">All actions</option>
+        <option value="user_updated">Profile updated</option>
+        <option value="premium_granted">Premium granted</option>
+        <option value="premium_revoked">Premium revoked</option>
+        <option value="user_status_muted">User muted</option>
+        <option value="user_status_suspended">User suspended</option>
+        <option value="user_status_banned">User banned</option>
+        <option value="user_status_active">User restored (active)</option>
+        <option value="entitlement_granted">Entitlement granted</option>
+        <option value="entitlement_revoked">Entitlement revoked</option>
+        <option value="certificate_revoked">Certificate revoked</option>
+        <option value="community_post_deleted">Community post deleted</option>
+        <option value="discussion_flag_resolved">Discussion flag resolved</option>
+        <option value="notifications_pruned">Notifications pruned</option>
+        <option value="broadcast_sent">Broadcast sent</option>
+        <option value="problem_created">Problem created</option>
+        <option value="problem_updated">Problem updated</option>
+        <option value="problem_deleted">Problem deleted</option>
+        <option value="classroom_created">Classroom created</option>
+        <option value="enquiry_status_updated">Institute enquiry updated</option>
+        <option value="feedback_approved">Feedback approved</option>
+      </select>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Action</th>
+            <th>Resource</th>
+            <th>Target</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="audit-body">
+          <tr><td colspan="5" class="empty-row">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+<script src="js/vendor/supabase.min.js" defer></script>
 <script src="js/admin-boot.js" defer></script>
-<script src="js/supabaseClient.js" defer></script><script src="js/utils.js" defer></script><script src="js/admin-icons.js" defer></script><script src="js/admin-common.js" defer></script><script src="js/admin-audit.js" defer></script></body></html>
+<script src="js/supabaseClient.js" defer></script>
+<script src="js/utils.js" defer></script>
+<script src="js/admin-icons.js" defer></script>
+<script src="js/admin-common.js" defer></script>
+<script src="js/admin-audit.js" defer></script>
+</body>
+</html>

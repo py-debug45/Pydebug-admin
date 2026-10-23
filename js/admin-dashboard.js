@@ -191,11 +191,18 @@ async function loadStats() {
     showToast("Some stats couldn't be loaded — check the Supabase schema/RLS setup (README step 1).", "error");
   }
 
-  // Revenue from the payment_grants ledger (the user app's real payment
-  // record — every row is a verified successful payment).
+  // Revenue from the payment_grants ledger (cross-referenced with payment_orders
+  // when grant.amount_paise is null).
   try {
-    const data = await fetchAdminRows("payment_grants", "payment_id, plan_key, amount_paise, created_at", "payment_id");
-    const rows = data || [];
+    const [grantRows, orderRows] = await Promise.all([
+      fetchAdminRows("payment_grants", "payment_id, order_id, plan_key, amount_paise, created_at", "payment_id"),
+      fetchAdminRows("payment_orders", "order_id, amount", "created_at").catch(() => []),
+    ]);
+    const orderMap = {};
+    (orderRows || []).forEach((o) => {
+      if (o.order_id && Number.isFinite(Number(o.amount))) orderMap[o.order_id] = Number(o.amount);
+    });
+    const rows = (grantRows || []).map((g) => ({ ...g, order_amount_paise: orderMap[g.order_id] ?? null }));
     const total = rows.reduce((s, g) => s + grantAmountPaise(g), 0);
     const now = Date.now();
     const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
@@ -211,7 +218,7 @@ async function loadStats() {
       .reduce((s, g) => s + grantAmountPaise(g), 0);
     document.getElementById("stat-revenue").textContent = fmtINR(total / 100);
     document.getElementById("stat-month-revenue").textContent = fmtINR(monthTotal / 100);
-    setTrend("stat-month-revenue-trend", monthTotal / 100, previousMonthTotal, "₹");
+    setTrend("stat-month-revenue-trend", monthTotal / 100, previousMonthTotal / 100, "₹");
   } catch (e) {
     console.warn("loadStats revenue:", e.message);
     document.getElementById("stat-revenue").textContent = "₹—";
@@ -532,13 +539,15 @@ async function loadProblems(page = 0) {
   // 50 × (createElement + innerHTML + appendChild), i.e. 50 separate layout
   // invalidations and 150 individual click listeners per render.
   tbody.innerHTML = dashboardProblems.map((p) => {
-    const safeType = p.type === "bug" ? "bug" : "question";
+    const safeType = p.type === "bug" ? "bug" : p.type === "coding" ? "info" : "question";
+    const typeLabel = p.type === "bug" ? "Bug" : p.type === "coding" ? "Write Code" : "Question";
     const safeDiff = ["easy", "medium", "hard"].includes(p.difficulty) ? p.difficulty : "medium";
+    const statusBit = p.status && p.status !== "published" ? ` <span class="tag tag--attempted">${escapeHtml(p.status)}</span>` : "";
     const id = encodeURIComponent(p.id);
     return `<tr>
       <td class="mono muted">${p.problem_number ?? "—"}</td>
-      <td>${escapeHtml(p.title)}</td>
-      <td><span class="tag tag--${safeType}">${safeType === "bug" ? "Bug" : "Question"}</span></td>
+      <td>${escapeHtml(p.title)}${statusBit}${p.slug ? `<div class="mono muted" style="font-size:0.72rem">/${escapeHtml(p.slug)}</div>` : ""}</td>
+      <td><span class="tag tag--${safeType}">${typeLabel}</span></td>
       <td><span class="diff diff--${safeDiff}">${escapeHtml(p.difficulty || safeDiff)}</span></td>
       <td>${escapeHtml(p.topic || "-")}</td>
       <td>${p.is_premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>'}</td>
@@ -615,11 +624,13 @@ async function duplicateProblem(id, btn) {
     btn.textContent = origText;
     return;
   }
-  const { id: _id, created_at: _c, ...copy } = p;
+  const { id: _id, created_at: _c, updated_at: _u, ...copy } = p;
   copy.title = `${p.title} (Copy)`;
-  // Give the copy the next free number so grid order stays unique.
+  // Give the copy the next free number + unique slug, and skip notification blast.
   const { data: top } = await sb.from("problems").select("problem_number").order("problem_number", { ascending: false }).limit(1);
   copy.problem_number = (Number(top?.[0]?.problem_number) || 0) + 1;
+  copy.slug = `${slugifyProblemTitle(copy.title)}-${copy.problem_number}`;
+  copy.admin_skip_notification = true;
 
   const { error } = await sb.from("problems").insert(copy);
   if (error) {
