@@ -28,6 +28,7 @@
     lock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
     shield: '<path d="M12 3 20 6v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="m9 12 2 2 4-4"/>',
     key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M16 7l2 2M14 9l2 2"/>',
+    ticket: '<path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a3 3 0 0 0 0 6v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a3 3 0 0 0 0-6z"/><path d="M13 6v12"/>',
     eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>',
     eyeOff: '<path d="m3 3 18 18M10.6 6.2A10.8 10.8 0 0 1 12 6c6.5 0 10 6 10 6a18 18 0 0 1-3.1 3.6M6.2 6.3C3.5 8 2 12 2 12s3.5 6 10 6c1.6 0 3-.4 4.2-1"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.7-4L3 10M3 5v5h5M4 13a8 8 0 0 0 14.7 4L21 14m0 5v-5h-5"/>',
@@ -66,6 +67,7 @@
     "📣": "bell", "📝": "file", "🏆": "trophy", "❄️": "snow", "❄": "snow", "✅": "check",
     "✔️": "check", "✔": "check", "❌": "close", "⚠️": "alert", "⚠": "alert", "🔴": "alert",
     "🟡": "alert", "🟢": "check", "⭐": "target", "📄": "file", "🔧": "code", "🥺": "heart",
+    "🎟️": "ticket", "🎟": "ticket",
     "↻": "refresh", "✕": "close", "←": "arrowLeft", "→": "arrowRight",
   };
 

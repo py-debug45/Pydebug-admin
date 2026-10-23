@@ -174,6 +174,13 @@ guessable from the main user-facing URL.
 - `payments.html` — Revenue from the verified `payment_grants` ledger
   (total / 30-day / by-plan donuts) + full grant log with plan filter,
   search and CSV export
+- `coupons.html` — **Coupon & Promo Codes Manager**: create / edit promo
+  codes with a live price preview (₹149 monthly · ₹999 yearly), plan
+  targeting, total & per-user limits, expiry presets, first-purchase-only
+  mode, copyable share links, pause/activate, guarded delete, search /
+  status filters / sorting, summary cards (active codes, redemptions,
+  attributed revenue) and CSV export — all through the `admin_*_coupon`
+  RPCs (direct `coupons` table access stays blocked by RLS)
 - `discussions.html` — Moderate problem comments: search, filter
   (solutions/replies), view full text, delete spam, CSV export
 - `notifications.html` — Broadcast announcements to All / Free / Premium
@@ -319,6 +326,43 @@ Shared helpers: `js/admin-common.js` (auth gate + formatting + plan prices),
 `js/admin-charts.js` (dependency-free SVG charts), `js/admin-export.js`
 (CSV downloads).
 
+## 🎟️ Coupon & Promo Codes Manager (2026-10-23)
+
+`coupons.html` + `js/admin-coupons.js` drive the Premium coupon system that
+already lives in the database (`db/migrations/20261023_premium_coupons.sql`).
+The `coupons` table is intentionally **not** readable through PostgREST: RLS
+blocks direct access, and every operation is a `SECURITY DEFINER` RPC that
+re-checks `profiles.is_admin = true` and the verified admin email. That is why
+the page never calls `sb.from("coupons")` — only:
+
+| RPC | Purpose |
+| --- | --- |
+| `admin_list_coupons()` | every coupon + live `usedCount`, `remainingUses`, `revenuePaise`, `isExpired` |
+| `admin_upsert_coupon(...)` | create or update a code (keyed by `p_code`) |
+| `admin_toggle_coupon(p_code, p_is_active)` | pause / re-activate |
+| `admin_delete_coupon(p_code)` | delete — or return `{ deleted: false, deactivated: true }` and pause the coupon when paid redemptions already exist, so audit history survives |
+
+Behaviour worth knowing:
+
+- **Codes are permanent.** `admin_upsert_coupon` is keyed by the code, so the
+  code input locks while editing. To rename a campaign, delete and re-create.
+- **Pause state survives edits.** Creating a coupon sends
+  `p_is_active: true`; saving an edit re-sends the coupon's *current* state, so
+  editing a paused code does not silently re-activate it.
+- **Delete is safe.** The RPC's response decides the toast: a real delete, or
+  the "has paid redemptions → paused instead" message.
+- **Share links** are `https://pydebug.in/premium?coupon=CODE` (the user panel
+  reads `?coupon=` and auto-applies it at checkout).
+- **Validation** mirrors the SQL constraints: code 3–24 chars `[A-Z0-9_-]`,
+  discount integer 1–80, per-user 1–10, blank `max_uses` = unlimited,
+  expiry must be in the future (or "No expiry"), description capped at 160.
+- **Live price preview** uses the founding prices from `PYDEBUG_PLANS`
+  (`js/admin-common.js`) so a discount preview never drifts from checkout.
+
+The pure helpers (`CouponCore` in `js/admin-coupons.js`) are covered by
+`node --test tests/coupons.test.cjs`; `.preview/server.cjs` runs the page with
+seeded demo data and a mocked Supabase client for UI review (git-ignored).
+
 ## Keep in sync with the user panel
 
 - **Plan prices** (`js/admin-common.js` → `PYDEBUG_PLANS`) must match the
@@ -360,4 +404,4 @@ Insights and payment totals now paginate past PostgREST's response cap.
 Revenue uses the ledger's actual `amount_paise`, falling back to plan prices
 only for historical rows without an amount. Audit displays both server and
 panel ledger formats. Run regression checks with
-`node --test tests/admin-data.test.cjs`.
+`node --test tests/*.test.cjs`.
