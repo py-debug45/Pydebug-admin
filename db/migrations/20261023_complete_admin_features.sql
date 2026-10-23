@@ -302,15 +302,19 @@ create policy "Admins manage shared snippets"
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
--- 4. Admin RLS policies across all newer user-app tables
+-- 4. Admin table privileges and RLS policies across newer user-app tables
+-- PostgREST needs both SELECT privileges and an RLS policy. SELECT grants do
+-- not bypass RLS: learner/anon access remains restricted by existing policies.
 do $$
 begin
   if to_regclass('public.user_certificates') is not null then
+    execute 'grant select on public.user_certificates to authenticated';
     execute 'drop policy if exists "Admins can read all certificates" on public.user_certificates';
     execute 'create policy "Admins can read all certificates" on public.user_certificates for select using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.mock_attempts') is not null then
+    execute 'grant select on public.mock_attempts to authenticated';
     execute 'drop policy if exists "Admins can read all mock attempts" on public.mock_attempts';
     execute 'create policy "Admins can read all mock attempts" on public.mock_attempts for select using ((select public.is_admin()))';
   end if;
@@ -358,6 +362,7 @@ begin
   end if;
 
   if to_regclass('public.study_plans') is not null then
+    execute 'grant select on public.study_plans to authenticated';
     execute 'drop policy if exists "Admins can read all study plans" on public.study_plans';
     execute 'create policy "Admins can read all study plans" on public.study_plans for select using ((select public.is_admin()))';
   end if;
