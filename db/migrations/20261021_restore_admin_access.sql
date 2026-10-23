@@ -6,7 +6,8 @@ declare t text;
 begin
   foreach t in array array['profiles','problems','submissions','payment_grants','payments',
     'problem_discussions','discussion_likes','notifications','user_achievements',
-    'user_presence','admin_audit_log','admin_settings','ai_settings','ai_logs'] loop
+    'user_presence','admin_audit_log','admin_settings','ai_settings','ai_logs',
+    'user_certificates','mock_attempts','study_plans'] loop
     if to_regclass('public.' || t) is not null then
       execute format('alter table public.%I enable row level security', t);
       execute format('grant select on public.%I to authenticated', t);
