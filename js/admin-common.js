@@ -417,6 +417,7 @@ const ADMIN_NAV_ITEMS = [
   ["community.html", "💬  Community & Hub"],
   ["submissions.html", "</> Submissions"],
   ["payments.html", "₹  Payments"],
+  ["coupons.html", "🎟️  Coupons & Promos"],
   ["discussions.html", "◌  Discussions"],
   ["notifications.html", "🔔  Notifications"],
   ["ai.html", "🤖  AI Control"],
