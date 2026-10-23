@@ -18,19 +18,10 @@
   <aside class="admin-sidebar">
     <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
     <div class="admin-sidebar__tag">ADMIN PANEL</div>
-    <nav>
-      <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
-      <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
-      <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
-      <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
-      <a href="notifications.html" data-admin-nav="notifications.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Notifications</a>
-      <a href="ai.html" data-admin-nav="ai.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="8" height="8" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg> AI Control</a>
-<a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
-      <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
-    </nav>
+    <nav></nav>
     <div class="admin-sidebar__account">
       <span id="admin-name">...</span>
-      <button data-admin-logout aria-label="Log out" title="Log out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
     </div>
   </aside>
 
@@ -47,6 +38,7 @@
           <select id="problem-type">
             <option value="bug">Fix the Bug</option>
             <option value="question">Predict Output</option>
+            <option value="coding">Write Code (Test Cases)</option>
           </select>
         </div>
         <div class="field">
@@ -57,15 +49,29 @@
             <option value="hard">Hard</option>
           </select>
         </div>
+        <div class="field">
+          <label for="problem-status-input">Status</label>
+          <select id="problem-status-input">
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="flex:2">
+          <label for="problem-title-input">Title (English)</label>
+          <input type="text" id="problem-title-input" required placeholder="e.g. Off-by-one loop error">
+        </div>
+        <div class="field" style="flex:1">
+          <label for="problem-slug-input">URL Slug</label>
+          <input type="text" id="problem-slug-input" placeholder="auto-generated-from-title">
+        </div>
       </div>
 
       <div class="field">
-        <label for="problem-title-input">Title</label>
-        <input type="text" id="problem-title-input" required placeholder="e.g. Off-by-one loop error">
-      </div>
-
-      <div class="field">
-        <label for="problem-description">Description</label>
+        <label for="problem-description">Description (English)</label>
         <textarea id="problem-description" style="min-height:80px" placeholder="What the user needs to do..."></textarea>
       </div>
 
@@ -91,9 +97,20 @@
           <label for="problem-number-input">Problem number</label>
           <input type="number" id="problem-number-input" min="1" step="1" placeholder="e.g. 120">
         </div>
-        <div class="field checkbox-field" style="align-self:end;padding-bottom:10px">
+        <div class="field">
+          <label for="problem-battle-error">Error class (optional)</label>
+          <input type="text" id="problem-battle-error" placeholder="e.g. IndexError, TypeError">
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="field checkbox-field">
           <input type="checkbox" id="problem-premium">
-          <label for="problem-premium" style="margin:0">Mark as Premium</label>
+          <label for="problem-premium" style="margin:0">Mark as Premium ⭐</label>
+        </div>
+        <div class="field checkbox-field">
+          <input type="checkbox" id="problem-skip-notif">
+          <label for="problem-skip-notif" style="margin:0">Quiet publish (skip bell/push blast to all users)</label>
         </div>
       </div>
 
@@ -107,11 +124,39 @@
         <textarea id="expected-output" required style="min-height:80px" placeholder="Exact output text..."></textarea>
       </div>
 
+      <div class="field" id="test-cases-field" style="display:none">
+        <label for="problem-test-cases">Test cases JSON (for Write Code judge)</label>
+        <textarea id="problem-test-cases" class="mono" style="min-height:110px" placeholder='[{"call": "solve([1, 2, 3])", "expected": "6"}, {"call": "solve([])", "expected": "0"}]'></textarea>
+      </div>
+
       <div class="field">
-        <label>Hints</label>
+        <label for="problem-solution-code">Reference solution code (optional)</label>
+        <textarea id="problem-solution-code" class="mono" style="min-height:90px" placeholder="Clean reference Python solution for AI Teacher / editorial..."></textarea>
+      </div>
+
+      <div class="field">
+        <label>Hints (English)</label>
         <div id="hints-container"></div>
         <button type="button" id="add-hint-btn" class="btn btn--secondary btn--sm">+ Add hint</button>
       </div>
+
+      <details class="section-card" style="margin:18px 0;padding:14px 16px">
+        <summary style="cursor:pointer;font-weight:600">🇮🇳 Hindi / Hinglish Translation (optional)</summary>
+        <div style="margin-top:12px">
+          <div class="field">
+            <label for="problem-title-hi">Title (Hindi / Hinglish)</label>
+            <input type="text" id="problem-title-hi" placeholder="उदा. लूप में IndexError ठीक करें">
+          </div>
+          <div class="field">
+            <label for="problem-description-hi">Description (Hindi / Hinglish)</label>
+            <textarea id="problem-description-hi" style="min-height:70px" placeholder="यूज़र को क्या ठीक करना है..."></textarea>
+          </div>
+          <div class="field">
+            <label for="problem-hints-hi">Hints in Hindi (one per line)</label>
+            <textarea id="problem-hints-hi" style="min-height:80px" placeholder="Hint 1&#10;Hint 2&#10;Hint 3"></textarea>
+          </div>
+        </div>
+      </details>
 
       <button type="submit" class="btn btn--primary">Save Problem</button>
     </form>

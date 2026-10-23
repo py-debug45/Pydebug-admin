@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d111a">
+<meta name="robots" content="noindex, nofollow">
+<title>Certificates — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav></nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <div class="admin-eyebrow">VERIFIED CREDENTIALS</div>
+        <h1>Certificates</h1>
+      </div>
+      <div class="admin-topbar__actions">
+        <a href="https://pydebug.in/certificates" target="_blank" rel="noopener" class="btn btn--secondary btn--sm">Public verify page ↗</a>
+        <button class="btn btn--secondary btn--sm" id="refresh-certs-btn">↻ Refresh</button>
+        <button class="btn btn--secondary btn--sm" id="export-certs-btn">Export CSV</button>
+      </div>
+    </div>
+
+    <div id="certs-hint"></div>
+
+    <div class="admin-stats-row">
+      <div class="stat-card"><div class="value" id="cert-total">0</div><div class="label">Total issued</div><div class="sub">all 4 tiers</div></div>
+      <div class="stat-card"><div class="value value--green" id="cert-active">0</div><div class="label">Valid &amp; active</div><div class="sub">publicly verifiable</div></div>
+      <div class="stat-card"><div class="value" id="cert-revoked">0</div><div class="label">Revoked</div><div class="sub">permanently invalidated</div></div>
+      <div class="stat-card"><div class="value value--mint" id="cert-bronze">0</div><div class="label">🥉 Bronze</div><div class="sub">free earned tier</div></div>
+      <div class="stat-card"><div class="value value--mint" id="cert-pro-tiers">0</div><div class="label">🥈🥇💎 Pro tiers</div><div class="sub">Silver · Gold · Diamond</div></div>
+    </div>
+
+    <div class="admin-cols" style="margin-top:0;margin-bottom:18px">
+      <div class="chart-card">
+        <h3>Issued by tier</h3>
+        <div id="chart-cert-tiers"><div class="chart-empty">Loading...</div></div>
+      </div>
+      <div class="section-card">
+        <h3>Public ID verifier</h3>
+        <p class="muted" style="font-size:0.84rem;margin:4px 0 12px">Paste any exact certificate ID (e.g. <code>PYD-BR-2026-...</code>) to jump directly to its snapshot record.</p>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="field" style="flex:1;margin:0">
+            <input type="text" id="quick-verify-input" placeholder="PYD-BR-2026-...">
+          </div>
+          <button type="button" class="btn btn--primary btn--sm" id="quick-verify-btn">Check ID</button>
+        </div>
+        <div id="quick-verify-result" style="margin-top:12px;font-size:0.84rem"></div>
+      </div>
+    </div>
+
+    <div class="admin-toolbar">
+      <input type="text" id="cert-search" placeholder="Search by certificate ID, learner name or email...">
+      <select id="cert-filter-tier">
+        <option value="all">All tiers</option>
+        <option value="bronze">🥉 Bronze</option>
+        <option value="silver">🥈 Silver</option>
+        <option value="gold">🥇 Gold</option>
+        <option value="diamond">💎 Diamond</option>
+      </select>
+      <select id="cert-filter-status">
+        <option value="all">All statuses</option>
+        <option value="active">Valid only</option>
+        <option value="revoked">Revoked only</option>
+      </select>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Issued</th>
+            <th>Verify ID</th>
+            <th>Learner</th>
+            <th>Tier</th>
+            <th>Recorded Evidence</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="certs-tbody"></tbody>
+      </table>
+    </div>
+    <div id="certs-pagination" class="pagination-bar"></div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="cert-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <h2 id="cert-modal-title">Certificate Snapshot</h2>
+      <button class="modal__close" id="cert-modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal__meta" id="cert-modal-meta"></div>
+    <div id="cert-modal-kpis" class="kv-grid"></div>
+    <pre class="code-block" id="cert-modal-json" style="max-height:240px;overflow:auto"></pre>
+  </div>
+</div>
+
+<script src="js/vendor/supabase.min.js" defer></script>
+<script src="js/admin-boot.js" defer></script>
+<script src="js/supabaseClient.js" defer></script>
+<script src="js/utils.js" defer></script>
+<script src="js/admin-icons.js" defer></script>
+<script src="js/admin-common.js" defer></script>
+<script src="js/admin-charts.js" defer></script>
+<script src="js/admin-export.js" defer></script>
+<script src="js/admin-certificates.js" defer></script>
+</body>
+</html>

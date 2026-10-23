@@ -93,16 +93,22 @@ table.admin-table tbody tr { transition: background-color .16s ease; }
 
 
 .admin-sidebar {
-  width: 220px;
+  width: 228px;
   flex-shrink: 0;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-subtle);
-  padding: 22px 14px;
+  padding: 20px 12px;
   position: sticky;
   top: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
+}
+.admin-sidebar nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .admin-sidebar__logo {
   font-family: var(--font-mono);
@@ -1206,6 +1212,85 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
     transition-duration: .001ms !important;
   }
 }
+
+/* ---------- Tabbed workspaces, tier badges & hygiene cards ---------- */
+.admin-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 20px;
+  background: rgba(15, 20, 30, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 13px;
+}
+.admin-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: 500 0.86rem var(--font-body);
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.admin-tab:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.admin-tab.is-active {
+  color: var(--accent-mint);
+  background: rgba(79, 209, 197, 0.12);
+  border-color: rgba(79, 209, 197, 0.28);
+  font-weight: 600;
+}
+.admin-tab__count {
+  font-size: 0.72rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+.admin-tab-panel { display: none; }
+.admin-tab-panel.is-active { display: block; }
+
+.tag--tier { font-weight: 600; letter-spacing: 0.01em; }
+.tag--tier-bronze { background: rgba(205, 127, 50, 0.16); color: #e29b56; border: 1px solid rgba(205, 127, 50, 0.34); }
+.tag--tier-silver { background: rgba(192, 202, 218, 0.15); color: #d6deeb; border: 1px solid rgba(192, 202, 218, 0.32); }
+.tag--tier-gold { background: rgba(246, 196, 69, 0.16); color: #f6c445; border: 1px solid rgba(246, 196, 69, 0.36); }
+.tag--tier-diamond { background: rgba(99, 218, 255, 0.15); color: #7ce2ff; border: 1px solid rgba(99, 218, 255, 0.36); }
+
+.hygiene-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  margin-bottom: 22px;
+  background: linear-gradient(135deg, rgba(227, 179, 65, 0.08), rgba(79, 209, 197, 0.06));
+  border: 1px solid rgba(227, 179, 65, 0.26);
+  border-radius: 14px;
+}
+.hygiene-banner__copy h3 { margin: 0 0 4px; font-size: 0.98rem; }
+.hygiene-banner__copy p { margin: 0; font-size: 0.83rem; color: var(--text-muted); }
+.hygiene-banner__actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.kv-box {
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.kv-box span { display: block; font-size: 0.72rem; color: var(--text-muted); margin-bottom: 3px; }
+.kv-box strong { font-size: 0.96rem; color: var(--text-primary); }
 
 /* ========================================================================
    Responsive — SINGLE source of truth (keep this block last)

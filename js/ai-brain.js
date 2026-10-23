@@ -2619,25 +2619,38 @@ async function AI_fetchProblemsIndex() {
    6. RUNNERS (called by watcher + AI page buttons)
    ============================================================ */
 
-// --- 6a. Moderate discussions: delete abusive/spam, warn offender ---
+function AI_slugFor(title, num) {
+  const base = String(title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64) || "python-problem";
+  return num ? `${base}-${num}` : `${base}-${Date.now().toString(36).slice(-4)}`;
+}
+
+// --- 6a. Moderate discussions + community chat: delete abusive/spam, warn offender ---
 async function AI_runModeration(opts) {
   opts = opts || {};
   const settings = AI_getSettings();
-  const { data, error } = await sb
-    .from("problem_discussions")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(400);
-  if (error) throw error;
-  const comments = data || [];
+  const [discRes, chatRes] = await Promise.all([
+    sb.from("problem_discussions").select("*").order("created_at", { ascending: false }).limit(400),
+    sb.from("community_posts").select("*").order("created_at", { ascending: false }).limit(300).then((r) => r, () => ({ data: [] })),
+  ]);
+  if (discRes.error) throw discRes.error;
+  const comments = discRes.data || [];
+  const chatPosts = chatRes.data || [];
   let removed = 0, warned = 0;
 
   const flagged = comments
     .map((c) => ({ c, scan: AI_scanText(c.content) }))
     .filter((x) => x.scan.flagged);
-  if (!flagged.length) {
-    if (!opts.auto) AI_log("moderation_scan", `Scanned ${comments.length} comments — all clean.`, "success");
-    return { scanned: comments.length, removed: 0, warned: 0 };
+  const flaggedChat = chatPosts
+    .map((cp) => ({ cp, scan: AI_scanText((cp.content || "") + "\n" + (cp.python_code || "")) }))
+    .filter((x) => x.scan.flagged);
+
+  if (!flagged.length && !flaggedChat.length) {
+    if (!opts.auto) AI_log("moderation_scan", `Scanned ${comments.length} comments + ${chatPosts.length} chat posts — all clean.`, "success");
+    return { scanned: comments.length + chatPosts.length, removed: 0, warned: 0 };
   }
 
   // Problem titles for warning messages.
@@ -2663,12 +2676,12 @@ async function AI_runModeration(opts) {
       const soft = scan.severity === "mild";
       const { error: nErr } = await sb.from("notifications").insert({
         user_id: c.user_id,
-        type: "announcement", // user-panel bell compatible
+        type: "announcement",
         title: soft ? "⚠️ Please keep discussions friendly" : "⚠️ Your comment was removed",
         message: soft
           ? `Hi! Your comment on "${titleById[c.problem_id] || "a problem"}" was removed because it contained rude language. Please keep PyDebug discussions respectful and kind.`
           : `Hi! Your comment on "${titleById[c.problem_id] || "a problem"}" was automatically removed for ${label} (${scan.hits.slice(0, 3).join(", ")}). Repeated violations may lead to suspension — please keep it clean.`,
-        link: "/problems.html",
+        link: "/problems",
         is_read: false,
       });
       if (!nErr) {
@@ -2677,8 +2690,35 @@ async function AI_runModeration(opts) {
       }
     }
   }
-  AI_log("moderation_scan", `Scanned ${comments.length} comments — removed ${removed}, warned ${warned}.`, removed ? "warn" : "success");
-  return { scanned: comments.length, removed, warned };
+
+  for (const { cp, scan } of flaggedChat) {
+    const label = scan.severity === "spam" ? "spam" : scan.severity === "severe" ? "abusive language" : "rude language";
+    const { error: delErr } = await sb.rpc("admin_delete_community_post", {
+      target_post_id: cp.id,
+      delete_reason: `AI moderation (${label})`,
+    });
+    if (delErr) {
+      AI_log("moderation_error", `Could not delete community post ${cp.id}: ${delErr.message}`, "error");
+      continue;
+    }
+    removed++;
+    AI_log("moderation_removed", `Deleted ${label} community chat post (${scan.hits.slice(0, 3).join(", ")}).`, "warn");
+
+    if (settings.warn_user && cp.user_id) {
+      const { error: nErr } = await sb.from("notifications").insert({
+        user_id: cp.user_id,
+        type: "announcement",
+        title: "⚠️ Your community post was removed",
+        message: `Hi! Your post in PyDebug Community was removed for ${label} (${scan.hits.slice(0, 3).join(", ")}). Please keep community chat respectful and focused on Python learning.`,
+        link: "/community",
+        is_read: false,
+      });
+      if (!nErr) warned++;
+    }
+  }
+
+  AI_log("moderation_scan", `Scanned ${comments.length + chatPosts.length} items — removed ${removed}, warned ${warned}.`, removed ? "warn" : "success");
+  return { scanned: comments.length + chatPosts.length, removed, warned };
 }
 
 // --- Premium mix: mark ~premium_percent of a batch as Premium (hard first) ---
@@ -2730,14 +2770,17 @@ async function AI_generateProblems(count, opts) {
       p.difficulty = tpl.difficulty;
       const v = AI_validateProblem(p, fps);
       if (!v.ok) continue;
+      const numNext = ++nextNum;
       payload = {
         type: p.type,
         title: p.title,
+        slug: AI_slugFor(p.title, numNext),
         description: p.description,
         difficulty: p.difficulty,
         topic: p.topic,
-        problem_number: ++nextNum,
+        problem_number: numNext,
         is_premium: false,
+        admin_skip_notification: true,
         starter_code: p.starter_code,
         expected_output: p.expected_output,
         hints: p.hints,
@@ -2929,7 +2972,7 @@ async function AI_broadcastNewProblems(added) {
   let sent = 0;
   for (let i = 0; i < recipients.length; i += CHUNK) {
     const chunk = recipients.slice(i, i + CHUNK).map((uid) => ({
-      user_id: uid, type: "new_problem", title, message, link: "/problems.html", is_read: false,
+      user_id: uid, type: "new_problem", title, message, link: "/problems", is_read: false,
     }));
     const { error } = await sb.from("notifications").insert(chunk);
     if (error) throw error;
@@ -2960,7 +3003,7 @@ async function AI_runWelcome(opts) {
       type: "announcement",
       title: "👋 Welcome to PyDebug!",
       message: "Welcome aboard! Start with an Easy problem, fix your first bug and earn XP. Stuck? Use hints — good luck!",
-      link: "/problems.html",
+      link: "/problems",
       is_read: false,
     }));
     const { error: insErr } = await sb.from("notifications").insert(chunk);

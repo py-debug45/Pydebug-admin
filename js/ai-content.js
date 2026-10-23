@@ -59,10 +59,11 @@ async function AI_runGapFill(count, opts) {
       try { p = tpl.make(); } catch (e) { continue; }
       p.type = tpl.type; p.topic = tpl.topic; p.difficulty = tpl.difficulty;
       if (!AI_validateProblem(p, fps).ok) continue;
+      const numNext = ++nextNum;
       payload = {
-        type: p.type, title: p.title, description: p.description,
-        difficulty: p.difficulty, topic: p.topic, problem_number: ++nextNum,
-        is_premium: false, starter_code: p.starter_code,
+        type: p.type, title: p.title, slug: AI_slugFor(p.title, numNext), description: p.description,
+        difficulty: p.difficulty, topic: p.topic, problem_number: numNext,
+        is_premium: false, admin_skip_notification: true, starter_code: p.starter_code,
         expected_output: p.expected_output, hints: p.hints,
         _gap: `${cell.topic}/${cell.diff} (had ${cell.count})`, _bug: p.bug,
       };
@@ -110,10 +111,11 @@ async function AI_generateVariations(problemId, n) {
       try { p = tpl.make(); } catch (e) { continue; }
       p.type = tpl.type; p.topic = tpl.topic; p.difficulty = tpl.difficulty;
       if (!AI_validateProblem(p, fps).ok) continue;
+      const numNext = ++nextNum;
       payload = {
-        type: p.type, title: p.title, description: p.description,
-        difficulty: p.difficulty, topic: p.topic, problem_number: ++nextNum,
-        is_premium: !!src.is_premium, starter_code: p.starter_code,
+        type: p.type, title: p.title, slug: AI_slugFor(p.title, numNext), description: p.description,
+        difficulty: p.difficulty, topic: p.topic, problem_number: numNext,
+        is_premium: !!src.is_premium, admin_skip_notification: true, starter_code: p.starter_code,
         expected_output: p.expected_output, hints: p.hints,
       };
       fps.add(AI_fingerprint(p.starter_code, p.expected_output));
@@ -134,7 +136,7 @@ async function AI_qualityReport() {
   let from = 0;
   for (;;) {
     const { data, error } = await sb.from("problems")
-      .select("id,problem_number,title,type,difficulty,topic,hints,starter_code,expected_output,description")
+      .select("id,problem_number,title,slug,type,difficulty,topic,hints,starter_code,expected_output,description")
       .order("problem_number", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
@@ -143,15 +145,21 @@ async function AI_qualityReport() {
     from += PAGE;
   }
   const numCount = {};
+  const titleCount = {};
   probs.forEach((p) => {
     if (p.problem_number !== null && p.problem_number !== undefined) {
       numCount[p.problem_number] = (numCount[p.problem_number] || 0) + 1;
     }
+    const tk = String(p.title || "").trim().toLowerCase();
+    if (tk) titleCount[tk] = (titleCount[tk] || 0) + 1;
   });
   const issues = [];
   probs.forEach((p) => {
     const flags = [];
-    if (!String(p.title || "").trim() || String(p.title).trim().length < 8) flags.push("short-title");
+    const tk = String(p.title || "").trim().toLowerCase();
+    if (!tk || tk.length < 8) flags.push("short-title");
+    else if (titleCount[tk] > 1) flags.push(`dup-title:${titleCount[tk]}x`);
+    if (!String(p.slug || "").trim()) flags.push("no-slug");
     if (!String(p.description || "").trim() || String(p.description).trim().length < 10) flags.push("weak-description");
     if (!String(p.starter_code || "").trim()) flags.push("no-code");
     if (!String(p.expected_output || "").trim()) flags.push("no-output");
@@ -366,10 +374,11 @@ async function AI_runBulkImport(validated) {
   let added = 0;
   for (const r of good) {
     const p = r.payload;
+    const numNext = ++nextNum;
     const { error } = await sb.from("problems").insert({
-      type: p.type, title: p.title, description: p.description,
-      difficulty: p.difficulty, topic: p.topic, problem_number: ++nextNum,
-      is_premium: !!p.is_premium, starter_code: p.starter_code,
+      type: p.type, title: p.title, slug: AI_slugFor(p.title, numNext), description: p.description,
+      difficulty: p.difficulty, topic: p.topic, problem_number: numNext,
+      is_premium: !!p.is_premium, admin_skip_notification: true, starter_code: p.starter_code,
       expected_output: p.expected_output, hints: p.hints.filter((h) => String(h || "").trim()),
     });
     if (!error) added++;

@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0d111a">
 <meta name="robots" content="noindex, nofollow">
-<title>Payments — PyDebug Admin</title>
+<title>Payments &amp; Entitlements — PyDebug Admin</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/dashboard.css">
 <link rel="stylesheet" href="css/responsive.css">
@@ -18,26 +18,21 @@
   <aside class="admin-sidebar">
     <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
     <div class="admin-sidebar__tag">ADMIN PANEL</div>
-    <nav>
-      <a href="dashboard.html" data-admin-nav="dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg> Dashboard</a>
-      <a href="submissions.html" data-admin-nav="submissions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Submissions</a>
-      <a href="payments.html" data-admin-nav="payments.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</a>
-      <a href="discussions.html" data-admin-nav="discussions.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Discussions</a>
-      <a href="notifications.html" data-admin-nav="notifications.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Notifications</a>
-      <a href="ai.html" data-admin-nav="ai.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="8" height="8" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg> AI Control</a>
-<a href="problem-form.html" data-admin-nav="problem-form.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Problem</a>
-      <a href="users.html" data-admin-nav="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17 14c2.5 0 5 1.5 5 4"/></svg> Users</a>
-    </nav>
+    <nav></nav>
     <div class="admin-sidebar__account">
       <span id="admin-name">...</span>
-      <button data-admin-logout aria-label="Log out" title="Log out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
     </div>
   </aside>
 
   <main class="admin-main">
     <div class="admin-topbar">
-      <h1>Payments</h1>
+      <div>
+        <div class="admin-eyebrow">REVENUE, CHECKOUT FUNNEL &amp; ENTITLEMENTS</div>
+        <h1>Payments</h1>
+      </div>
       <div class="admin-topbar__actions">
+        <button class="btn btn--secondary btn--sm" id="refresh-payments-btn">↻ Refresh</button>
         <button class="btn btn--secondary btn--sm" id="export-payments-btn">Export CSV</button>
       </div>
     </div>
@@ -45,45 +40,132 @@
     <div id="payments-hint"></div>
 
     <div class="admin-stats-row">
-      <div class="stat-card"><div class="value" id="pay-total-revenue">₹0</div><div class="label">Total revenue</div><div class="sub">verified payments only</div></div>
-      <div class="stat-card"><div class="value value--mint" id="pay-month-revenue">₹0</div><div class="label">Revenue (last 30 days)</div></div>
-      <div class="stat-card"><div class="value value--green" id="pay-count">0</div><div class="label">Payments</div></div>
+      <div class="stat-card"><div class="value" id="pay-total-revenue">₹0</div><div class="label">Total revenue</div><div class="sub">verified Razorpay grants</div></div>
+      <div class="stat-card"><div class="value value--mint" id="pay-month-revenue">₹0</div><div class="label">Revenue (30 days)</div></div>
+      <div class="stat-card"><div class="value value--green" id="pay-count">0</div><div class="label">Paid conversions</div></div>
+      <div class="stat-card"><div class="value" id="pay-orders-dropoff">0</div><div class="label">Abandoned checkouts</div><div class="sub" id="pay-conversion-rate">— conversion</div></div>
       <div class="stat-card"><div class="value" id="pay-avg">₹0</div><div class="label">Avg. payment</div></div>
     </div>
 
-    <div class="admin-cols" style="margin-top:0;margin-bottom:14px">
-      <div class="chart-card"><h3>Revenue by plan</h3><div id="chart-plan-revenue"><div class="chart-empty">Loading...</div></div></div>
-      <div class="chart-card"><h3>Payments by plan</h3><div id="chart-plan-count"><div class="chart-empty">Loading...</div></div></div>
+    <div class="admin-tabs" role="tablist" aria-label="Payment views">
+      <button type="button" class="admin-tab is-active" data-pay-tab="grants">✅ Verified Grants <span class="admin-tab__count" id="tab-count-grants">0</span></button>
+      <button type="button" class="admin-tab" data-pay-tab="orders">🛒 Checkout Funnel &amp; Drop-offs <span class="admin-tab__count" id="tab-count-orders">0</span></button>
+      <button type="button" class="admin-tab" data-pay-tab="entitlements">🎟️ Product Entitlements <span class="admin-tab__count" id="tab-count-entitlements">0</span></button>
     </div>
 
-    <div class="admin-toolbar">
-      <input type="text" id="payment-search" placeholder="Search by user email/name, payment id or order id...">
-      <select id="payment-filter-plan">
-        <option value="all">All plans</option>
-        <option value="monthly">Monthly (₹99)</option>
-        <option value="sixmonth">6-Month (₹499)</option>
-        <option value="yearly">Yearly (₹799)</option>
-      </select>
-    </div>
+    <!-- TAB 1: VERIFIED GRANTS -->
+    <section class="admin-tab-panel is-active" id="panel-grants">
+      <div class="admin-cols" style="margin-top:0;margin-bottom:14px">
+        <div class="chart-card"><h3>Revenue by plan</h3><div id="chart-plan-revenue"><div class="chart-empty">Loading...</div></div></div>
+        <div class="chart-card"><h3>Payments by plan</h3><div id="chart-plan-count"><div class="chart-empty">Loading...</div></div></div>
+      </div>
 
-    <div class="admin-table-wrap">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>User</th>
-            <th>Plan</th>
-            <th>Amount</th>
-            <th>Premium until</th>
-            <th>Payment ID</th>
-          </tr>
-        </thead>
-        <tbody id="payments-tbody"></tbody>
-      </table>
-    </div>
-    <div class="load-more-wrap">
-      <button class="btn btn--secondary btn--sm" id="payments-load-more" style="display:none">Load more</button>
-    </div>
+      <div class="admin-toolbar">
+        <input type="text" id="payment-search" placeholder="Search by user email/name, payment id or order id...">
+        <select id="payment-filter-plan">
+          <option value="all">All plans</option>
+          <option value="monthly">Pro Monthly (₹149)</option>
+          <option value="sixmonth">Pro 6-Month (₹499)</option>
+          <option value="yearly">Pro Yearly (₹999)</option>
+          <option value="exam_pack">Exam Pack (₹1,499)</option>
+        </select>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>User</th>
+              <th>Plan</th>
+              <th>Amount</th>
+              <th>Premium until</th>
+              <th>Payment ID</th>
+            </tr>
+          </thead>
+          <tbody id="payments-tbody"></tbody>
+        </table>
+      </div>
+      <div class="load-more-wrap">
+        <button class="btn btn--secondary btn--sm" id="payments-load-more" style="display:none">Load more</button>
+      </div>
+    </section>
+
+    <!-- TAB 2: CHECKOUT ORDERS & ABANDONED DROP-OFFS -->
+    <section class="admin-tab-panel" id="panel-orders">
+      <div class="admin-toolbar">
+        <input type="text" id="order-search" placeholder="Search order id, user email or name...">
+        <select id="order-filter-state">
+          <option value="all">All Razorpay orders</option>
+          <option value="abandoned">Abandoned / Unpaid only</option>
+          <option value="converted">Converted (Paid) only</option>
+        </select>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>User</th>
+              <th>Product / Plan</th>
+              <th>Order Amount</th>
+              <th>Status</th>
+              <th>Order ID</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 3: PRODUCT ENTITLEMENTS (PRO & EXAM PACK) -->
+    <section class="admin-tab-panel" id="panel-entitlements">
+      <div class="section-card" style="margin-bottom:18px;max-width:680px">
+        <h3>Grant product entitlement</h3>
+        <p class="muted" style="font-size:0.83rem;margin:4px 0 12px">Grant or extend <code>pro</code> or <code>exam_pack</code> access for a learner by email or user UUID.</p>
+        <form id="entitlement-form" class="admin-form">
+          <div class="form-row">
+            <div class="field" style="flex:2">
+              <label for="ent-user">Learner Email or UUID</label>
+              <input type="text" id="ent-user" required placeholder="learner@example.com">
+            </div>
+            <div class="field">
+              <label for="ent-product">Product</label>
+              <select id="ent-product">
+                <option value="exam_pack">Exam Pack</option>
+                <option value="pro">Pro</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ent-days">Duration</label>
+              <select id="ent-days">
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="365" selected>1 year (365d)</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn--primary btn--sm">Grant entitlement</button>
+        </form>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Learner</th>
+              <th>Product Key</th>
+              <th>Expires At</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="entitlements-tbody"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 

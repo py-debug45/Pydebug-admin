@@ -1,7 +1,5 @@
-// admin-user-detail.js — single-user overview + management actions.
+// admin-user-detail.js — single-user overview + management + account moderation + certificates/mocks.
 
-// Badge catalogue — mirrors the user panel's js/achievements.js.
-// (Unlocks are computed server-side; the admin panel only displays them.)
 const PYDEBUG_BADGES = [
   { id: "first-blood", emoji: "🩸", title: "First Blood" },
   { id: "getting-started", emoji: "🌱", title: "Getting Started" },
@@ -50,6 +48,7 @@ onAdminReady(async () => {
   document.getElementById("display-name-save-btn").addEventListener("click", saveDisplayName);
   document.getElementById("premium-grant-btn").addEventListener("click", grantPremium);
   document.getElementById("premium-revoke-btn").addEventListener("click", revokePremium);
+  document.getElementById("mod-save-btn").addEventListener("click", saveModeration);
   document.getElementById("admin-toggle-btn").addEventListener("click", toggleAdmin);
   document.getElementById("reset-progress-btn").addEventListener("click", resetProgress);
 });
@@ -63,7 +62,7 @@ async function reloadUser() {
   }
   detailProfile = data;
   renderProfile();
-  await Promise.all([renderUserSubmissions(), renderBadges()]);
+  await Promise.all([renderUserSubmissions(), renderBadges(), renderCertsAndMocks()]);
 }
 
 function renderProfile() {
@@ -77,6 +76,7 @@ function renderProfile() {
 
   const premium = isPremiumUser(p);
   document.getElementById("detail-badges").innerHTML =
+    accountStatusBadge(p) + " " +
     (premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>') +
     (p.is_admin ? ' <span class="tag tag--info">Admin</span>' : "");
 
@@ -96,17 +96,58 @@ function renderProfile() {
     cur.textContent = "No active premium.";
   }
 
+  const st = p.status || "active";
+  document.getElementById("mod-status").value = ["active", "muted", "suspended", "banned"].includes(st) ? st : "active";
+  document.getElementById("mod-reason").value = p.status_reason || "";
+  const modCur = document.getElementById("moderation-current");
+  if (st === "active") {
+    modCur.textContent = "Account is active and in good standing.";
+  } else {
+    modCur.textContent = `Status: ${st.toUpperCase()}${p.status_until ? " until " + fmtDateTime(p.status_until) : " (indefinite)"}${p.status_reason ? " · " + p.status_reason : ""}`;
+  }
+
   const toggleBtn = document.getElementById("admin-toggle-btn");
   toggleBtn.textContent = p.is_admin ? "Remove admin" : "Make admin";
   toggleBtn.disabled = p.is_admin && p.id === currentAdmin.id;
   toggleBtn.title = toggleBtn.disabled ? "You can't remove your own admin access" : "";
 }
 
+async function renderCertsAndMocks() {
+  const card = document.getElementById("detail-certs-card");
+  const [certRes, mockRes] = await Promise.all([
+    sb.from("user_certificates").select("verify_id, tier_id, issued_at, revoked_at").eq("user_id", detailUserId).order("issued_at", { ascending: false }),
+    sb.from("mock_attempts").select("paper_id, status, score, percentile, submitted_at, started_at").eq("user_id", detailUserId).order("started_at", { ascending: false }).limit(10),
+  ]);
+
+  const certs = certRes.data || [];
+  const mocks = mockRes.data || [];
+  document.getElementById("detail-cert-count").textContent = `${certs.length} certs · ${mocks.length} mocks`;
+
+  const certHtml = certs.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">${certs.map((c) => `
+        <a href="certificates.html" class="badge-chip badge-chip--on" style="text-decoration:none">
+          ${tierBadge(c.tier_id)}
+          <span class="mono" style="font-size:0.76rem">${escapeHtml(c.verify_id)}</span>
+          ${c.revoked_at ? '<span class="tag tag--failed">Revoked</span>' : ""}
+        </a>`).join("")}</div>`
+    : `<div class="muted" style="font-size:0.84rem;margin-bottom:10px">No certificates issued yet.</div>`;
+
+  const mockHtml = mocks.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:8px">${mocks.map((m) => `
+        <span class="badge-chip">
+          <strong>${escapeHtml(m.paper_id)}</strong>
+          <span>${m.score != null ? Number(m.score) + "%" : escapeHtml(m.status || "started")}</span>
+        </span>`).join("")}</div>`
+    : `<div class="muted" style="font-size:0.84rem">No mock test attempts yet.</div>`;
+
+  card.innerHTML = certHtml + mockHtml;
+}
+
 async function renderBadges() {
   const grid = document.getElementById("detail-badges-grid");
   const { data, error } = await sb.from("user_achievements").select("achievement_id, unlocked_at").eq("user_id", detailUserId);
   if (error) {
-    grid.innerHTML = `<div class="chart-empty">Couldn't load badges (${escapeHtml(error.message)}). Run <code>supabase-admin-setup.sql</code>, then reload.</div>`;
+    grid.innerHTML = `<div class="chart-empty">Couldn't load badges (${escapeHtml(error.message)}).</div>`;
     return;
   }
   const unlocked = {};
@@ -133,7 +174,7 @@ async function renderUserSubmissions() {
     .limit(20);
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-row">Couldn't load submissions (${escapeHtml(error.message)}). Run <code>supabase-admin-setup.sql</code>, then reload.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-row">Couldn't load submissions (${escapeHtml(error.message)}).</td></tr>`;
     return;
   }
 
@@ -154,17 +195,12 @@ async function renderUserSubmissions() {
     (problems || []).forEach((p) => { titles[p.id] = p.title; });
   }
 
-  tbody.innerHTML = "";
-  rows.forEach((s) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="muted" title="${escapeHtml(fmtDateTime(s.created_at))}">${escapeHtml(timeAgo(s.created_at))}</td>
-      <td>${escapeHtml(titles[s.problem_id] || "—")}</td>
-      <td>${statusBadge(s.status || "attempted")}</td>
-      <td class="muted" title="${escapeHtml(fmtDateTime(s.solved_at))}">${s.solved_at ? escapeHtml(timeAgo(s.solved_at)) : "—"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+  tbody.innerHTML = rows.map((s) => `<tr>
+    <td class="muted" title="${escapeHtml(fmtDateTime(s.created_at))}">${escapeHtml(timeAgo(s.created_at))}</td>
+    <td>${escapeHtml(titles[s.problem_id] || "—")}</td>
+    <td>${statusBadge(s.status || "attempted")}</td>
+    <td class="muted" title="${escapeHtml(fmtDateTime(s.solved_at))}">${s.solved_at ? escapeHtml(timeAgo(s.solved_at)) : "—"}</td>
+  </tr>`).join("");
 }
 
 async function updateProfile(updates, successMsg, btn) {
@@ -186,7 +222,6 @@ async function addXp(e) {
     showToast("Enter an XP amount first", "error");
     return;
   }
-  // Mirror a real solve: both leaderboards move together.
   await updateProfile(
     { xp: (detailProfile.xp ?? 0) + delta, monthly_xp: (detailProfile.monthly_xp ?? 0) + delta },
     `XP updated (${delta > 0 ? "+" : ""}${delta} total + monthly)`,
@@ -233,6 +268,34 @@ async function grantPremium(e) {
 
 async function revokePremium(e) {
   await updateProfile({ is_premium: false, premium_expires_at: null }, "Premium revoked", e.target);
+}
+
+async function saveModeration(e) {
+  const status = document.getElementById("mod-status").value;
+  const dur = document.getElementById("mod-duration").value;
+  const reason = document.getElementById("mod-reason").value.trim();
+
+  if (status !== "active" && detailProfile.id === currentAdmin.id) {
+    showToast("You cannot mute, suspend, or ban your own admin account", "error");
+    return;
+  }
+
+  let until = null;
+  if (status !== "active") {
+    if (dur === "24h") until = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    else if (dur === "7d") until = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+    else if (dur === "30d") until = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  }
+
+  await updateProfile(
+    {
+      status,
+      status_until: status === "active" ? null : until,
+      status_reason: status === "active" ? null : (reason || null),
+    },
+    `Account status set to ${status}`,
+    e.target
+  );
 }
 
 async function toggleAdmin(e) {
