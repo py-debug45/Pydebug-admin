@@ -303,83 +303,127 @@ create policy "Admins manage shared snippets"
   with check ((select public.is_admin()));
 
 -- 4. Admin table privileges and RLS policies across newer user-app tables
--- PostgREST needs both SELECT privileges and an RLS policy. SELECT grants do
--- not bypass RLS: learner/anon access remains restricted by existing policies.
+-- PostgREST needs both table privileges and an RLS policy. Table grants do
+-- not bypass RLS: learner/anon access remains restricted by policies.
+revoke all on public.institute_enquiries from anon, authenticated;
+grant insert on public.institute_enquiries to anon, authenticated;
+grant select, update, delete on public.institute_enquiries to authenticated;
+
+revoke all on public.learner_feedback from anon, authenticated;
+grant select on public.learner_feedback to anon, authenticated;
+grant insert, update, delete on public.learner_feedback to authenticated;
+
+revoke all on public.classrooms from anon, authenticated;
+grant select, insert, update, delete on public.classrooms to authenticated;
+
+revoke all on public.classroom_members from anon, authenticated;
+grant select, insert, delete on public.classroom_members to authenticated;
+
+revoke all on public.shared_snippets from anon, authenticated;
+grant select on public.shared_snippets to anon, authenticated;
+grant insert, update, delete on public.shared_snippets to authenticated;
+
 do $$
 begin
   if to_regclass('public.user_certificates') is not null then
+    execute 'revoke all on public.user_certificates from anon';
     execute 'grant select on public.user_certificates to authenticated';
     execute 'drop policy if exists "Admins can read all certificates" on public.user_certificates';
-    execute 'create policy "Admins can read all certificates" on public.user_certificates for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read all certificates" on public.user_certificates for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.mock_attempts') is not null then
+    execute 'revoke all on public.mock_attempts from anon';
     execute 'grant select on public.mock_attempts to authenticated';
     execute 'drop policy if exists "Admins can read all mock attempts" on public.mock_attempts';
-    execute 'create policy "Admins can read all mock attempts" on public.mock_attempts for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read all mock attempts" on public.mock_attempts for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.battles') is not null then
+    execute 'revoke all on public.battles from anon';
+    execute 'grant select on public.battles to authenticated';
     execute 'drop policy if exists "Admins can read all battles" on public.battles';
-    execute 'create policy "Admins can read all battles" on public.battles for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read all battles" on public.battles for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.community_posts') is not null then
+    execute 'grant select, insert, update, delete on public.community_posts to authenticated';
     execute 'drop policy if exists "Admins can read all community posts" on public.community_posts';
-    execute 'create policy "Admins can read all community posts" on public.community_posts for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read all community posts" on public.community_posts for select to authenticated using ((select public.is_admin()))';
     execute 'drop policy if exists "Admins can delete community posts" on public.community_posts';
-    execute 'create policy "Admins can delete community posts" on public.community_posts for delete using ((select public.is_admin()))';
+    execute 'create policy "Admins can delete community posts" on public.community_posts for delete to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.discussion_flags') is not null then
+    execute 'revoke all on public.discussion_flags from anon';
+    execute 'grant select, insert, update, delete on public.discussion_flags to authenticated';
     execute 'drop policy if exists "Admins can manage discussion flags" on public.discussion_flags';
-    execute 'create policy "Admins can manage discussion flags" on public.discussion_flags for all using ((select public.is_admin())) with check ((select public.is_admin()))';
+    execute 'create policy "Admins can manage discussion flags" on public.discussion_flags for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.payment_orders') is not null then
+    execute 'revoke all on public.payment_orders from anon';
+    execute 'grant select on public.payment_orders to authenticated';
     execute 'drop policy if exists "Admins can read all payment orders" on public.payment_orders';
-    execute 'create policy "Admins can read all payment orders" on public.payment_orders for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read all payment orders" on public.payment_orders for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.product_entitlements') is not null then
+    execute 'revoke all on public.product_entitlements from anon';
+    execute 'grant select, insert, update, delete on public.product_entitlements to authenticated';
     execute 'drop policy if exists "Admins can manage product entitlements" on public.product_entitlements';
-    execute 'create policy "Admins can manage product entitlements" on public.product_entitlements for all using ((select public.is_admin())) with check ((select public.is_admin()))';
+    execute 'create policy "Admins can manage product entitlements" on public.product_entitlements for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.push_announcements') is not null then
+    execute 'revoke all on public.push_announcements from anon';
+    execute 'grant select, insert, update, delete on public.push_announcements to authenticated';
     execute 'drop policy if exists "Admins can manage push announcements" on public.push_announcements';
-    execute 'create policy "Admins can manage push announcements" on public.push_announcements for all using ((select public.is_admin())) with check ((select public.is_admin()))';
+    execute 'create policy "Admins can manage push announcements" on public.push_announcements for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.push_subscriptions') is not null then
+    execute 'grant select on public.push_subscriptions to authenticated';
     execute 'drop policy if exists "Admins can read push subscriptions" on public.push_subscriptions';
-    execute 'create policy "Admins can read push subscriptions" on public.push_subscriptions for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read push subscriptions" on public.push_subscriptions for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.push_broadcast_log') is not null then
+    execute 'revoke all on public.push_broadcast_log from anon';
+    execute 'grant select on public.push_broadcast_log to authenticated';
     execute 'drop policy if exists "Admins can read push broadcast log" on public.push_broadcast_log';
-    execute 'create policy "Admins can read push broadcast log" on public.push_broadcast_log for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read push broadcast log" on public.push_broadcast_log for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.study_plans') is not null then
+    execute 'revoke all on public.study_plans from anon';
     execute 'grant select on public.study_plans to authenticated';
     execute 'drop policy if exists "Admins can read all study plans" on public.study_plans';
-    execute 'create policy "Admins can read all study plans" on public.study_plans for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read all study plans" on public.study_plans for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.referrals') is not null then
+    execute 'revoke all on public.referrals from anon';
+    execute 'grant select, insert, update, delete on public.referrals to authenticated';
     execute 'drop policy if exists "Admins can manage referrals" on public.referrals';
-    execute 'create policy "Admins can manage referrals" on public.referrals for all using ((select public.is_admin())) with check ((select public.is_admin()))';
+    execute 'create policy "Admins can manage referrals" on public.referrals for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()))';
+  end if;
+
+  if to_regclass('public.admin_audit_log') is not null then
+    execute 'revoke all on public.admin_audit_log from anon';
+    execute 'grant select, insert on public.admin_audit_log to authenticated';
   end if;
 
   if to_regclass('public.teacher_history') is not null then
+    execute 'grant select on public.teacher_history to authenticated';
     execute 'drop policy if exists "Admins can read teacher history" on public.teacher_history';
-    execute 'create policy "Admins can read teacher history" on public.teacher_history for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read teacher history" on public.teacher_history for select to authenticated using ((select public.is_admin()))';
   end if;
 
   if to_regclass('public.teacher_usage') is not null then
+    execute 'grant select on public.teacher_usage to authenticated';
     execute 'drop policy if exists "Admins can read teacher usage" on public.teacher_usage';
-    execute 'create policy "Admins can read teacher usage" on public.teacher_usage for select using ((select public.is_admin()))';
+    execute 'create policy "Admins can read teacher usage" on public.teacher_usage for select to authenticated using ((select public.is_admin()))';
   end if;
 end $$;
 

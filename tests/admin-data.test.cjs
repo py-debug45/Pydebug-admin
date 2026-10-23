@@ -116,3 +116,76 @@ test('badges render account moderation, certificate tiers, and statuses safely',
   assert.match(ctx.statusBadge('revoked'), /tag--failed/);
   assert.match(ctx.statusBadge('pilot_active'), /tag--solved/);
 });
+
+test('every table queried by the admin panel has authenticated grants and RLS policies in migrations', () => {
+  const path = require('node:path');
+  const jsFiles = fs.readdirSync('js').filter((f) => f.endsWith('.js'));
+  const queriedTables = new Set();
+  const insertedTables = new Set();
+
+  for (const file of jsFiles) {
+    const code = fs.readFileSync(path.join('js', file), 'utf8');
+    for (const m of code.matchAll(/fetchAdminRows\(\s*["']([^"']+)["']/g)) {
+      queriedTables.add(m[1]);
+    }
+    for (const m of code.matchAll(/\.from\(\s*["']([^"']+)["']\s*\)/g)) {
+      queriedTables.add(m[1]);
+    }
+    for (const m of code.matchAll(/\.from\(\s*["']([^"']+)["']\s*\)\.insert\(/g)) {
+      insertedTables.add(m[1]);
+    }
+  }
+
+  assert.ok(queriedTables.has('user_certificates'));
+  assert.ok(queriedTables.has('mock_attempts'));
+  assert.ok(queriedTables.has('study_plans'));
+
+  const restoreSql = fs.readFileSync('db/migrations/20261021_restore_admin_access.sql', 'utf8');
+  const completeSql = fs.readFileSync('db/migrations/20261023_complete_admin_features.sql', 'utf8');
+  const fixGrantsSql = fs.readFileSync('db/migrations/20261023_fix_admin_table_grants.sql', 'utf8');
+  const combinedSql = `${restoreSql}\n${completeSql}\n${fixGrantsSql}`;
+
+  for (const table of queriedTables) {
+    assert.match(
+      restoreSql,
+      new RegExp(`'${table}'`),
+      `Expected ${table} to be included in 20261021_restore_admin_access.sql`
+    );
+    const hasExplicitGrant =
+      new RegExp(`grant\\s+[^;]*select[^;]*on\\s+public\\.${table}\\s+to\\s+[^;]*authenticated`, 'i').test(combinedSql) ||
+      new RegExp(`'${table}'`).test(restoreSql);
+    assert.ok(hasExplicitGrant, `Expected SELECT grant for ${table}`);
+  }
+
+  // Specifically guard the tables that previously threw "permission denied for table ..."
+  for (const criticalTable of [
+    'user_certificates',
+    'mock_attempts',
+    'study_plans',
+    'payment_orders',
+    'product_entitlements',
+    'push_announcements',
+    'push_broadcast_log',
+    'discussion_flags',
+    'referrals',
+    'admin_audit_log',
+  ]) {
+    assert.match(
+      fixGrantsSql,
+      new RegExp(`grant\\s+[^;]*select[^;]*on\\s+public\\.${criticalTable}\\s+to\\s+authenticated`, 'i'),
+      `Expected explicit SELECT grant for ${criticalTable} in 20261023_fix_admin_table_grants.sql`
+    );
+    assert.match(
+      fixGrantsSql,
+      new RegExp(`revoke\\s+all\\s+on\\s+public\\.${criticalTable}\\s+from\\s+anon`, 'i'),
+      `Expected anon privilege revocation on ${criticalTable}`
+    );
+  }
+
+  // Client-side inserts (including writeAdminAudit and Web Push broadcast queue) must have INSERT privilege
+  for (const table of insertedTables) {
+    const grantedInFix = new RegExp(`grant\\s+[^;]*insert[^;]*on\\s+public\\.${table}\\s+to\\s+[^;]*authenticated`, 'i').test(combinedSql);
+    const grantedInLoop = new RegExp(`'${table}'`).test(restoreSql.slice(restoreSql.indexOf('-- Writes are granted')));
+    assert.ok(grantedInFix || grantedInLoop, `Expected INSERT grant for client-inserted table ${table}`);
+  }
+});

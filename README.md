@@ -338,11 +338,16 @@ learner-table grants or disabling RLS:
 1. `db/migrations/20261021_restore_admin_access.sql`
 2. `db/migrations/20261021_admin_compatibility.sql`
 3. `db/migrations/20261023_complete_admin_features.sql`
+4. `db/migrations/20261023_fix_admin_table_grants.sql`
 
-The latest migration is idempotent; re-run it after pulling updates. It grants
-`SELECT` to `authenticated` for `user_certificates`, `mock_attempts`, and
-`study_plans` in addition to creating their admin-read RLS policies. Both are
-required by PostgREST, and the grants do not bypass RLS.
+The latest migrations are idempotent; re-run them after pulling updates. They
+grant the required `authenticated` table privileges (`SELECT` / append-only
+`INSERT` / admin CRUD) across `user_certificates`, `mock_attempts`,
+`study_plans`, `payment_orders`, `product_entitlements`, `push_announcements`,
+`push_broadcast_log`, `discussion_flags`, `referrals`, and `admin_audit_log`,
+revoke excess `anon` privileges on newer tables, and reload PostgREST's schema
+cache. Both table grants and RLS policies are required by PostgREST, and table
+grants never bypass RLS.
 
 Together, these migrations restore authenticated **admin-only** policies for
 panel queries; anonymous visitors and ordinary learners cannot read answer

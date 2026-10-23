@@ -65,16 +65,28 @@ function commUserLabel(uid) {
 async function loadCommunityHub() {
   const btn = document.getElementById("refresh-comm-btn");
   btn.disabled = true;
+  const hintEl = document.getElementById("comm-hint");
+  if (hintEl) hintEl.innerHTML = "";
 
-  const [postsRes, flagsRes, clsRes, memRes, enqRes, fbRes, refRes] = await Promise.allSettled([
-    fetchAdminRows("community_posts", "*", "created_at"),
-    fetchAdminRows("discussion_flags", "*", "created_at"),
-    fetchAdminRows("classrooms", "*", "created_at"),
-    fetchAdminRows("classroom_members", "classroom_id, student_id", "joined_at"),
-    fetchAdminRows("institute_enquiries", "*", "created_at"),
-    fetchAdminRows("learner_feedback", "*", "created_at"),
-    fetchAdminRows("referrals", "*", "created_at"),
-  ]);
+  const sources = [
+    ["community_posts", fetchAdminRows("community_posts", "*", "created_at")],
+    ["discussion_flags", fetchAdminRows("discussion_flags", "*", "created_at")],
+    ["classrooms", fetchAdminRows("classrooms", "*", "created_at")],
+    ["classroom_members", fetchAdminRows("classroom_members", "classroom_id, student_id", "joined_at")],
+    ["institute_enquiries", fetchAdminRows("institute_enquiries", "*", "created_at")],
+    ["learner_feedback", fetchAdminRows("learner_feedback", "*", "created_at")],
+    ["referrals", fetchAdminRows("referrals", "*", "created_at")],
+  ];
+  const results = await Promise.allSettled(sources.map(([, promise]) => promise));
+  const [postsRes, flagsRes, clsRes, memRes, enqRes, fbRes, refRes] = results;
+
+  const warnings = results
+    .map((res, idx) => (res.status === "rejected" ? `${sources[idx][0]}: ${res.reason?.message || "unavailable"}` : null))
+    .filter(Boolean);
+  if (warnings.length && hintEl) {
+    hintEl.innerHTML =
+      `<div class="admin-hint">Some community tables could not be read (${escapeHtml(warnings.join("; "))}). Run the latest SQL migration in Supabase.</div>`;
+  }
 
   allPosts = postsRes.status === "fulfilled" ? postsRes.value.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) : [];
   allFlags = flagsRes.status === "fulfilled" ? flagsRes.value.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) : [];

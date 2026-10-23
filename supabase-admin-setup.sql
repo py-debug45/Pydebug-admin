@@ -356,11 +356,12 @@ end $$;
 
 -- =============================================================
 -- 14. Full 2026 Feature & RPC Upgrade
--- Run these two migrations in order after this base script:
+-- Run these three migrations in order after this base script:
 --   1. db/migrations/20261021_admin_compatibility.sql
 --   2. db/migrations/20261023_complete_admin_features.sql
+--   3. db/migrations/20261023_fix_admin_table_grants.sql
 -- They add Write-Code problem columns, URL slugs, trigger deduplication,
 -- Certificates / Mock Tests / Battles / Study Plans / Community /
--- Classrooms / Institute Enquiries / Feedback / Web Push RLS policies,
+-- Classrooms / Institute Enquiries / Feedback / Web Push grants + RLS policies,
 -- and the 6 SECURITY DEFINER admin RPCs.
 -- =============================================================

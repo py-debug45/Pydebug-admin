@@ -4,10 +4,12 @@ grant usage on schema public to authenticated;
 do $$
 declare t text;
 begin
-  foreach t in array array['profiles','problems','submissions','payment_grants','payments',
-    'problem_discussions','discussion_likes','notifications','user_achievements',
+  foreach t in array array['profiles','problems','submissions','payment_grants','payment_orders','payments',
+    'product_entitlements','problem_discussions','discussion_likes','discussion_flags','community_posts',
+    'notifications','push_subscriptions','push_announcements','push_broadcast_log','user_achievements',
     'user_presence','admin_audit_log','admin_settings','ai_settings','ai_logs',
-    'user_certificates','mock_attempts','study_plans'] loop
+    'user_certificates','mock_attempts','battles','study_plans',
+    'classrooms','classroom_members','institute_enquiries','learner_feedback','referrals'] loop
     if to_regclass('public.' || t) is not null then
       execute format('alter table public.%I enable row level security', t);
       execute format('grant select on public.%I to authenticated', t);
@@ -21,15 +23,20 @@ end $$;
 do $$
 declare t text; op text;
 begin
-  foreach t in array array['problems','problem_discussions','discussion_likes','notifications','submissions','user_presence','admin_settings','ai_settings','ai_logs'] loop
+  foreach t in array array['problems','problem_discussions','discussion_likes','discussion_flags','notifications','push_announcements','product_entitlements','submissions','user_presence','admin_audit_log','admin_settings','ai_settings','ai_logs'] loop
     if to_regclass('public.' || t) is not null then
       foreach op in array array['insert','update','delete'] loop
-        -- Submission/presence/like management needs deletion only.
+        -- Submission/presence/like management needs deletion only; audit log is append-only.
         if t in ('submissions','user_presence','discussion_likes') and op <> 'delete' then continue; end if;
+        if t = 'admin_audit_log' and op <> 'insert' then continue; end if;
         execute format('grant %s on public.%I to authenticated', op, t);
         execute format('drop policy if exists %I on public.%I', 'Admin panel ' || op, t);
         if op = 'insert' then
-          execute format('create policy %I on public.%I for insert to authenticated with check ((select public.is_admin()))', 'Admin panel ' || op, t);
+          if t = 'admin_audit_log' then
+            execute 'create policy "Admin panel insert" on public.admin_audit_log for insert to authenticated with check ((select public.is_admin()) and admin_id = (select auth.uid()))';
+          else
+            execute format('create policy %I on public.%I for insert to authenticated with check ((select public.is_admin()))', 'Admin panel ' || op, t);
+          end if;
         elsif op = 'update' then
           execute format('create policy %I on public.%I for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()))', 'Admin panel ' || op, t);
         else
