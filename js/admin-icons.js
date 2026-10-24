@@ -57,6 +57,10 @@
     trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM12 13v5M8 21h8M5 5H3v2a4 4 0 0 0 4 4M19 5h2v2a4 4 0 0 1-4 4"/>',
     zap: '<path d="M13 2 3 14h8l-1 8 10-12h-8z"/>',
     snow: '<path d="M12 2v20M4.9 6l14.2 12M19.1 6 4.9 18M5 12h14"/><path d="m12 2 1 2M12 2 11 4M12 22l1-2M12 22l-1-2"/>',
+    // Sidebar navigation glyphs — kept here so the admin menu never mixes
+    // emoji with text symbols (they rendered at different sizes and weights).
+    certificate: '<circle cx="12" cy="9" r="5.5"/><path d="m8.6 13.4-.9 7.1 4.3-1.9 4.3 1.9-.9-7.1"/>',
+    chat: '<path d="M8 9h8M8 13h5"/><path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z"/>',
   };
 
   const aliases = {
