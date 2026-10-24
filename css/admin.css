@@ -1206,8 +1206,18 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
 
 /* Long pages: let the browser skip layout/paint for cards that are far
    below the fold until they scroll into view. */
-.dashboard-bottom-grid .section-card,
-.admin-table-wrap { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+.dashboard-bottom-grid .section-card { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+
+/* Desktop-only optimization. Below 860px every admin table restructures into
+   stacked block cards, and its rows are re-rendered via innerHTML after async
+   RPC loads. With paint containment active, Chrome Android leaves the freshly
+   swapped subtrees unpainted — the cards keep their correct layout size but
+   their text/labels/buttons show up blank (reported on the Coupons Studio),
+   sometimes only partially, until an unrelated resize forces a repaint.
+   Keep content-visibility where it is stable: wide desktop tables. */
+@media (min-width: 861px) {
+  .admin-table-wrap { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+}
 
 @media (hover: none) {
   /* Touch devices get no hover state, so these transitions only ever cost
@@ -2111,7 +2121,10 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
   .founder-quick-bar { margin: -8px 0 14px; padding: 7px 10px; }
   .founder-quick-bar__label { display: none; }
 
-  /* Mobile card layout for Creator Affiliate & Coupon Studio table */
+  /* Mobile card layout for Creator Affiliate & Coupon Studio table.
+     The desktop table (min-width: 960px) becomes one stacked card per
+     coupon: a prominent code/creator header, then label ⇄ value rows. */
+  table.coupon-table { min-width: 0; }
   table.coupon-table thead { display: none; }
   table.coupon-table,
   table.coupon-table tbody,
@@ -2126,35 +2139,109 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
   }
   table.coupon-table td[data-label] {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 6px 0;
+    gap: 4px 10px;
+    padding: 7px 0;
     border-bottom: 1px solid rgba(148, 163, 184, .1);
   }
   table.coupon-table td[data-label]:last-child { border-bottom: 0; padding-bottom: 0; }
   table.coupon-table td[data-label]::before {
     content: attr(data-label);
-    flex: 0 0 118px;
-    font-size: .7rem;
+    flex: 0 0 104px;
+    max-width: 104px;
+    font-size: .68rem;
     font-weight: 700;
+    line-height: 1.35;
     text-transform: uppercase;
-    letter-spacing: .05em;
+    letter-spacing: .04em;
     color: var(--text-muted);
-    padding-top: 2px;
+    padding-top: 3px;
   }
-  table.coupon-table td.coupon-cell-code,
-  table.coupon-table td.coupon-cell-actions {
+  /* Every value stacks in the right column (under each other) instead of
+     scattering across the row — discount + sub, countdown + full date,
+     revenue + order count all stay grouped and right-aligned. */
+  table.coupon-table td[data-label] > * {
+    flex: 0 0 calc(100% - 114px);
+    min-width: 0;
+    margin-left: auto;
+    text-align: right;
+  }
+  /* Long sub-lines (e.g. "31 Oct 2026, 11:22 pm") wrap instead of pushing
+     the card past the screen edge. */
+  table.coupon-table .coupon-cell-sub {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* ---- Code / creator header: the first thing the eye should find ---- */
+  table.coupon-table td.coupon-cell-code {
     flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
     gap: 6px;
+    padding-bottom: 11px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(148, 163, 184, .18);
   }
   table.coupon-table td.coupon-cell-code::before,
   table.coupon-table td.coupon-cell-actions::before {
     flex: none;
+    max-width: none;
+  }
+  table.coupon-table td.coupon-cell-code > * {
+    flex: none;
+    width: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+  table.coupon-table .coupon-cell-code { min-width: 0; }
+  table.coupon-table .coupon-code {
+    align-self: flex-start;
+    padding: 4px 11px;
+    font-size: .98rem;
+    letter-spacing: .08em;
+  }
+  table.coupon-table .coupon-desc {
+    max-width: 100%;
+    margin-top: 0;
+    font-size: .78rem;
+    line-height: 1.45;
+    color: #b6c1d4;
+    white-space: normal;
+  }
+  table.coupon-table .coupon-flags { justify-content: flex-start; }
+
+  /* Usage bar + payout calculator fill the value column */
+  table.coupon-table .coupon-usage { min-width: 0; width: 100%; }
+  table.coupon-table .coupon-usage__text { text-align: right; }
+  table.coupon-table .payout-calc {
+    min-width: 0;
+    width: 100%;
+    align-items: flex-end;
+  }
+  table.coupon-table .payout-calc__controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  /* ---- Share & action buttons: full-width, labelled tap targets ---- */
+  table.coupon-table td.coupon-cell-actions {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 6px;
+  }
+  table.coupon-table td.coupon-cell-actions > * {
+    flex: none;
+    width: 100%;
+    margin-left: 0;
+    text-align: left;
   }
   .coupon-share-kit,
   .coupon-actions { width: 100%; max-width: none; }
   .coupon-share-kit .btn { width: 100%; justify-content: center; }
+  .coupon-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
 
 @media (max-width: 560px) {
