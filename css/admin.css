@@ -1556,6 +1556,379 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
 }
 
 /* ========================================================================
+   Founder Quick Tools · Sachet Monetization · Creator Studio · Campus Tags
+   ======================================================================== */
+
+/* Founder Quick-Launch Bar (1-tap external links to pydebug.in studios) */
+.founder-quick-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: -6px 0 18px;
+  background: rgba(19, 25, 37, .92);
+  border: 1px solid var(--admin-line);
+  border-radius: 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.founder-quick-bar::-webkit-scrollbar { display: none; }
+.founder-quick-bar__label {
+  flex: 0 0 auto;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-right: 4px;
+}
+.founder-quick-bar__links {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 0 auto;
+}
+.founder-quick-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 11px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: #e6eefc;
+  text-decoration: none;
+  background: #182030;
+  border: 1px solid rgba(124, 152, 198, .22);
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: border-color .15s ease, background .15s ease;
+}
+.founder-quick-pill:hover {
+  background: #1f2a3f;
+  border-color: rgba(79, 209, 197, .5);
+  color: #ffffff;
+}
+.founder-quick-pill span {
+  font-size: .72rem;
+  color: var(--accent-mint);
+}
+
+/* Sidebar Founder Quick Tools block */
+.admin-sidebar__quick {
+  margin-top: 14px;
+  padding: 10px 8px 6px;
+  border-top: 1px solid var(--admin-line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.admin-sidebar__quick-title {
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--text-muted);
+  padding: 0 8px 4px;
+}
+.admin-sidebar__quick-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 9px;
+  font-size: .78rem;
+  color: #cbd5e1;
+  text-decoration: none;
+  border-radius: 9px;
+  transition: background .15s ease, color .15s ease;
+}
+.admin-sidebar__quick-link:hover {
+  background: rgba(79, 209, 197, .1);
+  color: #ffffff;
+}
+
+/* Pro 7-Day Pass (weekly) badge */
+.tag--weekly {
+  background: rgba(52, 211, 153, .16);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, .34);
+}
+
+/* Sachet Conversion Metric Card */
+.sachet-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.sachet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.sachet-panel {
+  padding: 13px 14px;
+  background: rgba(13, 18, 28, .72);
+  border: 1px solid var(--admin-line);
+  border-radius: 13px;
+}
+.sachet-panel--upgrade {
+  background: rgba(20, 36, 36, .48);
+  border-color: rgba(79, 209, 197, .28);
+}
+.sachet-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  font-size: .77rem;
+  color: var(--text-muted);
+}
+.sachet-panel__head strong {
+  color: var(--text-primary);
+  font-size: .82rem;
+}
+.sachet-split-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: .8rem;
+}
+.sachet-split-count {
+  color: var(--text-muted);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.sachet-split-rev {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+.sachet-upgrade-kpi {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--accent-mint);
+  line-height: 1.15;
+  margin: 4px 0 6px;
+}
+.sachet-upgrade-kpi small {
+  font-size: .78rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+.sachet-upgrade-sub {
+  font-size: .8rem;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+.sachet-upgrade-meta {
+  font-size: .73rem;
+  color: var(--text-muted);
+}
+
+/* 1-Tap Quick Campaign Presets (Creator Partner / Campus CR / Exam Flash) */
+.campaign-presets-bar {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 0 0 18px;
+  padding: 11px 12px;
+  background: rgba(13, 18, 28, .66);
+  border: 1px solid var(--admin-line);
+  border-radius: 13px;
+}
+.campaign-presets-bar__label {
+  align-self: center;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+.campaign-preset-btn {
+  flex: 1 1 190px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 12px;
+  text-align: left;
+  color: var(--text-primary);
+  background: #171f2e;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.campaign-preset-btn:hover,
+.campaign-preset-btn.is-active {
+  background: rgba(79, 209, 197, .12);
+  border-color: rgba(79, 209, 197, .55);
+}
+.campaign-preset-btn strong { font-size: .84rem; }
+.campaign-preset-btn small { font-size: .72rem; color: var(--text-muted); }
+
+/* Affiliate Payout Calculator & Creator Share Kit */
+.payout-calc {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 132px;
+}
+.coupon-payout-val {
+  font-size: .92rem;
+  color: #fbbf24;
+  font-family: var(--font-mono);
+}
+.payout-calc__controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.coupon-comm-select,
+.coupon-comm-custom {
+  height: 29px;
+  padding: 2px 7px;
+  font-size: .75rem;
+  color: var(--text-primary);
+  background: #131926;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 7px;
+}
+.coupon-comm-custom { width: 64px; }
+
+.coupon-share-kit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.coupon-tracking-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.coupon-tracking-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.coupon-track-pill {
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: .69rem;
+  color: #cbd5e1;
+  background: #141b28;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.coupon-track-pill:hover {
+  border-color: var(--accent-mint);
+  color: #ffffff;
+}
+.coupon-whatsapp-btn {
+  justify-content: center;
+}
+
+/* Campus Leaderboard Pills & Moderation Controls */
+.campus-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  font-size: .74rem;
+  font-weight: 600;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, .14);
+  border: 1px solid rgba(96, 165, 250, .32);
+  border-radius: 999px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.campus-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 10px;
+  font-size: .8rem;
+  color: var(--text-muted);
+}
+.campus-summary-strip strong { color: var(--text-primary); }
+.campus-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.user-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.user-name-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.user-name-link {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+.user-name-link:hover { text-decoration: underline; }
+.campus-mod-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.campus-mod-btn {
+  padding: 2px 7px;
+  font-size: .69rem;
+  color: #cbd5e1;
+  background: #151c29;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.campus-mod-btn:hover {
+  border-color: var(--accent-mint);
+  color: #ffffff;
+}
+.campus-mod-btn--clear {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, .3);
+}
+.campus-mod-btn--clear:hover {
+  background: rgba(239, 68, 68, .15);
+  border-color: #f87171;
+  color: #fecaca;
+}
+.campus-mod-btn--subtle {
+  opacity: .75;
+}
+.campus-detail-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+/* ========================================================================
    Responsive — SINGLE source of truth (keep this block last)
    ======================================================================== */
 @media (max-width: 860px) {
@@ -1659,6 +2032,54 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
   .detail-head__badges { margin-left: 0; }
   .admin-password-card { padding: 27px 20px 20px; border-radius: 22px; }
   .ai-bell { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .sachet-grid { grid-template-columns: 1fr; }
+  .founder-quick-bar { margin: -8px 0 14px; padding: 7px 10px; }
+  .founder-quick-bar__label { display: none; }
+
+  /* Mobile card layout for Creator Affiliate & Coupon Studio table */
+  table.coupon-table thead { display: none; }
+  table.coupon-table,
+  table.coupon-table tbody,
+  table.coupon-table tr,
+  table.coupon-table td { display: block; width: 100%; }
+  table.coupon-table tr[data-coupon-row] {
+    margin-bottom: 12px;
+    padding: 12px 13px;
+    background: #131926;
+    border: 1px solid var(--admin-line);
+    border-radius: 14px;
+  }
+  table.coupon-table td[data-label] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, .1);
+  }
+  table.coupon-table td[data-label]:last-child { border-bottom: 0; padding-bottom: 0; }
+  table.coupon-table td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 118px;
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--text-muted);
+    padding-top: 2px;
+  }
+  table.coupon-table td.coupon-cell-code,
+  table.coupon-table td.coupon-cell-actions {
+    flex-direction: column;
+    gap: 6px;
+  }
+  table.coupon-table td.coupon-cell-code::before,
+  table.coupon-table td.coupon-cell-actions::before {
+    flex: none;
+  }
+  .coupon-share-kit,
+  .coupon-actions { width: 100%; max-width: none; }
+  .coupon-share-kit .btn { width: 100%; justify-content: center; }
 }
 
 @media (max-width: 560px) {
@@ -1685,4 +2106,7 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
   table.admin-table { font-size: .83rem; }
   table.admin-table th, table.admin-table td { padding: 10px 12px; }
   .row-actions { gap: 6px; }
+  .campaign-presets-bar { padding: 9px 10px; }
+  .campaign-preset-btn { flex: 1 1 100%; }
+  .founder-quick-pill { min-height: 36px; font-size: .76rem; }
 }

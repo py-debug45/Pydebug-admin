@@ -219,3 +219,70 @@ test('empty and malformed coupon lists never break the summary', () => {
   assert.equal(core.couponUsage({}).percent, 0);
   assert.equal(core.couponStatus({}, NOW).key, 'active');
 });
+
+test('weekly 7-day pass base price (₹49 / 4900 paise) is included in live coupon preview', () => {
+  const preview = core.couponPricePreview(20);
+  assert.equal(preview.weekly.basePaise, 4900);
+  assert.equal(preview.weekly.finalPaise, 3920);
+  assert.equal(preview.weekly.savePaise, 980);
+  assert.equal(core.formatCouponRupees(preview.weekly.finalPaise), '₹39.20');
+});
+
+test('1-tap campaign presets configure Creator Partner, Campus CR, and Exam Week Flash accurately', () => {
+  const creator = core.getCampaignPresetValues('creator', NOW);
+  assert.equal(creator.discountPercent, 20);
+  assert.equal(creator.applicablePlan, 'all');
+  assert.equal(creator.firstPurchaseOnly, false);
+  assert.equal(creator.description, 'Creator: @handle (30% share)');
+  assert.equal(creator.expiresAtIso, null);
+
+  const cr = core.getCampaignPresetValues('campus_cr', NOW);
+  assert.equal(cr.discountPercent, 25);
+  assert.equal(cr.applicablePlan, 'all');
+  assert.equal(cr.firstPurchaseOnly, true);
+  assert.equal(cr.description, 'Campus CR: College Name');
+
+  const flash = core.getCampaignPresetValues('exam_flash', NOW);
+  assert.equal(flash.discountPercent, 30);
+  assert.equal(flash.applicablePlan, 'all');
+  assert.equal(flash.firstPurchaseOnly, true);
+  assert.equal(flash.description, '48h Flash Sale');
+  assert.equal(flash.expiresAtIso, '2026-10-25T12:00:00.000Z');
+});
+
+test('affiliate payout calculator computes commissions from verified revenuePaise / 100', () => {
+  assert.equal(core.inferCommissionPercent('Creator: @aarav (30% share)'), 30);
+  assert.equal(core.inferCommissionPercent('Campus CR: DAVV Indore'), 25);
+  assert.equal(core.inferCommissionPercent('Creator: @riya (35% commission)'), 35);
+  assert.equal(core.inferCommissionPercent('48h Flash Sale'), 20);
+
+  const p30 = core.calculateAffiliatePayout(149000, 30); // ₹1,490 * 30% = ₹447
+  assert.equal(p30.revenueInr, 1490);
+  assert.equal(p30.payoutPaise, 44700);
+  assert.equal(core.formatCouponRupees(p30.payoutPaise), '₹447');
+
+  const p25 = core.calculateAffiliatePayout(3920, 25); // ₹39.20 * 25% = ₹9.80
+  assert.equal(p25.payoutPaise, 980);
+  assert.equal(core.formatCouponRupees(p25.payoutPaise), '₹9.80');
+});
+
+test('tracking links and Hinglish Creator WhatsApp Kit cover /premium, /today, /mock-test and ₹39-₹49 7d pass', () => {
+  const links = core.couponTrackingLinks('DAVV25');
+  assert.equal(links.premium, 'https://pydebug.in/premium?coupon=DAVV25');
+  assert.equal(links.today, 'https://pydebug.in/today?coupon=DAVV25');
+  assert.equal(links.mockTest, 'https://pydebug.in/mock-test?coupon=DAVV25');
+
+  const bundle = core.formatCouponTrackingLinks('DAVV25');
+  assert.match(bundle, /https:\/\/pydebug\.in\/premium\?coupon=DAVV25/);
+  assert.match(bundle, /https:\/\/pydebug\.in\/today\?coupon=DAVV25/);
+  assert.match(bundle, /https:\/\/pydebug\.in\/mock-test\?coupon=DAVV25/);
+
+  const kit = core.buildCreatorWhatsAppKit({ code: 'RAHUL20', discountPercent: 20 });
+  assert.match(kit, /RAHUL20/);
+  assert.match(kit, /20% OFF/);
+  assert.match(kit, /https:\/\/pydebug\.in\/premium\?coupon=RAHUL20/);
+  assert.match(kit, /https:\/\/pydebug\.in\/today\?coupon=RAHUL20/);
+  assert.match(kit, /https:\/\/pydebug\.in\/mock-test\?coupon=RAHUL20/);
+  assert.match(kit, /₹39–₹49/);
+  assert.match(kit, /₹149\/month/);
+});

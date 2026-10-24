@@ -1,10 +1,21 @@
-# Local sandbox preview harness (mock Supabase + static server) — never deployed
-.preview/
-
-# OS / editor noise
+# OS junk
 .DS_Store
 Thumbs.db
-*.swp
-.idea/
+
+# Editors
 .vscode/
+.idea/
+*.swp
+
+# Local environment secrets — never commit
+.env
+.env.*
+*.env
+
+# Generated static build & preview scratch
+_site/
+.preview/
+
+# Node (only if you add tooling locally — project has no build step)
 node_modules/
+npm-debug.log*

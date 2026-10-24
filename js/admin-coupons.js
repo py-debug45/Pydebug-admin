@@ -23,16 +23,57 @@ const COUPON_MIN_DISCOUNT = 1;
 const COUPON_MAX_DISCOUNT = 80;
 const COUPON_DESCRIPTION_MAX = 160;
 const COUPON_LINK_BASE = "https://pydebug.in/premium?coupon=";
+const COUPON_TODAY_LINK_BASE = "https://pydebug.in/today?coupon=";
+const COUPON_MOCK_LINK_BASE = "https://pydebug.in/mock-test?coupon=";
 
 // Live founding prices, in paise — keep in sync with PYDEBUG_PLANS in admin-common.js.
-const COUPON_BASE_PRICES = { monthly: 14900, yearly: 99900 };
+const COUPON_BASE_PRICES = { weekly: 4900, monthly: 14900, yearly: 99900 };
 const COUPON_PLAN_LABELS = {
   all: "All plans",
   yearly: "Pro Yearly only",
   monthly: "Pro Monthly only",
 };
-const COUPON_PLAN_SHORT = { all: "All plans", yearly: "Yearly", monthly: "Monthly" };
-const COUPON_EXPIRY_PRESETS = { "24h": 24 * 60 * 60 * 1000, "7d": 7 * 24 * 60 * 60 * 1000, "30d": 30 * 24 * 60 * 60 * 1000 };
+const COUPON_PLAN_SHORT = { all: "All plans (7d+M+Y)", yearly: "Yearly", monthly: "Monthly" };
+const COUPON_EXPIRY_PRESETS = {
+  "24h": 24 * 60 * 60 * 1000,
+  "48h": 48 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
+// 1-Tap Quick Campaign Presets for Creator Partners, Campus CRs, and Flash Sales.
+const COUPON_CAMPAIGN_PRESETS = {
+  creator: {
+    key: "creator",
+    label: "📹 Creator Partner",
+    discountPercent: 20,
+    applicablePlan: "all",
+    firstPurchaseOnly: false,
+    description: "Creator: @handle (30% share)",
+    expiryPreset: "none",
+    defaultCommission: 30,
+  },
+  campus_cr: {
+    key: "campus_cr",
+    label: "🎓 Campus CR",
+    discountPercent: 25,
+    applicablePlan: "all",
+    firstPurchaseOnly: true,
+    description: "Campus CR: College Name",
+    expiryPreset: "30d",
+    defaultCommission: 25,
+  },
+  exam_flash: {
+    key: "exam_flash",
+    label: "⚡ Exam Week Flash",
+    discountPercent: 30,
+    applicablePlan: "all",
+    firstPurchaseOnly: true,
+    description: "48h Flash Sale",
+    expiryPreset: "48h",
+    defaultCommission: 20,
+  },
+};
 
 // Uppercase + strip anything outside [A-Z0-9_-] (3–24 chars enforced at submit).
 function normalizeCouponCode(raw) {
@@ -150,6 +191,90 @@ function couponCountdown(iso, now) {
 
 function couponShareLink(code) {
   return COUPON_LINK_BASE + encodeURIComponent(String(code == null ? "" : code));
+}
+
+function couponTrackingLinks(code) {
+  const enc = encodeURIComponent(String(code == null ? "" : code));
+  return {
+    premium: COUPON_LINK_BASE + enc,
+    today: COUPON_TODAY_LINK_BASE + enc,
+    mockTest: COUPON_MOCK_LINK_BASE + enc,
+  };
+}
+
+function formatCouponTrackingLinks(code) {
+  const cleanCode = String(code == null ? "" : code).toUpperCase();
+  const links = couponTrackingLinks(cleanCode);
+  return [
+    `PyDebug Tracking Links (${cleanCode}):`,
+    `• Premium Checkout: ${links.premium}`,
+    `• Today's Wordle: ${links.today}`,
+    `• Live Mock Test: ${links.mockTest}`,
+  ].join("\n");
+}
+
+function getCampaignPresetValues(presetKey, now) {
+  const preset = COUPON_CAMPAIGN_PRESETS[presetKey];
+  if (!preset) return null;
+  const expiryIso = preset.expiryPreset === "none" ? null : couponPresetExpiryIso(preset.expiryPreset, now);
+  return {
+    ...preset,
+    expiresAtIso: expiryIso,
+    expiresAtLocal: expiryIso ? isoToLocalInputValue(expiryIso) : "",
+  };
+}
+
+function inferCommissionPercent(description) {
+  const desc = String(description == null ? "" : description);
+  const explicit = desc.match(/(\d{1,2}(?:\.\d+)?)\s*%\s*(?:share|comm|commission|payout)/i);
+  if (explicit) {
+    const n = Number(explicit[1]);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) return n;
+  }
+  if (/campus\s*cr/i.test(desc)) return 25;
+  if (/creator|influencer|affiliate|partner|@[\w.-]+/i.test(desc)) return 30;
+  return 20;
+}
+
+function calculateAffiliatePayout(revenuePaise, commissionPercent) {
+  const revPaise = Math.max(0, Math.round(Number(revenuePaise) || 0));
+  const rawPct = Number(commissionPercent);
+  const pct = Number.isFinite(rawPct) ? Math.min(100, Math.max(0, rawPct)) : 0;
+  const payoutPaise = Math.round((revPaise * pct) / 100);
+  return {
+    revenuePaise: revPaise,
+    revenueInr: revPaise / 100,
+    commissionPercent: pct,
+    payoutPaise,
+    payoutInr: payoutPaise / 100,
+  };
+}
+
+function buildCreatorWhatsAppKit(coupon) {
+  const c = coupon || {};
+  const code = String(c.code || "PYDEBUG20").toUpperCase();
+  const pct = Math.max(1, Math.min(80, Number(c.discountPercent) || 20));
+  const links = couponTrackingLinks(code);
+  const prices = couponPricePreview(pct);
+  const weeklyAfter = formatCouponRupees(prices.weekly.finalPaise);
+  const monthlyAfter = formatCouponRupees(prices.monthly.finalPaise);
+
+  return [
+    `🚀 *PyDebug Creator / Campus Partner Kit*`,
+    ``,
+    `Hey! Tumhara exclusive PyDebug promo code live ho gaya hai 🎉`,
+    `🎟️ *Code:* ${code} (${pct}% OFF)`,
+    ``,
+    `🔗 *Direct Auto-Apply Tracking Links (bio / story / pinned comment):*`,
+    `• Pro Plans Checkout: ${links.premium}`,
+    `• Today's Python Wordle: ${links.today}`,
+    `• Live Python Mock Test: ${links.mockTest}`,
+    ``,
+    `📲 *Ready-to-post Reel / WhatsApp Caption:*`,
+    `"Python debugging & placement tests crack karne hain? 🐍🔥 PyDebug par daily Python Wordle + AI debugger + timed Mock Tests try karo!`,
+    `Pro 7-Day Pass sirf ₹39–₹49 mein start hota hai (${weeklyAfter} with code *${code}*) aur full Pro ₹149/month (${monthlyAfter} with *${code}*)!`,
+    `Extra ${pct}% OFF auto-apply link 👉 ${links.premium}"`,
+  ].join("\n");
 }
 
 function couponPresetExpiryIso(preset, now) {
@@ -276,9 +401,12 @@ const CouponCore = {
   COUPON_MAX_DISCOUNT,
   COUPON_DESCRIPTION_MAX,
   COUPON_LINK_BASE,
+  COUPON_TODAY_LINK_BASE,
+  COUPON_MOCK_LINK_BASE,
   COUPON_BASE_PRICES,
   COUPON_PLAN_LABELS,
   COUPON_PLAN_SHORT,
+  COUPON_CAMPAIGN_PRESETS,
   normalizeCouponCode,
   isValidCouponCode,
   generateCouponCode,
@@ -289,6 +417,12 @@ const CouponCore = {
   formatCouponSpan,
   couponCountdown,
   couponShareLink,
+  couponTrackingLinks,
+  formatCouponTrackingLinks,
+  getCampaignPresetValues,
+  inferCommissionPercent,
+  calculateAffiliatePayout,
+  buildCreatorWhatsAppKit,
   couponPresetExpiryIso,
   isoToLocalInputValue,
   localInputValueToIso,
@@ -312,11 +446,52 @@ const COUPON_ERROR_FIELDS = {
   applicablePlan: "coupon-error-plan",
 };
 
+const COUPON_COMM_STORAGE_KEY = "pydebug_admin_coupon_comm_v1";
+
+function loadSavedCommissions() {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(COUPON_COMM_STORAGE_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveCommissionMap(map) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(COUPON_COMM_STORAGE_KEY, JSON.stringify(map || {}));
+    }
+  } catch (e) { /* storage quota or private mode */ }
+}
+
 const couponState = {
   rows: [],
   editing: null, // coupon object currently loaded into the form
   loading: false,
+  commissions: loadSavedCommissions(), // { [CODE]: { mode: "20"|"25"|"30"|"custom", pct: number } }
 };
+
+function getRowCommission(row) {
+  const code = row && row.code ? row.code : "";
+  const saved = code ? couponState.commissions[code] : null;
+  if (saved && Number.isFinite(Number(saved.pct))) {
+    const pct = Math.min(100, Math.max(0, Number(saved.pct)));
+    const mode = saved.mode || ([20, 25, 30].includes(pct) ? String(pct) : "custom");
+    return { mode, pct };
+  }
+  const inferred = inferCommissionPercent(row ? row.description : "");
+  const mode = [20, 25, 30].includes(inferred) ? String(inferred) : "custom";
+  return { mode, pct: inferred };
+}
+
+function setRowCommission(code, mode, pct) {
+  if (!code) return;
+  const cleanPct = Math.min(100, Math.max(0, Number(pct) || 0));
+  couponState.commissions[code] = { mode, pct: cleanPct };
+  saveCommissionMap(couponState.commissions);
+}
 
 onAdminReady(async () => {
   const admin = await requireAdmin();
@@ -473,6 +648,18 @@ function renderCouponStats() {
     top ? `top: ${top.code} · ${formatCouponRupees(top.revenuePaise)}` : "no attributed revenue yet"
   );
 
+  const totalPayoutPaise = couponState.rows.reduce((sum, row) => {
+    const comm = getRowCommission(row);
+    return sum + calculateAffiliatePayout(row.revenuePaise, comm.pct).payoutPaise;
+  }, 0);
+  setText("coupon-stat-payout", formatCouponRupees(totalPayoutPaise));
+  setText(
+    "coupon-stat-payout-sub",
+    totalPayoutPaise > 0
+      ? `across ${usedCodes} earning code${usedCodes === 1 ? "" : "s"}`
+      : "based on verified paid orders"
+  );
+
   const pill = document.getElementById("coupons-count");
   if (pill) pill.textContent = String(couponState.rows.length);
 }
@@ -511,15 +698,15 @@ function renderCouponRows() {
   if (!tbody) return;
 
   if (couponState.loading) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">Loading coupons…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-row">Loading coupons…</td></tr>`;
     return;
   }
 
   const rows = filteredCouponRows();
   if (!rows.length) {
     tbody.innerHTML = couponState.rows.length
-      ? `<tr><td colspan="8" class="empty-row">No coupons match these filters.</td></tr>`
-      : `<tr><td colspan="8" class="empty-row">No promo codes yet — create your first coupon with the form above.</td></tr>`;
+      ? `<tr><td colspan="9" class="empty-row">No coupons match these filters.</td></tr>`
+      : `<tr><td colspan="9" class="empty-row">No promo codes yet — tap a Quick Preset or create your first coupon above.</td></tr>`;
     return;
   }
 
@@ -531,9 +718,14 @@ function couponRowHtml(row) {
   const status = couponStatus(row, now);
   const usage = couponUsage(row);
   const expiry = couponCountdown(row.expiresAt, now);
-  const planLabel = COUPON_PLAN_LABELS[row.applicablePlan] || row.applicablePlan;
+  const planLabel = row.applicablePlan === "all"
+    ? "All (7d + M + Y)"
+    : (COUPON_PLAN_LABELS[row.applicablePlan] || row.applicablePlan);
   const code = escapeHtml(row.code);
   const startsSoon = row.startsAt && new Date(row.startsAt).getTime() > now;
+
+  const comm = getRowCommission(row);
+  const payout = calculateAffiliatePayout(row.revenuePaise, comm.pct);
 
   const flags = [];
   if (row.firstPurchaseOnly) flags.push(`<span class="coupon-flag">1st purchase only</span>`);
@@ -541,26 +733,54 @@ function couponRowHtml(row) {
   if (startsSoon) flags.push(`<span class="coupon-flag coupon-flag--info">Starts ${escapeHtml(fmtDateTime(row.startsAt))}</span>`);
 
   return `<tr data-coupon-row="${code}">
-    <td class="coupon-cell-code">
+    <td class="coupon-cell-code" data-label="Coupon / Creator">
       <code class="coupon-code" title="${code}">${code}</code>
       ${row.description ? `<div class="coupon-desc">${escapeHtml(row.description)}</div>` : ""}
       ${flags.length ? `<div class="coupon-flags">${flags.join("")}</div>` : ""}
     </td>
-    <td><strong class="coupon-discount">${row.discountPercent}%</strong><div class="coupon-cell-sub">off base price</div></td>
-    <td><span class="tag tag--info">${escapeHtml(planLabel)}</span></td>
-    <td>${couponUsageHtml(usage)}</td>
-    <td>
+    <td data-label="Discount"><strong class="coupon-discount">${row.discountPercent}%</strong><div class="coupon-cell-sub">off base price</div></td>
+    <td data-label="Applies to"><span class="tag tag--info">${escapeHtml(planLabel)}</span></td>
+    <td data-label="Usage">${couponUsageHtml(usage)}</td>
+    <td data-label="Expiry">
       <span class="coupon-expiry coupon-expiry--${expiry.tone}">${escapeHtml(expiry.text)}</span>
       <div class="coupon-cell-sub" title="${escapeHtml(fmtDateTime(row.expiresAt))}">${row.expiresAt ? escapeHtml(fmtDateTime(row.expiresAt)) : "Never expires"}</div>
     </td>
-    <td>
+    <td data-label="Verified Revenue">
       <strong class="coupon-revenue">${escapeHtml(formatCouponRupees(row.revenuePaise))}</strong>
       <div class="coupon-cell-sub">${usage.used ? `${usage.used} paid order${usage.used === 1 ? "" : "s"}` : "no redemptions yet"}</div>
     </td>
-    <td><span class="tag ${status.cls}">${escapeHtml(status.label)}</span></td>
-    <td>
+    <td class="coupon-cell-payout" data-label="Affiliate Payout">
+      <div class="payout-calc">
+        <strong class="coupon-payout-val" data-coupon-payout-val="${code}">${escapeHtml(formatCouponRupees(payout.payoutPaise))}</strong>
+        <div class="payout-calc__controls">
+          <select class="coupon-comm-select" data-coupon-comm-select="${code}" aria-label="Commission percent for ${code}">
+            <option value="20"${comm.mode === "20" ? " selected" : ""}>20%</option>
+            <option value="25"${comm.mode === "25" ? " selected" : ""}>25%</option>
+            <option value="30"${comm.mode === "30" ? " selected" : ""}>30%</option>
+            <option value="custom"${comm.mode === "custom" ? " selected" : ""}>Custom %</option>
+          </select>
+          <input type="number" class="coupon-comm-custom" data-coupon-comm-custom="${code}"
+                 min="0" max="100" step="0.5" value="${comm.pct}"
+                 aria-label="Custom commission percent for ${code}"
+                 ${comm.mode === "custom" ? "" : "hidden"}>
+        </div>
+        <div class="coupon-cell-sub" data-coupon-payout-sub="${code}">${comm.pct}% of ${escapeHtml(formatCouponRupees(row.revenuePaise))}</div>
+      </div>
+    </td>
+    <td data-label="Status"><span class="tag ${status.cls}">${escapeHtml(status.label)}</span></td>
+    <td class="coupon-cell-actions" data-label="Share & Actions">
+      <div class="coupon-share-kit" data-keep-emoji="1">
+        <div class="coupon-tracking-group">
+          <button type="button" class="btn btn--secondary btn--sm" data-coupon-copy-links="${code}" title="Copy all 3 tracking URLs (/premium, /today, /mock-test)">🔗 Copy Tracking Links</button>
+          <div class="coupon-tracking-pills">
+            <button type="button" class="coupon-track-pill" data-coupon-copy-code="${code}" data-coupon-copy-target="premium" title="Copy https://pydebug.in/premium?coupon=${code}">/premium</button>
+            <button type="button" class="coupon-track-pill" data-coupon-copy-code="${code}" data-coupon-copy-target="today" title="Copy https://pydebug.in/today?coupon=${code}">/today</button>
+            <button type="button" class="coupon-track-pill" data-coupon-copy-code="${code}" data-coupon-copy-target="mockTest" title="Copy https://pydebug.in/mock-test?coupon=${code}">/mock-test</button>
+          </div>
+        </div>
+        <button type="button" class="btn btn--primary btn--sm coupon-whatsapp-btn" data-coupon-copy-kit="${code}" title="Copy ready-to-send Hinglish Creator WhatsApp Kit">📲 Copy Creator WhatsApp Kit</button>
+      </div>
       <div class="coupon-actions">
-        <button type="button" class="btn btn--secondary btn--sm" data-coupon-copy="${code}" title="Copy shareable promo link" aria-label="Copy shareable promo link for ${code}">${couponIcon("clipboard")}<span>Copy</span></button>
         <button type="button" class="btn btn--secondary btn--sm" data-coupon-edit="${code}" title="Edit this coupon" aria-label="Edit coupon ${code}">${couponIcon("file")}<span>Edit</span></button>
         <button type="button" class="btn btn--secondary btn--sm" data-coupon-toggle="${code}" title="${row.isActive ? "Pause this coupon" : "Activate this coupon"}" aria-label="${row.isActive ? "Pause" : "Activate"} coupon ${code}">${couponIcon(row.isActive ? "snow" : "check")}<span>${row.isActive ? "Pause" : "Activate"}</span></button>
         <button type="button" class="btn btn--danger btn--sm" data-coupon-delete="${code}" title="Delete this coupon" aria-label="Delete coupon ${code}">${couponIcon("trash")}<span>Delete</span></button>
@@ -587,21 +807,86 @@ function couponIcon(name) {
 }
 
 /* ------------------------------------------------------------------ *
- * Table actions: copy link / edit / pause-activate / delete
+ * Table actions: copy links / WhatsApp kit / payout calc / edit / toggle / delete
  * ------------------------------------------------------------------ */
+
+function updateRowPayoutDom(code) {
+  const row = couponState.rows.find((item) => item.code === code);
+  if (!row) return;
+  const comm = getRowCommission(row);
+  const payout = calculateAffiliatePayout(row.revenuePaise, comm.pct);
+  const valEl = document.querySelector(`[data-coupon-payout-val="${cssEscape(code)}"]`);
+  const subEl = document.querySelector(`[data-coupon-payout-sub="${cssEscape(code)}"]`);
+  if (valEl) valEl.textContent = formatCouponRupees(payout.payoutPaise);
+  if (subEl) subEl.textContent = `${comm.pct}% of ${formatCouponRupees(row.revenuePaise)}`;
+  renderCouponStats();
+}
 
 function bindCouponTable() {
   const tbody = document.getElementById("coupons-tbody");
   if (!tbody || tbody.dataset.bound === "1") return;
   tbody.dataset.bound = "1";
 
-  // One delegated listener for the whole table (rows are re-rendered often).
+  // Commission % calculator (select + custom input)
+  tbody.addEventListener("change", (event) => {
+    const sel = event.target.closest("select[data-coupon-comm-select]");
+    if (!sel) return;
+    const code = sel.dataset.couponCommSelect;
+    const customInput = tbody.querySelector(`input[data-coupon-comm-custom="${cssEscape(code)}"]`);
+    if (sel.value === "custom") {
+      if (customInput) {
+        customInput.hidden = false;
+        customInput.focus();
+      }
+      const pct = customInput ? Number(customInput.value) || 0 : 30;
+      setRowCommission(code, "custom", pct);
+    } else {
+      if (customInput) {
+        customInput.hidden = true;
+        customInput.value = sel.value;
+      }
+      setRowCommission(code, sel.value, Number(sel.value));
+    }
+    updateRowPayoutDom(code);
+  });
+
+  tbody.addEventListener("input", (event) => {
+    const inp = event.target.closest("input[data-coupon-comm-custom]");
+    if (!inp) return;
+    const code = inp.dataset.couponCommCustom;
+    setRowCommission(code, "custom", Number(inp.value) || 0);
+    updateRowPayoutDom(code);
+  });
+
+  // One delegated click listener for the whole table (rows are re-rendered often).
   tbody.addEventListener("click", async (event) => {
-    const button = event.target.closest("button[data-coupon-copy], button[data-coupon-edit], button[data-coupon-toggle], button[data-coupon-delete]");
+    const button = event.target.closest(
+      "button[data-coupon-copy], button[data-coupon-copy-links], button[data-coupon-copy-target], button[data-coupon-copy-kit], button[data-coupon-edit], button[data-coupon-toggle], button[data-coupon-delete]"
+    );
     if (!button) return;
 
     if (button.dataset.couponCopy) {
-      await copyCouponLink(button.dataset.couponCopy);
+      await copyTextWithToast(couponShareLink(button.dataset.couponCopy), `Promo link copied — ${button.dataset.couponCopy}`);
+      return;
+    }
+    if (button.dataset.couponCopyLinks) {
+      const code = button.dataset.couponCopyLinks;
+      await copyTextWithToast(formatCouponTrackingLinks(code), `All 3 tracking links copied — ${code}`);
+      return;
+    }
+    if (button.dataset.couponCopyTarget) {
+      const code = button.dataset.couponCopyCode;
+      const target = button.dataset.couponCopyTarget;
+      const links = couponTrackingLinks(code);
+      const url = links[target] || links.premium;
+      const labelMap = { premium: "/premium", today: "/today", mockTest: "/mock-test" };
+      await copyTextWithToast(url, `Copied ${labelMap[target] || ""} link — ${code}`);
+      return;
+    }
+    if (button.dataset.couponCopyKit) {
+      const code = button.dataset.couponCopyKit;
+      const row = couponState.rows.find((item) => item.code === code) || { code, discountPercent: 20 };
+      await copyTextWithToast(buildCreatorWhatsAppKit(row), `Creator WhatsApp Kit copied — ${code}`);
       return;
     }
     if (button.dataset.couponEdit) {
@@ -618,18 +903,16 @@ function bindCouponTable() {
   });
 }
 
-async function copyCouponLink(code) {
-  const link = couponShareLink(code);
+async function copyTextWithToast(text, successMessage) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(text);
     } else {
-      fallbackCopyToClipboard(link);
+      fallbackCopyToClipboard(text);
     }
-    showToast(`Promo link copied — ${code}`, "success");
+    showToast(successMessage, "success");
   } catch (err) {
-    // Clipboard permissions can be blocked; never leave the admin empty-handed.
-    showToast(`Copy manually: ${link}`, "error");
+    showToast(`Copy manually: ${text}`, "error");
   }
 }
 
@@ -778,6 +1061,36 @@ function bindCouponForm() {
     });
   });
 
+  // 1-Tap Quick Campaign Presets (Creator Partner / Campus CR / Exam Week Flash)
+  document.querySelectorAll("[data-campaign-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const values = getCampaignPresetValues(btn.dataset.campaignPreset);
+      if (!values) return;
+
+      document.getElementById("coupon-discount").value = String(values.discountPercent);
+      document.getElementById("coupon-discount-range").value = String(values.discountPercent);
+      document.getElementById("coupon-plan").value = values.applicablePlan;
+      document.getElementById("coupon-first-purchase").checked = values.firstPurchaseOnly;
+      document.getElementById("coupon-description").value = values.description;
+      document.getElementById("coupon-expires").value = values.expiresAtLocal;
+
+      document.querySelectorAll("[data-campaign-preset]").forEach((other) => {
+        other.classList.toggle("is-active", other === btn);
+      });
+      document.querySelectorAll("[data-coupon-preset]").forEach((chip) => {
+        chip.classList.toggle("is-active", chip.dataset.couponPreset === values.expiryPreset);
+      });
+
+      clearCouponFormErrors();
+      updateCouponPreview();
+      showToast(`Applied ${values.label} preset`, "info");
+
+      if (!codeInput.readOnly && !codeInput.value.trim()) {
+        codeInput.focus();
+      }
+    });
+  });
+
   form.addEventListener("submit", submitCouponForm);
   document.getElementById("coupon-reset").addEventListener("click", () => {
     resetCouponForm();
@@ -853,6 +1166,7 @@ function updateCouponPreview() {
   const prices = couponPricePreview(percent);
   const plan = COUPON_PLAN_LABELS[raw.applicablePlan] ? raw.applicablePlan : "all";
 
+  applyCouponPreviewPlan("weekly", prices.weekly, plan);
   applyCouponPreviewPlan("monthly", prices.monthly, plan);
   applyCouponPreviewPlan("yearly", prices.yearly, plan);
 
@@ -865,8 +1179,8 @@ function updateCouponPreview() {
   const note = document.getElementById("coupon-preview-note");
   if (note) {
     note.textContent = plan === "all"
-      ? "Applies to both Pro Monthly and Pro Yearly at checkout."
-      : `Applies only to ${COUPON_PLAN_LABELS[plan].toLowerCase()} — the other plan charges full price.`;
+      ? "Applies to Pro 7-Day Pass (₹49), Pro Monthly (₹149), and Pro Yearly (₹999) at checkout."
+      : `Applies only to ${COUPON_PLAN_LABELS[plan].toLowerCase()} — other plans charge full price.`;
   }
 
   updateCouponDescriptionCount();
@@ -1043,8 +1357,8 @@ function resetCouponForm() {
     isoToLocalInputValue(couponPresetExpiryIso("30d"));
   document.getElementById("coupon-per-user").value = "1";
 
-  document.getElementById("coupon-form-title").textContent = "Create a coupon";
-  document.getElementById("coupon-form-sub").textContent = "One code, one campaign — it works on the premium checkout the moment you save.";
+  document.getElementById("coupon-form-title").textContent = "Create a coupon or creator code";
+  document.getElementById("coupon-form-sub").textContent = "Tap a quick preset or customize below — works across 7-Day Pass, Monthly & Yearly checkout instantly.";
   const pill = document.getElementById("coupon-edit-pill");
   pill.hidden = true;
   pill.textContent = "";
@@ -1053,6 +1367,7 @@ function resetCouponForm() {
   document.getElementById("coupon-code-hint").innerHTML =
     '3–24 characters · A–Z, 0–9, _ and -. Share as <code>pydebug.in/premium?coupon=CODE</code>.';
 
+  document.querySelectorAll("[data-campaign-preset]").forEach((btn) => btn.classList.remove("is-active"));
   document.querySelectorAll("[data-coupon-preset]").forEach((btn) => btn.classList.remove("is-active"));
   const defaultPreset = document.querySelector('[data-coupon-preset="30d"]');
   if (defaultPreset) defaultPreset.classList.add("is-active");
@@ -1068,6 +1383,9 @@ function resetCouponForm() {
 function exportCoupons() {
   const rows = filteredCouponRows().map((row) => {
     const usage = couponUsage(row);
+    const comm = getRowCommission(row);
+    const payout = calculateAffiliatePayout(row.revenuePaise, comm.pct);
+    const links = couponTrackingLinks(row.code);
     return {
       code: row.code,
       discount_percent: row.discountPercent,
@@ -1078,10 +1396,14 @@ function exportCoupons() {
       per_user_limit: row.maxUsesPerUser,
       first_purchase_only: row.firstPurchaseOnly ? "yes" : "no",
       revenue_inr: (row.revenuePaise / 100).toFixed(2),
+      commission_percent: comm.pct,
+      affiliate_payout_inr: payout.payoutInr.toFixed(2),
       starts_at: row.startsAt || "",
       expires_at: row.expiresAt || "",
       description: row.description,
-      share_link: couponShareLink(row.code),
+      premium_link: links.premium,
+      today_link: links.today,
+      mock_test_link: links.mockTest,
     };
   });
   const stamp = new Date().toISOString().slice(0, 10);

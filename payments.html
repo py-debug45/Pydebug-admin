@@ -53,6 +53,8 @@
       <div class="stat-card"><div class="value" id="pay-avg">₹0</div><div class="label">Avg. payment</div><div class="sub">per paid conversion</div></div>
     </div>
 
+    <div id="sachet-conversion-root" style="margin-bottom:18px"></div>
+
     <div class="admin-tabs" role="tablist" aria-label="Payment views">
       <button type="button" class="admin-tab is-active" data-pay-tab="grants">✅ Verified Grants <span class="admin-tab__count" id="tab-count-grants">0</span></button>
       <button type="button" class="admin-tab" data-pay-tab="orders">🛒 Checkout Funnel &amp; Drop-offs <span class="admin-tab__count" id="tab-count-orders">0</span></button>
@@ -70,9 +72,10 @@
         <input type="text" id="payment-search" placeholder="Search by user email/name, payment id or order id...">
         <select id="payment-filter-plan">
           <option value="all">All plans</option>
+          <option value="weekly">Pro 7-Day Pass (7d) (₹49)</option>
           <option value="monthly">Pro Monthly (₹149)</option>
-          <option value="sixmonth">Pro 6-Month (₹499)</option>
           <option value="yearly">Pro Yearly (₹999)</option>
+          <option value="sixmonth">Pro 6 Months (Legacy) (₹499)</option>
           <option value="exam_pack">Exam Pack (₹1,499)</option>
         </select>
       </div>
@@ -103,6 +106,14 @@
     <section class="admin-tab-panel" id="panel-orders">
       <div class="admin-toolbar">
         <input type="text" id="order-search" placeholder="Search order id, user email or name...">
+        <select id="order-filter-plan">
+          <option value="all">All plans</option>
+          <option value="weekly">Pro 7-Day Pass (7d)</option>
+          <option value="monthly">Pro Monthly</option>
+          <option value="yearly">Pro Yearly</option>
+          <option value="sixmonth">Pro 6 Months (Legacy)</option>
+          <option value="exam_pack">Exam Pack</option>
+        </select>
         <select id="order-filter-state">
           <option value="all">All Razorpay orders</option>
           <option value="abandoned">Abandoned / Unpaid only</option>
@@ -131,9 +142,9 @@
 
     <!-- TAB 3: PRODUCT ENTITLEMENTS (PRO & EXAM PACK) -->
     <section class="admin-tab-panel" id="panel-entitlements">
-      <div class="section-card" style="margin-bottom:18px;max-width:680px">
-        <h3>Grant product entitlement</h3>
-        <p class="muted" style="font-size:0.83rem;margin:4px 0 12px">Grant or extend <code>pro</code> or <code>exam_pack</code> access for a learner by email or user UUID.</p>
+      <div class="section-card" style="margin-bottom:18px;max-width:720px">
+        <h3>Grant / Extend Pro Access</h3>
+        <p class="muted" style="font-size:0.83rem;margin:4px 0 12px">Grant or extend <code>pro</code> (7-Day Pass, Monthly, or Yearly) or <code>exam_pack</code> access for a learner by email or user UUID.</p>
         <form id="entitlement-form" class="admin-form">
           <div class="form-row">
             <div class="field" style="flex:2">
@@ -143,20 +154,21 @@
             <div class="field">
               <label for="ent-product">Product</label>
               <select id="ent-product">
+                <option value="pro" selected>Pro</option>
                 <option value="exam_pack">Exam Pack</option>
-                <option value="pro">Pro</option>
               </select>
             </div>
             <div class="field">
               <label for="ent-days">Duration</label>
               <select id="ent-days">
-                <option value="30">30 days</option>
-                <option value="90">90 days</option>
-                <option value="365" selected>1 year (365d)</option>
+                <option value="7">7 Days — Pro 7-Day Pass</option>
+                <option value="30">30 Days — Pro Monthly</option>
+                <option value="90">90 Days</option>
+                <option value="365" selected>365 Days — Pro Yearly</option>
               </select>
             </div>
           </div>
-          <button type="submit" class="btn btn--primary btn--sm">Grant entitlement</button>
+          <button type="submit" class="btn btn--primary btn--sm">Grant / Extend Pro Access</button>
         </form>
       </div>
 
