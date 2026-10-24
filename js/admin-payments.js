@@ -25,6 +25,8 @@ onAdminReady(async () => {
   });
 
   document.getElementById("order-search").addEventListener("input", debounce(applyOrderFilters, 250));
+  const orderPlanEl = document.getElementById("order-filter-plan");
+  if (orderPlanEl) orderPlanEl.addEventListener("change", applyOrderFilters);
   document.getElementById("order-filter-state").addEventListener("change", applyOrderFilters);
 
   document.getElementById("entitlement-form").addEventListener("submit", submitEntitlementGrant);
@@ -167,6 +169,23 @@ function renderPaymentStats() {
       ? `${estimatedCount} legacy amount${estimatedCount === 1 ? "" : "s"} not recorded (list price used)`
       : "actually charged by Razorpay";
   }
+
+  const sachetRoot = document.getElementById("sachet-conversion-root");
+  if (sachetRoot) {
+    sachetRoot.innerHTML = renderSachetCardHtml(computeSachetMetrics(allGrants));
+  }
+}
+
+function planChartColor(planKey, fallbackIdx) {
+  const palette = {
+    weekly: CHART_COLORS.mint,
+    monthly: CHART_COLORS.amber,
+    yearly: CHART_COLORS.blue,
+    exam_pack: CHART_COLORS.purple,
+    sixmonth: "#94a3b8",
+  };
+  const fallback = [CHART_COLORS.mint, CHART_COLORS.amber, CHART_COLORS.purple, CHART_COLORS.blue];
+  return palette[planKey] || fallback[fallbackIdx % fallback.length];
 }
 
 function renderPlanCharts() {
@@ -177,17 +196,21 @@ function renderPlanCharts() {
     byPlan[k].count++;
     byPlan[k].revenue += grantAmountPaise(g);
   });
-  const colors = [CHART_COLORS.mint, CHART_COLORS.amber, CHART_COLORS.purple, CHART_COLORS.blue];
-  const keys = Object.keys(byPlan);
+  const order = ["weekly", "monthly", "yearly", "sixmonth", "exam_pack"];
+  const keys = Object.keys(byPlan).sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
   document.getElementById("chart-plan-revenue").innerHTML = keys.length
     ? svgDonut(keys.map((k, i) => ({
-        label: `${planLabel(k)} (₹${Math.round(byPlan[k].revenue / 100).toLocaleString("en-IN")})`,
+        label: `${planLabel(k)} (${formatPaiseINR(byPlan[k].revenue)})`,
         value: byPlan[k].revenue,
-        color: colors[i % colors.length],
+        color: planChartColor(k, i),
       })))
     : `<div class="chart-empty">No payments yet</div>`;
   document.getElementById("chart-plan-count").innerHTML = keys.length
-    ? svgDonut(keys.map((k, i) => ({ label: planLabel(k), value: byPlan[k].count, color: colors[i % colors.length] })))
+    ? svgDonut(keys.map((k, i) => ({ label: planLabel(k), value: byPlan[k].count, color: planChartColor(k, i) })))
     : `<div class="chart-empty">No payments yet</div>`;
 }
 
@@ -234,13 +257,13 @@ function renderPayments() {
       : `<span class="muted">No expiry</span>`;
     const discount = pct > 0
       ? `<span class="tag tag--solved">${pct}% off</span>
-         <div class="muted" style="font-size:0.74rem">${escapeHtml(g.coupon_code || "coupon")}${saved ? ` · ${escapeHtml(fmtINR(saved / 100))} saved` : ""}</div>`
+         <div class="muted" style="font-size:0.74rem">${escapeHtml(g.coupon_code || "coupon")}${saved ? ` · ${escapeHtml(formatPaiseINR(saved))} saved` : ""}</div>`
       : `<span class="muted">—</span>`;
     const amountCell = estimated
-      ? `<strong title="Actual Razorpay amount was never recorded for this legacy payment — showing the plan list price.">${escapeHtml(fmtINR(charged / 100))}*</strong>
+      ? `<strong title="Actual Razorpay amount was never recorded for this legacy payment — showing the plan list price.">${escapeHtml(formatPaiseINR(charged))}*</strong>
          <div><button type="button" class="btn btn--secondary btn--sm" style="padding:2px 7px;font-size:.7rem;margin-top:4px"
             data-grant-amount="${escapeHtml(g.payment_id || "")}" data-grant-list="${list}">Set paid ₹</button></div>`
-      : `<strong>${escapeHtml(fmtINR(paid / 100))}</strong>`;
+      : `<strong>${escapeHtml(formatPaiseINR(paid))}</strong>`;
     return `<tr>
       <td title="${escapeHtml(fmtDateTime(g.created_at))}">
         ${escapeHtml(fmtDateTime(g.created_at))}
@@ -250,8 +273,8 @@ function renderPayments() {
         <a href="user-detail.html?id=${encodeURIComponent(g.user_id || "")}">${escapeHtml(displayNameOf(u))}</a>
         <div class="muted" style="font-size:0.75rem">${escapeHtml(u.email || "")}</div>
       </td>
-      <td><span class="tag tag--premium">${escapeHtml(planLabel(g.plan_key))}</span></td>
-      <td class="muted">${pct > 0 ? `<s>${escapeHtml(fmtINR(list / 100))}</s>` : escapeHtml(fmtINR(list / 100))}</td>
+      <td>${planBadge(g.plan_key)}</td>
+      <td class="muted">${pct > 0 ? `<s>${escapeHtml(formatPaiseINR(list))}</s>` : escapeHtml(formatPaiseINR(list))}</td>
       <td>${amountCell}</td>
       <td>${discount}</td>
       <td>${until}</td>
@@ -317,15 +340,18 @@ function explainPaymentError(error) {
 function applyOrderFilters() {
   const paidOrderIds = new Set(allGrants.map((g) => g.order_id).filter(Boolean));
   const search = document.getElementById("order-search").value.trim().toLowerCase();
+  const planEl = document.getElementById("order-filter-plan");
+  const plan = planEl ? planEl.value : "all";
   const state = document.getElementById("order-filter-state").value;
 
   filteredOrders = allOrders.filter((o) => {
     const isPaid = paidOrderIds.has(o.order_id);
+    if (plan !== "all" && o.plan_key !== plan && o.product_key !== plan) return false;
     if (state === "abandoned" && isPaid) return false;
     if (state === "converted" && !isPaid) return false;
     if (search) {
       const u = payUserMap[o.user_id] || {};
-      const hay = `${o.order_id || ""} ${u.email || ""} ${u.display_name || ""} ${u.full_name || ""} ${o.coupon_code || ""}`.toLowerCase();
+      const hay = `${o.order_id || ""} ${u.email || ""} ${u.display_name || ""} ${u.full_name || ""} ${o.coupon_code || ""} ${planLabel(o.plan_key)}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -345,7 +371,7 @@ function applyOrderFilters() {
     const list = pct > 0 ? Math.round((paid * 100) / (100 - pct)) : (planAmountPaise(o.plan_key) || paid);
     const discount = pct > 0
       ? `<span class="tag tag--solved">${pct}% off</span>
-         <div class="muted" style="font-size:0.74rem">${escapeHtml(o.coupon_code || "coupon")} · ${escapeHtml(fmtINR(Math.max(0, list - paid) / 100))} off</div>`
+         <div class="muted" style="font-size:0.74rem">${escapeHtml(o.coupon_code || "coupon")} · ${escapeHtml(formatPaiseINR(Math.max(0, list - paid)))} off</div>`
       : `<span class="muted">—</span>`;
     return `<tr>
       <td title="${escapeHtml(fmtDateTime(o.created_at))}">
@@ -356,9 +382,9 @@ function applyOrderFilters() {
         <a href="user-detail.html?id=${encodeURIComponent(o.user_id || "")}">${escapeHtml(displayNameOf(u))}</a>
         <div class="muted" style="font-size:0.74rem">${escapeHtml(u.email || "")}</div>
       </td>
-      <td><span class="tag tag--info">${escapeHtml(planLabel(o.plan_key))}</span></td>
-      <td class="muted">${pct > 0 ? `<s>${escapeHtml(fmtINR(list / 100))}</s>` : escapeHtml(fmtINR(list / 100))}</td>
-      <td><strong>${escapeHtml(fmtINR(paid / 100))}</strong></td>
+      <td>${planBadge(o.plan_key, "tag--info")}</td>
+      <td class="muted">${pct > 0 ? `<s>${escapeHtml(formatPaiseINR(list))}</s>` : escapeHtml(formatPaiseINR(list))}</td>
+      <td><strong>${escapeHtml(formatPaiseINR(paid))}</strong></td>
       <td>${discount}</td>
       <td>${isPaid ? statusBadge("paid") : '<span class="tag tag--attempted">Abandoned</span>'}</td>
       <td class="mono muted">${escapeHtml(o.order_id || "—")}</td>
@@ -423,18 +449,31 @@ async function submitEntitlementGrant(e) {
 
   if (!raw) return;
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let userId = uuidRe.test(raw) ? raw : null;
+  let profile = null;
 
-  if (!userId) {
-    const { data, error } = await sb.from("profiles").select("id").ilike("email", sanitizeIlike(raw)).maybeSingle();
+  if (uuidRe.test(raw)) {
+    const { data } = await sb.from("profiles").select("id, is_premium, premium_expires_at").eq("id", raw).maybeSingle();
+    profile = data || { id: raw };
+  } else {
+    const { data, error } = await sb.from("profiles").select("id, is_premium, premium_expires_at").ilike("email", sanitizeIlike(raw)).maybeSingle();
     if (error || !data) {
       showToast("No learner found with that email or UUID", "error");
       return;
     }
-    userId = data.id;
+    profile = data;
   }
 
-  const expires = new Date(Date.now() + days * 86400000).toISOString();
+  const userId = profile.id;
+  const existingEnt = allEntitlements.find((item) => item.user_id === userId && item.product_key === product);
+  const existingEntMs = existingEnt && existingEnt.expires_at ? new Date(existingEnt.expires_at).getTime() : 0;
+  const existingProMs = product === "pro" && profile.premium_expires_at ? new Date(profile.premium_expires_at).getTime() : 0;
+  const baseMs = Math.max(
+    Date.now(),
+    Number.isFinite(existingEntMs) ? existingEntMs : 0,
+    Number.isFinite(existingProMs) ? existingProMs : 0
+  );
+  const expires = new Date(baseMs + days * 86400000).toISOString();
+
   const { error } = await sb.rpc("admin_manage_entitlement", {
     target_user: userId,
     target_product: product,
@@ -445,7 +484,17 @@ async function submitEntitlementGrant(e) {
     showToast("Grant failed: " + error.message, "error");
     return;
   }
-  showToast(`Granted ${product} for ${days} days`, "success");
+
+  // Keep profiles.is_premium & premium_expires_at in sync when granting Pro.
+  if (product === "pro") {
+    await sb.rpc("admin_panel_update_profile", {
+      target_user: userId,
+      patch: { is_premium: true, premium_expires_at: expires },
+    });
+  }
+
+  const durationLabel = days === 7 ? "7 Days (Pro 7-Day Pass)" : `${days} days`;
+  showToast(`Granted ${product} for ${durationLabel}`, "success");
   document.getElementById("ent-user").value = "";
   await loadAllPaymentData();
 }
@@ -455,13 +504,14 @@ function exportPayments() {
     const paidOrderIds = new Set(allGrants.map((g) => g.order_id).filter(Boolean));
     downloadCSV("pydebug-checkout-orders.csv", filteredOrders.map((o) => {
       const pct = Math.max(0, Math.min(99, Number(o.discount_percent) || 0));
-      const paid = Number(o.amount) || planAmountPaise(o.plan_key);
+      const paid = Number.isFinite(Number(o.amount)) ? Number(o.amount) : planAmountPaise(o.plan_key);
       const list = pct > 0 ? Math.round((paid * 100) / (100 - pct)) : (planAmountPaise(o.plan_key) || paid);
       return {
         order_id: o.order_id,
         created_at: o.created_at,
         user: (payUserMap[o.user_id] || {}).email || o.user_id,
         plan: o.plan_key,
+        plan_label: planLabel(o.plan_key),
         list_price_inr: (list / 100).toFixed(2),
         amount_inr: (paid / 100).toFixed(2),
         coupon_code: o.coupon_code || "",
@@ -478,6 +528,7 @@ function exportPayments() {
     purchased_at: g.created_at,
     user: (payUserMap[g.user_id] || {}).email || g.user_id,
     plan: g.plan_key,
+    plan_label: planLabel(g.plan_key),
     list_price_inr: (grantListAmountPaise(g) / 100).toFixed(2),
     amount_paid_inr: (grantAmountPaise(g) / 100).toFixed(2),
     amount_source: grantAmountIsEstimated(g) ? "plan list price (not recorded)" : "razorpay captured",

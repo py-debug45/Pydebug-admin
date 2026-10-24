@@ -28,8 +28,8 @@
   <main class="admin-main">
     <div class="admin-topbar">
       <div>
-        <div class="admin-eyebrow">GROWTH · DISCOUNTS &amp; PROMOTIONS</div>
-        <h1>Coupon &amp; Promo Codes <span class="pill-count" id="coupons-count">0</span></h1>
+        <div class="admin-eyebrow">GROWTH · CREATOR AFFILIATES, DISCOUNTS &amp; PROMOS</div>
+        <h1>Creator Affiliate &amp; Coupon Studio <span class="pill-count" id="coupons-count">0</span></h1>
       </div>
       <div class="admin-topbar__actions">
         <a href="https://pydebug.in/premium" target="_blank" rel="noopener" class="btn btn--secondary btn--sm">Premium page ↗</a>
@@ -48,13 +48,18 @@
       </div>
       <div class="stat-card">
         <div class="value" id="coupon-stat-redemptions">0</div>
-        <div class="label">Total redemptions</div>
+        <div class="label">Verified redemptions</div>
         <div class="sub" id="coupon-stat-redemptions-sub">paid orders that used a code</div>
       </div>
       <div class="stat-card">
         <div class="value value--mint" id="coupon-stat-revenue">₹0</div>
-        <div class="label">Revenue from coupons</div>
+        <div class="label">Verified coupon revenue</div>
         <div class="sub" id="coupon-stat-revenue-sub">attributed to promo codes</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="coupon-stat-payout">₹0</div>
+        <div class="label">Est. creator payouts</div>
+        <div class="sub" id="coupon-stat-payout-sub">UPI commission on paid orders</div>
       </div>
     </div>
 
@@ -62,10 +67,27 @@
     <section class="section-card coupon-form-card" id="coupon-form-card">
       <div class="section-card__head coupon-form-head">
         <div>
-          <h3 id="coupon-form-title">Create a coupon</h3>
-          <p id="coupon-form-sub">One code, one campaign — it works on the premium checkout the moment you save.</p>
+          <h3 id="coupon-form-title">Create a coupon or creator code</h3>
+          <p id="coupon-form-sub">Tap a quick preset or customize below — works across 7-Day Pass, Monthly &amp; Yearly checkout instantly.</p>
         </div>
         <span class="coupon-edit-pill" id="coupon-edit-pill" hidden>Editing</span>
+      </div>
+
+      <!-- 1-Tap Quick Campaign Presets -->
+      <div class="campaign-presets-bar" role="group" aria-label="1-Tap Quick Presets" data-keep-emoji="1">
+        <span class="campaign-presets-bar__label">1-Tap Quick Presets:</span>
+        <button type="button" class="campaign-preset-btn" data-campaign-preset="creator">
+          <strong>📹 Creator Partner</strong>
+          <small>20% OFF · All plans · Evergreen · 30% share</small>
+        </button>
+        <button type="button" class="campaign-preset-btn" data-campaign-preset="campus_cr">
+          <strong>🎓 Campus CR</strong>
+          <small>25% OFF · All plans · 1st purchase only</small>
+        </button>
+        <button type="button" class="campaign-preset-btn" data-campaign-preset="exam_flash">
+          <strong>⚡ Exam Week Flash</strong>
+          <small>30% OFF · All plans · 1st purchase · 48h</small>
+        </button>
       </div>
 
       <div class="coupon-layout">
@@ -99,7 +121,7 @@
             <div class="field">
               <label for="coupon-plan">Applies to</label>
               <select id="coupon-plan" aria-describedby="coupon-error-plan">
-                <option value="all">All plans (Monthly + Yearly)</option>
+                <option value="all">All plans (7-Day Pass + Monthly + Yearly)</option>
                 <option value="yearly">Pro Yearly only</option>
                 <option value="monthly">Pro Monthly only</option>
               </select>
@@ -126,6 +148,7 @@
             <input type="datetime-local" id="coupon-expires" aria-describedby="coupon-error-expires">
             <div class="coupon-preset-row" role="group" aria-label="Expiry presets">
               <button type="button" class="coupon-preset" data-coupon-preset="24h">+24 hours</button>
+              <button type="button" class="coupon-preset" data-coupon-preset="48h">+48 hours</button>
               <button type="button" class="coupon-preset" data-coupon-preset="7d">+7 days</button>
               <button type="button" class="coupon-preset" data-coupon-preset="30d">+30 days</button>
               <button type="button" class="coupon-preset" data-coupon-preset="none">No expiry</button>
@@ -142,8 +165,8 @@
           </label>
 
           <div class="field">
-            <label for="coupon-description">Campaign note</label>
-            <input type="text" id="coupon-description" maxlength="160" placeholder="e.g. Diwali Sale — YouTube promo">
+            <label for="coupon-description">Campaign / Creator note</label>
+            <input type="text" id="coupon-description" maxlength="160" placeholder="e.g. Creator: @handle (30% share) or Campus CR: DAVV">
             <div class="coupon-char-count"><span id="coupon-desc-count">0 / 160</span></div>
           </div>
 
@@ -162,6 +185,18 @@
               <h3>What learners pay</h3>
             </div>
             <span class="coupon-preview__badge" id="coupon-preview-percent">—</span>
+          </div>
+
+          <div class="coupon-price" id="coupon-price-weekly">
+            <div class="coupon-price__head">
+              <span class="coupon-price__plan">Pro 7-Day Pass (7d)</span>
+              <span class="coupon-price__note" data-plan-note>Included</span>
+            </div>
+            <div class="coupon-price__row">
+              <span class="coupon-price__base" id="coupon-price-weekly-base">₹49</span>
+              <strong class="coupon-price__final" id="coupon-price-weekly-final">₹49</strong>
+            </div>
+            <span class="coupon-price__save" id="coupon-price-weekly-save">No discount yet</span>
           </div>
 
           <div class="coupon-price" id="coupon-price-monthly">
@@ -188,15 +223,15 @@
             <span class="coupon-price__save" id="coupon-price-yearly-save">No discount yet</span>
           </div>
 
-          <p class="coupon-preview__note" id="coupon-preview-note">Applies to both Pro Monthly and Pro Yearly at checkout.</p>
-          <p class="coupon-preview__meta">Base prices are the live founding prices (₹149 monthly · ₹999 yearly). The discounted amount is what Razorpay charges.</p>
+          <p class="coupon-preview__note" id="coupon-preview-note">Applies to Pro 7-Day Pass, Pro Monthly, and Pro Yearly at checkout.</p>
+          <p class="coupon-preview__meta">Base prices are live founding prices (₹49 7d · ₹149 monthly · ₹999 yearly). The discounted amount is what Razorpay charges.</p>
         </aside>
       </div>
     </section>
 
     <!-- ============ LIST ============ -->
     <div class="admin-toolbar coupon-toolbar">
-      <input type="text" id="coupon-search" placeholder="Search by code, campaign note or plan..." aria-label="Search coupons">
+      <input type="text" id="coupon-search" placeholder="Search by code, creator @handle, campus CR or plan..." aria-label="Search coupons">
       <select id="coupon-filter-status" aria-label="Filter by status">
         <option value="all">All statuses</option>
         <option value="active">Active</option>
@@ -217,18 +252,19 @@
       <table class="admin-table coupon-table">
         <thead>
           <tr>
-            <th>Coupon</th>
+            <th>Coupon / Creator</th>
             <th>Discount</th>
             <th>Applies to</th>
             <th>Usage</th>
             <th>Expiry</th>
-            <th>Revenue</th>
+            <th>Verified Revenue</th>
+            <th>Affiliate Payout</th>
             <th>Status</th>
-            <th>Actions</th>
+            <th>Share &amp; Actions</th>
           </tr>
         </thead>
         <tbody id="coupons-tbody">
-          <tr><td colspan="8" class="empty-row">Loading coupons…</td></tr>
+          <tr><td colspan="9" class="empty-row">Loading coupons…</td></tr>
         </tbody>
       </table>
     </div>

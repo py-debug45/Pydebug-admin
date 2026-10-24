@@ -46,6 +46,10 @@ onAdminReady(async () => {
   document.getElementById("freeze-add-btn").addEventListener("click", () => adjustFreezes(1));
   document.getElementById("freeze-remove-btn").addEventListener("click", () => adjustFreezes(-1));
   document.getElementById("display-name-save-btn").addEventListener("click", saveDisplayName);
+  const campusSaveBtn = document.getElementById("campus-tag-save-btn");
+  if (campusSaveBtn) campusSaveBtn.addEventListener("click", saveCampusTag);
+  const campusClearBtn = document.getElementById("campus-tag-clear-btn");
+  if (campusClearBtn) campusClearBtn.addEventListener("click", clearCampusTag);
   document.getElementById("premium-grant-btn").addEventListener("click", grantPremium);
   document.getElementById("premium-revoke-btn").addEventListener("click", revokePremium);
   document.getElementById("mod-save-btn").addEventListener("click", saveModeration);
@@ -110,22 +114,22 @@ async function renderPurchases() {
     const saved = grantDiscountPaise(g);
     const left = premiumTimeLeft(g.expires_at);
     const paidCell = paid === null
-      ? `<strong title="The charged amount was not recorded for this legacy payment.">${escapeHtml(fmtINR(grantAmountPaise(g) / 100))}*</strong>`
-      : `<strong>${escapeHtml(fmtINR(paid / 100))}</strong>`;
+      ? `<strong title="The charged amount was not recorded for this legacy payment.">${escapeHtml(formatPaiseINR(grantAmountPaise(g)))}*</strong>`
+      : `<strong>${escapeHtml(formatPaiseINR(paid))}</strong>`;
     return `<tr>
       <td title="${escapeHtml(fmtDateTime(g.created_at))}">
         ${escapeHtml(fmtDateTime(g.created_at))}
         <div class="muted" style="font-size:0.74rem">${escapeHtml(timeAgo(g.created_at))}</div>
       </td>
-      <td><span class="tag tag--premium">${escapeHtml(planLabel(g.plan_key))}</span></td>
+      <td>${planBadge(g.plan_key)}</td>
       <td>
         ${paidCell}
-        <div class="muted" style="font-size:0.74rem">${pct > 0 ? `list ${escapeHtml(fmtINR(list / 100))}` : ""}</div>
+        <div class="muted" style="font-size:0.74rem">${pct > 0 ? `list ${escapeHtml(formatPaiseINR(list))}` : ""}</div>
       </td>
       <td>
         ${pct > 0
           ? `<span class="tag tag--solved">${pct}% off</span>
-             <div class="muted" style="font-size:0.74rem">${escapeHtml(g.coupon_code || "coupon")}${saved ? ` · ${escapeHtml(fmtINR(saved / 100))} saved` : ""}</div>`
+             <div class="muted" style="font-size:0.74rem">${escapeHtml(g.coupon_code || "coupon")}${saved ? ` · ${escapeHtml(formatPaiseINR(saved))} saved` : ""}</div>`
           : `<span class="muted">—</span>`}
       </td>
       <td>
@@ -139,15 +143,20 @@ async function renderPurchases() {
 
 function renderProfile() {
   const p = detailProfile;
-  const name = p.display_name || p.full_name || p.email || "User";
+  const parsedCampus = parseDisplayNameCampus(p.display_name);
+  const name = parsedCampus.baseName || p.full_name || p.email || "User";
   document.getElementById("detail-avatar").textContent = name.trim().charAt(0).toUpperCase();
   document.getElementById("detail-name").textContent = name;
   document.getElementById("detail-email").textContent =
-    (p.email || "") + (p.display_name && p.full_name && p.display_name !== p.full_name ? ` · ${p.full_name}` : "");
+    (p.email || "") + (parsedCampus.baseName && p.full_name && parsedCampus.baseName !== p.full_name ? ` · ${p.full_name}` : "");
   document.getElementById("detail-joined").textContent = "Joined " + fmtDateTime(p.created_at);
 
   const premium = isPremiumUser(p);
+  const campusBadgeHtml = parsedCampus.hasCampus
+    ? `<span class="campus-pill" data-keep-emoji="1">🎓 ${escapeHtml(parsedCampus.campusTag)}</span>`
+    : "";
   document.getElementById("detail-badges").innerHTML =
+    (campusBadgeHtml ? campusBadgeHtml + " " : "") +
     accountStatusBadge(p) + " " +
     (premium ? '<span class="tag tag--premium">Premium</span>' : '<span class="tag tag--free">Free</span>') +
     (p.is_admin ? ' <span class="tag tag--info">Admin</span>' : "");
@@ -158,6 +167,22 @@ function renderProfile() {
   document.getElementById("detail-last-active").textContent = p.last_active_date ? `last active ${p.last_active_date}` : "";
   document.getElementById("detail-freezes").textContent = p.streak_freezes ?? 0;
   document.getElementById("display-name-input").value = p.display_name || "";
+
+  const campusInput = document.getElementById("campus-tag-input");
+  if (campusInput) campusInput.value = parsedCampus.campusTag || "";
+  const campusClearBtn = document.getElementById("campus-tag-clear-btn");
+  if (campusClearBtn) campusClearBtn.disabled = !parsedCampus.hasCampus;
+  const campusStatus = document.getElementById("campus-tag-current");
+  if (campusStatus) {
+    if (parsedCampus.hasCampus) {
+      const link = campusLeaderboardLink(parsedCampus.campusTag);
+      campusStatus.innerHTML =
+        `<span class="campus-pill">🎓 ${escapeHtml(parsedCampus.campusTag)}</span>` +
+        `<button type="button" class="btn btn--secondary btn--sm" data-copy-campus-link="${escapeHtml(link)}" data-campus-name="${escapeHtml(parsedCampus.campusTag)}">🔗 Copy Leaderboard Link</button>`;
+    } else {
+      campusStatus.innerHTML = `<span class="muted" style="font-size:0.8rem">No campus tag attached yet.</span>`;
+    }
+  }
 
   const cur = document.getElementById("premium-current");
   if (premium) {
@@ -320,26 +345,74 @@ async function saveDisplayName(e) {
   await updateProfile({ display_name: val || null }, val ? "Display name saved" : "Display name cleared (fallback active)", e.target);
 }
 
-function expiryForDuration(d) {
+async function saveCampusTag(e) {
+  const campusVal = (document.getElementById("campus-tag-input").value || "").trim();
+  const parsed = parseDisplayNameCampus(detailProfile.display_name);
+  const baseName = parsed.baseName || detailProfile.full_name || (detailProfile.email ? detailProfile.email.split("@")[0] : "Learner");
+  const composed = composeDisplayNameWithCampus(baseName, campusVal);
+  await updateProfile(
+    { display_name: composed || null },
+    campusVal ? `Campus tag saved → ${composed}` : `Campus tag cleared → ${composed || "default name"}`,
+    e.target
+  );
+}
+
+async function clearCampusTag(e) {
+  const cleaned = clearDisplayNameCampus(detailProfile.display_name, detailProfile.full_name || "");
+  await updateProfile(
+    { display_name: cleaned || null },
+    `Cleared campus tag → ${cleaned || "default name"}`,
+    e.target
+  );
+}
+
+function expiryForDuration(d, currentExpiresAt) {
   if (d === "lifetime") return null;
-  const dt = new Date();
-  if (d === "1mo") dt.setMonth(dt.getMonth() + 1);
-  if (d === "3mo") dt.setMonth(dt.getMonth() + 3);
-  if (d === "1yr") dt.setFullYear(dt.getFullYear() + 1);
+  const curMs = currentExpiresAt ? new Date(currentExpiresAt).getTime() : 0;
+  const baseMs = Number.isFinite(curMs) && curMs > Date.now() ? curMs : Date.now();
+  const dt = new Date(baseMs);
+  if (d === "7d") dt.setTime(baseMs + 7 * 86400000);
+  else if (d === "1mo") dt.setTime(baseMs + 30 * 86400000);
+  else if (d === "3mo") dt.setTime(baseMs + 90 * 86400000);
+  else if (d === "1yr") dt.setTime(baseMs + 365 * 86400000);
   return dt.toISOString();
 }
 
 async function grantPremium(e) {
   const duration = document.getElementById("premium-duration").value;
-  await updateProfile(
-    { is_premium: true, premium_expires_at: expiryForDuration(duration) },
-    "Premium granted",
+  const nextExpiry = expiryForDuration(duration, detailProfile && detailProfile.premium_expires_at);
+  const labelMap = {
+    "7d": "Pro 7-Day Pass (7d) granted",
+    "1mo": "Pro Monthly (30d) granted",
+    "3mo": "Pro (90d) granted",
+    "1yr": "Pro Yearly (365d) granted",
+    lifetime: "Lifetime Pro granted",
+  };
+  const ok = await updateProfile(
+    { is_premium: true, premium_expires_at: nextExpiry },
+    labelMap[duration] || "Premium granted",
     e.target
   );
+  if (ok && nextExpiry) {
+    await sb.rpc("admin_manage_entitlement", {
+      target_user: detailUserId,
+      target_product: "pro",
+      expires: nextExpiry,
+      revoke: false,
+    });
+  }
 }
 
 async function revokePremium(e) {
-  await updateProfile({ is_premium: false, premium_expires_at: null }, "Premium revoked", e.target);
+  const ok = await updateProfile({ is_premium: false, premium_expires_at: null }, "Premium revoked", e.target);
+  if (ok) {
+    await sb.rpc("admin_manage_entitlement", {
+      target_user: detailUserId,
+      target_product: "pro",
+      expires: null,
+      revoke: true,
+    });
+  }
 }
 
 async function saveModeration(e) {

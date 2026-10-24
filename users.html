@@ -27,14 +27,34 @@
 
   <main class="admin-main">
     <div class="admin-topbar">
-      <h1>Users <span class="pill-count" id="users-count"></span></h1>
+      <div>
+        <div class="admin-eyebrow">LEARNERS · PROFILES &amp; CAMPUS MODERATION</div>
+        <h1>Users <span class="pill-count" id="users-count"></span></h1>
+      </div>
       <div class="admin-topbar__actions">
+        <button class="btn btn--secondary btn--sm" id="refresh-campuses-btn">↻ Refresh</button>
         <button class="btn btn--secondary btn--sm" id="export-users-btn">Export CSV</button>
       </div>
     </div>
 
+    <section class="section-card campus-card" id="users-campus-card" style="margin-bottom:18px">
+      <div class="section-card__head">
+        <div>
+          <h3 data-keep-emoji="1">🎓 Top Colleges / Campuses</h3>
+          <p class="muted" style="font-size:0.8rem;margin:2px 0 0">Parsed from <code>Base Name · Campus Tag</code> on learner profiles · case-insensitive leaderboard rollup</p>
+        </div>
+        <a href="https://pydebug.in/leaderboard" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--sm">Live Leaderboard ↗</a>
+      </div>
+      <div id="users-campus-root"><div class="empty-row" style="padding:12px 0">Loading campus leaderboard stats…</div></div>
+    </section>
+
     <div class="admin-toolbar">
-      <input type="text" id="user-search" placeholder="Search by email or name...">
+      <input type="text" id="user-search" placeholder="Search by email, name, or college / campus...">
+      <select id="user-filter-campus">
+        <option value="all">All campuses</option>
+        <option value="tagged">With 🎓 Campus tag</option>
+        <option value="untagged">No campus tag</option>
+      </select>
       <select id="user-filter-plan">
         <option value="all">All plans</option>
         <option value="premium">Premium</option>

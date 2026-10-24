@@ -141,13 +141,135 @@ test('premium expiry labels show time left and expired access', () => {
   assert.match(soon.label, /Ends in \d+h/);
 });
 
-test('live plan catalog matches pydebug.in/premium founding prices', () => {
+test('live plan catalog matches pydebug.in/premium founding prices including weekly 7-Day Pass and legacy sixmonth', () => {
   const ctx = fullCommonContext();
+  assert.equal(ctx.planAmountPaise('weekly'), 4900);
+  assert.equal(ctx.planLabel('weekly'), 'Pro 7-Day Pass (7d)');
+  assert.match(ctx.planBadge('weekly'), /tag--weekly.*Pro 7-Day Pass \(7d\)/);
+
   assert.equal(ctx.planAmountPaise('monthly'), 14900);
-  assert.equal(ctx.planAmountPaise('sixmonth'), 49900);
+  assert.equal(ctx.planLabel('monthly'), 'Pro Monthly');
+
   assert.equal(ctx.planAmountPaise('yearly'), 99900);
+  assert.equal(ctx.planLabel('yearly'), 'Pro Yearly');
+
+  assert.equal(ctx.planAmountPaise('sixmonth'), 49900);
+  assert.equal(ctx.planLabel('sixmonth'), 'Pro 6 Months (Legacy)');
+  assert.match(ctx.planBadge('sixmonth'), /tag--unknown.*Pro 6 Months \(Legacy\)/);
+
   assert.equal(ctx.planAmountPaise('exam_pack'), 149900);
   assert.equal(ctx.planLabel('exam_pack'), 'Exam Pack');
+
+  assert.equal(ctx.formatPaiseINR(4900), '₹49');
+  assert.equal(ctx.formatPaiseINR(3920), '₹39.20');
+});
+
+test('sachet conversion metrics split today/7d revenue and track weekly -> monthly/yearly repeat upgrades', () => {
+  const ctx = fullCommonContext();
+  const now = new Date('2026-10-24T18:00:00.000Z').getTime();
+  const todayIso = new Date(now - 2 * 3600000).toISOString();
+  const threeDaysAgoIso = new Date(now - 3 * 86400000).toISOString();
+  const twentyDaysAgoIso = new Date(now - 20 * 86400000).toISOString();
+
+  const grants = [
+    // User 1: bought weekly 20d ago (welcome ₹39), upgraded to monthly today (₹149)
+    { user_id: 'u1', plan_key: 'weekly', amount_paise: 3900, created_at: twentyDaysAgoIso },
+    { user_id: 'u1', plan_key: 'monthly', amount_paise: 14900, created_at: todayIso },
+    // User 2: bought weekly 3d ago (₹49), upgraded to yearly today (₹999)
+    { user_id: 'u2', plan_key: 'weekly', amount_paise: 4900, created_at: threeDaysAgoIso },
+    { user_id: 'u2', plan_key: 'yearly', amount_paise: 99900, created_at: todayIso },
+    // User 3: bought weekly today (₹49), has not upgraded yet
+    { user_id: 'u3', plan_key: 'weekly', amount_paise: 4900, created_at: todayIso },
+    // User 4: bought monthly first, later bought weekly — NOT a weekly-first upgrade
+    { user_id: 'u4', plan_key: 'monthly', amount_paise: 14900, created_at: twentyDaysAgoIso },
+    { user_id: 'u4', plan_key: 'weekly', amount_paise: 4900, created_at: threeDaysAgoIso },
+  ];
+
+  const m = ctx.computeSachetMetrics(grants, now);
+  assert.equal(m.today.weekly.count, 1);
+  assert.equal(m.today.weekly.revenuePaise, 4900);
+  assert.equal(m.today.monthly.count, 1);
+  assert.equal(m.today.monthly.revenuePaise, 14900);
+  assert.equal(m.today.yearly.count, 1);
+  assert.equal(m.today.yearly.revenuePaise, 99900);
+
+  assert.equal(m.last7d.weekly.count, 3);
+  assert.equal(m.last7d.weekly.revenuePaise, 14700);
+  assert.equal(m.last7d.monthly.count, 1);
+  assert.equal(m.last7d.yearly.count, 1);
+
+  assert.equal(m.upgrades.weeklyFirstUsers, 3);
+  assert.equal(m.upgrades.upgradedUsers, 2);
+  assert.equal(m.upgrades.toMonthlyUsers, 1);
+  assert.equal(m.upgrades.toYearlyUsers, 1);
+  assert.equal(m.upgrades.conversionPercent, 67);
+  assert.equal(m.upgrades.upgradeRevenuePaise, 14900 + 99900);
+
+  const html = ctx.renderSachetCardHtml(m);
+  assert.match(html, /Pro 7-Day Pass \(7d\)/);
+  assert.match(html, /2 Sachet → Pro Upgrades/);
+});
+
+test('campus leaderboard helpers parse, moderate, and aggregate display_name tags case-insensitively', () => {
+  const ctx = fullCommonContext();
+
+  const parsed = ctx.parseDisplayNameCampus('Aarav Sharma · DAVV Indore');
+  assert.equal(parsed.hasCampus, true);
+  assert.equal(parsed.baseName, 'Aarav Sharma');
+  assert.equal(parsed.campusTag, 'DAVV Indore');
+
+  const plain = ctx.parseDisplayNameCampus('Priya Patel');
+  assert.equal(plain.hasCampus, false);
+  assert.equal(plain.baseName, 'Priya Patel');
+  assert.equal(plain.campusTag, null);
+
+  assert.equal(ctx.clearDisplayNameCampus('Aarav Sharma · Spam Tag'), 'Aarav Sharma');
+  assert.equal(ctx.composeDisplayNameWithCampus('Aarav Sharma', 'IIT Bombay'), 'Aarav Sharma · IIT Bombay');
+
+  const longComposed = ctx.composeDisplayNameWithCampus('A'.repeat(50), 'Indian Institute of Technology Indore MP');
+  assert.ok(longComposed.length <= 60, `Expected <= 60 chars, got ${longComposed.length}`);
+  assert.ok(longComposed.includes(' · '));
+
+  assert.equal(
+    ctx.campusLeaderboardLink('DAVV Indore'),
+    'https://pydebug.in/leaderboard?campus=DAVV%20Indore'
+  );
+
+  const rollup = ctx.aggregateCampuses([
+    { display_name: 'Aarav · DAVV Indore', xp: 450, streak: 5, is_premium: true },
+    { display_name: 'Riya · davv indore', xp: 300, streak: 0, is_premium: false },
+    { display_name: 'Kabir · VIT Vellore', xp: 900, streak: 12, is_premium: true },
+    { display_name: 'Untagged Learner', xp: 5000, streak: 20, is_premium: true },
+  ]);
+
+  assert.equal(rollup.length, 2);
+  assert.equal(rollup[0].campus, 'DAVV Indore');
+  assert.equal(rollup[0].totalStudents, 2);
+  assert.equal(rollup[0].activeStreakUsers, 1);
+  assert.equal(rollup[0].totalXp, 750);
+  assert.equal(rollup[0].proSubscribers, 1);
+  assert.equal(rollup[0].leaderboardUrl, 'https://pydebug.in/leaderboard?campus=DAVV%20Indore');
+
+  assert.equal(rollup[1].campus, 'VIT Vellore');
+  assert.equal(rollup[1].totalStudents, 1);
+  assert.equal(rollup[1].totalXp, 900);
+});
+
+test('grant controls offer 7-day pass and never offer legacy sixmonth for new grants', () => {
+  const paymentsHtml = fs.readFileSync('payments.html', 'utf8');
+  const userDetailHtml = fs.readFileSync('user-detail.html', 'utf8');
+
+  // Entitlement grant select in payments.html has 7 Days — Pro 7-Day Pass and NOT sixmonth/182
+  const entSelect = paymentsHtml.match(/<select id="ent-days">([\s\S]*?)<\/select>/);
+  assert.ok(entSelect, 'Expected #ent-days select on payments.html');
+  assert.match(entSelect[1], /value="7"[^>]*>7 Days — Pro 7-Day Pass/);
+  assert.doesNotMatch(entSelect[1], /sixmonth|182/i);
+
+  // User detail grant select has 7d — Pro 7-Day Pass and NOT sixmonth/6mo
+  const premSelect = userDetailHtml.match(/<select id="premium-duration">([\s\S]*?)<\/select>/);
+  assert.ok(premSelect, 'Expected #premium-duration select on user-detail.html');
+  assert.match(premSelect[1], /value="7d"[^>]*>7 Days — Pro 7-Day Pass/);
+  assert.doesNotMatch(premSelect[1], /sixmonth|6mo/i);
 });
 
 test('slugifyProblemTitle produces clean URL-safe slugs', () => {

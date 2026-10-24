@@ -55,6 +55,7 @@
     flagIndia: '<path d="M5 21V4M5 5h14l-2 4 2 4H5"/><circle cx="12" cy="9" r="1"/>',
     hand: '<path d="M7 11V6a1.5 1.5 0 0 1 3 0v4-6a1.5 1.5 0 0 1 3 0v6-5a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v5c0 5-3 8-7 8h-1c-3 0-4-2-6-4l-2-2a1.5 1.5 0 0 1 2-2z"/>',
     trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM12 13v5M8 21h8M5 5H3v2a4 4 0 0 0 4 4M19 5h2v2a4 4 0 0 1-4 4"/>',
+    zap: '<path d="M13 2 3 14h8l-1 8 10-12h-8z"/>',
     snow: '<path d="M12 2v20M4.9 6l14.2 12M19.1 6 4.9 18M5 12h14"/><path d="m12 2 1 2M12 2 11 4M12 22l1-2M12 22l-1-2"/>',
   };
 
@@ -63,7 +64,7 @@
     "🔍": "search", "🔎": "search", "🧹": "trash", "👋": "hand", "📰": "file", "❤️": "heart",
     "❤": "heart", "🎯": "target", "💰": "money", "💡": "info", "🚀": "arrowRight", "🧩": "sparkles",
     "✨": "sparkles", "📥": "download", "🇮🇳": "flagIndia", "🕵️": "search", "🕵": "search",
-    "🐞": "bug", "🏭": "chart", "⚡": "chart", "🛡️": "shield", "🛡": "shield", "🧪": "flask",
+    "🐞": "bug", "🏭": "chart", "⚡": "zap", "🛡️": "shield", "🛡": "shield", "🧪": "flask",
     "📣": "bell", "📝": "file", "🏆": "trophy", "❄️": "snow", "❄": "snow", "✅": "check",
     "✔️": "check", "✔": "check", "❌": "close", "⚠️": "alert", "⚠": "alert", "🔴": "alert",
     "🟡": "alert", "🟢": "check", "⭐": "target", "📄": "file", "🔧": "code", "🥺": "heart",
@@ -97,7 +98,7 @@
     const value = node.nodeValue;
     if (!value || !NON_ASCII_RE.test(value)) return;
     const parent = node.parentElement;
-    if (!parent || SKIP_TAGS[parent.tagName] || parent.closest("svg")) return;
+    if (!parent || SKIP_TAGS[parent.tagName] || parent.closest("svg, [data-keep-emoji]")) return;
 
     TOKEN_RE.lastIndex = 0;
     if (!TOKEN_RE.test(value)) return;

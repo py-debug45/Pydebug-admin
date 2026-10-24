@@ -92,7 +92,7 @@ onAdminReady(async () => {
   // several seconds parsing JSON before the page would even scroll.
   await Promise.all([loadStats(), loadProblems(0)]);
   loadAnalytics();
-  const later = () => { loadActivity(); loadTopProblems(); loadAIBrief(); };
+  const later = () => { loadActivity(); loadTopProblems(); loadAIBrief(); loadDashboardCampuses(); };
   if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(later, { timeout: 1200 });
   else window.setTimeout(later, 120);
 
@@ -129,6 +129,7 @@ async function refreshDashboard() {
       loadTopProblems(),
       loadDailyPractice(),
       loadAIBrief(),
+      loadDashboardCampuses(),
     ]);
     updateSyncStamp();
     showToast("Dashboard refreshed", "success");
@@ -195,7 +196,7 @@ async function loadStats() {
   // when grant.amount_paise is null).
   try {
     const [grantRows, orderRows] = await Promise.all([
-      fetchAdminRows("payment_grants", "payment_id, order_id, plan_key, amount_paise, created_at", "payment_id"),
+      fetchAdminRows("payment_grants", "payment_id, user_id, order_id, plan_key, amount_paise, created_at", "payment_id"),
       fetchAdminRows("payment_orders", "order_id, amount", "created_at").catch(() => []),
     ]);
     const orderMap = {};
@@ -219,6 +220,8 @@ async function loadStats() {
     document.getElementById("stat-revenue").textContent = fmtINR(total / 100);
     document.getElementById("stat-month-revenue").textContent = fmtINR(monthTotal / 100);
     setTrend("stat-month-revenue-trend", monthTotal / 100, previousMonthTotal / 100, "₹");
+    const sachetEl = document.getElementById("dashboard-sachet-root");
+    if (sachetEl) sachetEl.innerHTML = renderSachetCardHtml(computeSachetMetrics(rows));
   } catch (e) {
     console.warn("loadStats revenue:", e.message);
     document.getElementById("stat-revenue").textContent = "₹—";
@@ -672,5 +675,30 @@ async function varyProblem(id, btn) {
     showToast("Variations failed: " + e.message, "error");
     btn.disabled = false;
     btn.textContent = origText;
+  }
+}
+
+async function loadDashboardCampuses() {
+  const root = document.getElementById("dashboard-campus-root");
+  if (!root) return;
+  try {
+    const tagged = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await sb
+        .from("profiles")
+        .select("id, display_name, xp, streak, is_premium")
+        .ilike("display_name", "% · %")
+        .order("id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      const chunk = data || [];
+      tagged.push(...chunk);
+      if (chunk.length < pageSize) break;
+    }
+    root.innerHTML = renderCampusAnalyticsHtml(aggregateCampuses(tagged), { limit: 10, allowFilter: false });
+  } catch (e) {
+    console.warn("loadDashboardCampuses:", e.message);
+    root.innerHTML = `<div class="empty-row" style="padding:12px 0">Could not load campus leaderboard stats.</div>`;
   }
 }

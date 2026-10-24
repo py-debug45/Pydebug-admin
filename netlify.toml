@@ -1,33 +1,49 @@
 [build]
-  publish = "."
+  command = "rm -rf _site && mkdir -p _site && cp *.html _site/ && cp -r css js _site/"
+  publish = "_site"
 
-# ---------------------------------------------------------------------------
-# Caching
-# The panel is plain static files, so the browser can keep them instead of
-# re-downloading every script on every page change. App code is revalidated
-# (a 304 is instant but never serves a stale deploy); the version-pinned
-# vendor bundle may be cached for a day.
-# ---------------------------------------------------------------------------
+# Defense-in-depth: block public HTTP access to .env*, .sql, .md, /db/*, and /tests/*
+[[redirects]]
+  from = "/.env*"
+  to = "/__blocked__"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.env*"
+  to = "/__blocked__"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.sql"
+  to = "/__blocked__"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/db/*"
+  to = "/__blocked__"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.md"
+  to = "/__blocked__"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/tests/*"
+  to = "/__blocked__"
+  status = 404
+  force = true
+
 [[headers]]
-  for = "/*.html"
+  for = "/*"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
-    X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     X-Robots-Tag = "noindex, nofollow"
-
-[[headers]]
-  for = "/js/*"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
-
-[[headers]]
-  for = "/css/*"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
-
-[[headers]]
-  for = "/js/vendor/*"
-  [headers.values]
-    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

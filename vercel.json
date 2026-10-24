@@ -1,9 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": null,
-  "outputDirectory": ".",
+  "buildCommand": "rm -rf _site && mkdir -p _site && cp *.html _site/ && cp -r css js _site/",
+  "outputDirectory": "_site",
   "cleanUrls": true,
+  "rewrites": [
+    { "source": "/.env:rest*", "destination": "/__blocked__" },
+    { "source": "/:path*.env:rest*", "destination": "/__blocked__" },
+    { "source": "/:path*.sql", "destination": "/__blocked__" },
+    { "source": "/:path*.md", "destination": "/__blocked__" },
+    { "source": "/db/:path*", "destination": "/__blocked__" },
+    { "source": "/tests/:path*", "destination": "/__blocked__" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -11,20 +19,9 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
       ]
-    },
-    {
-      "source": "/(.*)\\.html",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
-    },
-    {
-      "source": "/(js|css)/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
-    },
-    {
-      "source": "/js/vendor/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }]
     }
   ]
 }

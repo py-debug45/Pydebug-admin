@@ -56,14 +56,22 @@
     <div class="detail-grid">
       <div>
         <div class="manage-card">
-          <h3>Display name</h3>
+          <h3 data-keep-emoji="1">Display name &amp; 🎓 Campus tag</h3>
+          <div id="campus-tag-current" class="campus-detail-status" data-keep-emoji="1"></div>
           <div class="field">
-            <input type="text" id="display-name-input" maxlength="60" placeholder="Public name on leaderboard &amp; discussions">
+            <input type="text" id="campus-tag-input" maxlength="45" placeholder="College / Campus tag (e.g. DAVV Indore, VIT)">
+          </div>
+          <div class="btn-row" style="margin-bottom:10px">
+            <button class="btn btn--secondary btn--sm" id="campus-tag-save-btn" data-keep-emoji="1">🎓 Save campus tag</button>
+            <button class="btn btn--danger btn--sm" id="campus-tag-clear-btn">✕ Clear campus tag</button>
+          </div>
+          <div class="field">
+            <input type="text" id="display-name-input" maxlength="60" placeholder="Full display name (Base Name · Campus Tag)">
           </div>
           <div class="btn-row">
-            <button class="btn btn--secondary btn--sm" id="display-name-save-btn">Save name</button>
+            <button class="btn btn--secondary btn--sm" id="display-name-save-btn">Save raw display name</button>
           </div>
-          <div class="manage-note">Shown publicly. Empty = app falls back to email prefix.</div>
+          <div class="manage-note">Stored in <code>profiles.display_name</code> as <code>Base Name · Campus Tag</code> (max 60 chars).</div>
         </div>
 
         <div class="manage-card">
@@ -88,18 +96,19 @@
         </div>
 
         <div class="manage-card">
-          <h3>Premium access</h3>
+          <h3>Grant / Extend Pro Access</h3>
           <div class="manage-note" id="premium-current" style="margin:0 0 10px"></div>
           <div class="field">
             <select id="premium-duration">
+              <option value="7d">7 Days — Pro 7-Day Pass</option>
+              <option value="1mo">30 Days — Pro Monthly</option>
+              <option value="3mo">90 Days</option>
+              <option value="1yr">365 Days — Pro Yearly</option>
               <option value="lifetime">Lifetime (manual grant)</option>
-              <option value="1mo">1 month</option>
-              <option value="3mo">3 months</option>
-              <option value="1yr">1 year</option>
             </select>
           </div>
           <div class="btn-row">
-            <button class="btn btn--primary btn--sm" id="premium-grant-btn">Grant premium</button>
+            <button class="btn btn--primary btn--sm" id="premium-grant-btn">Grant / Extend Pro</button>
             <button class="btn btn--secondary btn--sm" id="premium-revoke-btn">Revoke</button>
           </div>
         </div>
