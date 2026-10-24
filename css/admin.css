@@ -138,6 +138,17 @@ table.admin-table tbody tr { transition: background-color .16s ease; }
 .svg-icon-holder { display: inline-flex; align-items: center; justify-content: center; vertical-align: -0.13em; line-height: 0; margin: 0 0.12em; }
 .svg-icon-holder .svg-icon { width: 1em; height: 1em; }
 .admin-sidebar nav a svg { width: 17px; height: 17px; flex-shrink: 0; }
+/* Nav rows are icon + one label span. The span (not the <a>) is what
+   ellipsizes, so a long page name can never stretch the drawer wider. */
+.admin-nav-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-sidebar nav a .admin-nav-icon { width: 17px; height: 17px; opacity: .82; transition: opacity .18s ease; }
+.admin-sidebar nav a:hover .admin-nav-icon,
+.admin-sidebar nav a.active .admin-nav-icon { opacity: 1; }
+/* Drawer header (brand + close). Desktop keeps its usual stacked logo/tag;
+   the wrapper only exists to give the mobile drawer one pinned header row. */
+.admin-sidebar__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; flex: 0 0 auto; }
+.admin-sidebar__brand { min-width: 0; }
+.admin-sidebar__close { display: none; }
 .admin-sidebar__account button svg { width: 17px; height: 17px; display: block; }
 .admin-sidebar nav a:hover { background: var(--bg-elevated); color: var(--text-primary); }
 .admin-sidebar nav a.active {
@@ -884,6 +895,7 @@ body.admin-protected {
   border-left-color: var(--accent-mint);
   box-shadow: inset 0 0 20px rgba(79, 209, 197, .035);
 }
+.admin-sidebar nav a.active { padding-right: 26px; } /* room for the live dot */
 .admin-sidebar nav a.active::after {
   content: "";
   position: absolute;
@@ -1940,16 +1952,22 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
 
   .admin-shell { display: block; }
 
-  /* ---- Off-canvas drawer ---- */
+  /* ---- Off-canvas drawer ----
+     Layout is header / scrolling link list / footer. Only the link list
+     scrolls, so the brand and the account+logout row are always reachable —
+     before this, 14 links plus the quick-tools block pushed both off-screen
+     and the fixed hamburger sat on top of whatever link happened to be first. */
   .admin-sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    width: min(290px, 84vw);
+    width: min(300px, 86vw);
     height: 100%;
     height: 100dvh;
     max-height: 100dvh;
-    padding: calc(18px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: calc(14px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
     align-items: stretch;
     background: #10151f;
     border-right: 1px solid var(--admin-line);
@@ -1970,12 +1988,66 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
   }
   /* Keyboard users can still reach the drawer links while it animates. */
   .admin-sidebar:focus-within { visibility: visible; }
-  .admin-sidebar__tag { display: block; padding-left: 10px; margin-bottom: 18px; }
-  .admin-sidebar nav { display: flex; flex-direction: column; gap: 3px; overflow: visible; }
-  .admin-sidebar nav a { white-space: normal; min-height: 46px; font-size: .92rem; }
+
+  /* ---- Drawer header: brand on the left, close control on the right ---- */
+  .admin-sidebar__head {
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 12px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--admin-line);
+  }
+  .admin-sidebar__tag { display: block; padding-left: 39px; margin: 0; }
+  .admin-sidebar__close {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    margin: -4px -2px 0 0;
+    padding: 0;
+    color: var(--text-primary);
+    background: #171d2a;
+    border: 1px solid var(--admin-line-strong);
+    border-radius: 12px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .admin-sidebar__close .svg-icon { width: 19px; height: 19px; }
+  .admin-sidebar__close:hover,
+  .admin-sidebar__close:active { background: #202839; color: var(--accent-mint); border-color: rgba(79, 209, 197, .45); }
+
+  /* ---- Scrolling link list ---- */
+  .admin-sidebar nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 2px 0 8px;
+  }
+  .admin-sidebar nav::-webkit-scrollbar { width: 0; height: 0; }
+  .admin-sidebar nav a { min-height: 44px; margin-bottom: 0; padding: 9px 11px; font-size: .9rem; }
+  .admin-sidebar nav a.active { padding-right: 24px; }
   .admin-sidebar nav a:hover { transform: none; }
-  .admin-sidebar__account { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--admin-line); margin-left: 0; }
+  /* The 1-tap quick tools already sit in a horizontal bar at the top of the
+     page on phones; repeating them in the drawer just ate the space the real
+     navigation needed. */
+  .admin-sidebar__quick { display: none; }
+  .admin-sidebar__account {
+    flex: 0 0 auto;
+    margin: 8px 0 0;
+    padding: 12px 4px 0;
+    border-top: 1px solid var(--admin-line);
+  }
   .admin-sidebar__account span { display: block; }
+  .admin-sidebar__account button { width: 40px; height: 40px; display: grid; place-items: center; }
+  .admin-sidebar__account button svg { width: 19px; height: 19px; }
 
   .admin-sidebar-backdrop {
     display: block;
@@ -2006,9 +2078,12 @@ button, a, .btn, input, select, textarea { -webkit-tap-highlight-color: transpar
     border-radius: 13px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
     cursor: pointer;
-    transition: background .18s ease, border-color .18s ease;
+    transition: background .18s ease, border-color .18s ease, opacity .18s ease, visibility .18s ease;
   }
   .admin-mobile-menu:active { background: #202839; }
+  /* While the drawer is open the in-drawer ✕ is the close control, so the
+     floating hamburger steps aside instead of covering the brand row. */
+  body.admin-nav-open .admin-mobile-menu { opacity: 0; visibility: hidden; pointer-events: none; }
   .admin-mobile-menu .svg-icon { width: 21px; height: 21px; pointer-events: none; }
   .admin-mobile-menu[aria-expanded="true"] { color: var(--accent-mint); border-color: rgba(79, 209, 197, .45); }
   body.admin-nav-open { overflow: hidden; }

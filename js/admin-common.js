@@ -91,6 +91,31 @@ const AdminNav = (() => {
     sidebar = document.querySelector(".admin-sidebar");
     if (!sidebar || document.querySelector(".admin-mobile-menu")) return;
 
+    // Drawer header (brand + close). Built here instead of in every page's
+    // HTML so all 14 admin pages get identical chrome without duplicated
+    // markup. The existing logo/tag nodes are MOVED, not re-created, so any
+    // page-specific text stays intact.
+    let head = sidebar.querySelector(".admin-sidebar__head");
+    if (!head) {
+      head = document.createElement("div");
+      head.className = "admin-sidebar__head";
+      const brand = document.createElement("div");
+      brand.className = "admin-sidebar__brand";
+      const logo = sidebar.querySelector(".admin-sidebar__logo");
+      const tag = sidebar.querySelector(".admin-sidebar__tag");
+      if (logo) brand.appendChild(logo);
+      if (tag) brand.appendChild(tag);
+      head.appendChild(brand);
+      sidebar.insertBefore(head, sidebar.firstChild);
+    }
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "admin-sidebar__close";
+    closeBtn.setAttribute("aria-label", "Close admin navigation");
+    closeBtn.innerHTML = window.adminIcon ? adminIcon("close") : "✕";
+    head.appendChild(closeBtn);
+
     button = document.createElement("button");
     button.className = "admin-mobile-menu";
     button.type = "button";
@@ -111,6 +136,7 @@ const AdminNav = (() => {
       event.preventDefault();
       setOpen(!open);
     });
+    closeBtn.addEventListener("click", () => setOpen(false));
     backdrop.addEventListener("click", () => setOpen(false));
 
     // One delegated listener for every nav link (now and any added later).
@@ -818,29 +844,47 @@ function markAdminActiveNav() {
   const links = document.querySelectorAll(".admin-sidebar nav a");
   links.forEach((link) => {
     const target = link.getAttribute("data-admin-nav") || (link.getAttribute("href") || "").split("#")[0];
-    link.classList.toggle("active", target === page);
+    const active = target === page;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
     if (target) link.dataset.adminNav = target;
   });
 }
 
 // Older admin pages intentionally keep their HTML compact. Ensure every
 // page has the complete, consistently ordered workspace navigation.
+//
+// Every entry carries an icon NAME rather than a glyph: the previous list mixed
+// emoji (🎟️ 💬 🤖) with plain text symbols (▥ ◈ ✦ ⚔ ◌ ₹) — emoji rendered as
+// full-colour pictures, the rest as thin characters, so on a phone the drawer
+// looked ragged and misaligned. The SVG set from admin-icons.js gives every
+// row the same stroke weight, size and alignment.
 const ADMIN_NAV_ITEMS = [
-  ["dashboard.html", "▥  Dashboard"],
-  ["insights.html", "◈  Growth insights"],
-  ["certificates.html", "✦  Certificates"],
-  ["arenas.html", "⚔  Mocks & Battles"],
-  ["community.html", "💬  Community & Hub"],
-  ["submissions.html", "</> Submissions"],
-  ["payments.html", "₹  Payments"],
-  ["coupons.html", "🎟️  Coupons & Creators"],
-  ["discussions.html", "◌  Discussions"],
-  ["notifications.html", "🔔  Notifications"],
-  ["ai.html", "🤖  AI Control"],
-  ["audit.html", "🛡  Audit log"],
-  ["problem-form.html", "＋  Add Problem"],
-  ["users.html", "👥  Users"],
+  { href: "dashboard.html", label: "Dashboard", icon: "dashboard" },
+  { href: "insights.html", label: "Growth insights", icon: "chart" },
+  { href: "certificates.html", label: "Certificates", icon: "certificate" },
+  { href: "arenas.html", label: "Mocks & Battles", icon: "target" },
+  { href: "community.html", label: "Community & Hub", icon: "message" },
+  { href: "submissions.html", label: "Submissions", icon: "code" },
+  { href: "payments.html", label: "Payments", icon: "card" },
+  { href: "coupons.html", label: "Coupons & Creators", icon: "ticket" },
+  { href: "discussions.html", label: "Discussions", icon: "chat" },
+  { href: "notifications.html", label: "Notifications", icon: "bell" },
+  { href: "ai.html", label: "AI Control", icon: "bot" },
+  { href: "audit.html", label: "Audit log", icon: "shield" },
+  { href: "problem-form.html", label: "Add Problem", icon: "plus" },
+  { href: "users.html", label: "Users", icon: "users" },
 ];
+
+// One <a> body for every nav row: icon + single-line label. The label is
+// wrapped in a span so it can ellipsize instead of pushing the row wide.
+function adminNavLinkContent(item) {
+  const icon = typeof window !== "undefined" && window.adminIcon
+    ? window.adminIcon(item.icon, "admin-nav-icon")
+    : "";
+  return `${icon}<span class="admin-nav-label">${escapeHtml(item.label)}</span>`;
+}
 
 // 1-tap external Founder Quick Tools — optimized for mobile solo operations.
 const FOUNDER_QUICK_TOOLS = [
@@ -859,15 +903,18 @@ function ensureAdminNavigation() {
     if (href) existing.set(href, a);
   });
   const frag = document.createDocumentFragment();
-  ADMIN_NAV_ITEMS.forEach(([href, label]) => {
-    let link = existing.get(href);
+  ADMIN_NAV_ITEMS.forEach((item) => {
+    let link = existing.get(item.href);
     if (!link) {
       link = document.createElement("a");
-      link.href = href;
-      link.textContent = label;
+      link.href = item.href;
     }
-    link.dataset.adminNav = href;
-    existing.delete(href);
+    link.dataset.adminNav = item.href;
+    link.dataset.navIcon = item.icon;
+    // Re-render every row (even ones already in the page markup) so older
+    // pages, hand-written pages and this canonical list all look identical.
+    link.innerHTML = adminNavLinkContent(item);
+    existing.delete(item.href);
     frag.appendChild(link);
   });
   // Preserve any custom links not in the canonical list at the end.
