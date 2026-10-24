@@ -88,6 +88,59 @@ test('revenue uses verified charged amount, linked order amount, or plan fallbac
   assert.equal(ctx.grantAmountPaise({ amount_paise: null, plan_key: 'monthly' }), 9900);
 });
 
+test('discounted purchases report the real charged amount, list price and savings', () => {
+  const ctx = fullCommonContext();
+
+  // DIWALI01: 20% off Pro Monthly (₹149) => Razorpay charged ₹119.
+  const monthly = { amount_paise: 11900, plan_key: 'monthly', discount_percent: 20, coupon_code: 'DIWALI01' };
+  assert.equal(ctx.grantPaidPaise(monthly), 11900);
+  assert.equal(ctx.grantAmountPaise(monthly), 11900, 'revenue must use ₹119, not the ₹149 catalog price');
+  assert.equal(ctx.grantAmountIsEstimated(monthly), false);
+  assert.equal(ctx.grantDiscountPercent(monthly), 20);
+  assert.equal(ctx.grantListAmountPaise(monthly), 14875);
+  assert.equal(ctx.grantDiscountPaise(monthly), 2975);
+
+  // No coupon columns stored? Infer the discount from the actual amount.
+  const yearly = { amount_paise: 79920, plan_key: 'yearly' };
+  assert.equal(ctx.grantDiscountPercent(yearly), 20);
+  assert.equal(ctx.grantListAmountPaise(yearly), 99900);
+  assert.equal(ctx.grantDiscountPaise(yearly), 19980);
+  assert.equal(ctx.grantAmountPaise(yearly), 79920);
+
+  // A linked checkout order can stand in for an older grant.
+  const fromOrder = { amount_paise: null, order_amount_paise: 11900, plan_key: 'monthly', discount_percent: 20 };
+  assert.equal(ctx.grantPaidPaise(fromOrder), 11900);
+  assert.equal(ctx.grantAmountIsEstimated(fromOrder), false);
+
+  // Legacy grants are flagged instead of silently pretending the list price was paid.
+  const legacy = { amount_paise: null, plan_key: 'yearly' };
+  assert.equal(ctx.grantAmountIsEstimated(legacy), true);
+  assert.equal(ctx.grantAmountPaise(legacy), 99900);
+  assert.equal(ctx.grantDiscountPercent(legacy), 0);
+  assert.equal(ctx.grantDiscountPaise(legacy), 0);
+});
+
+test('premium expiry labels show time left and expired access', () => {
+  const ctx = fullCommonContext();
+  const inThreeDays = new Date(Date.now() + 3 * 86400000).toISOString();
+  const three = ctx.premiumTimeLeft(inThreeDays);
+  assert.equal(three.expired, false);
+  assert.equal(three.days, 3);
+  assert.match(three.label, /3 days left/);
+
+  const never = ctx.premiumTimeLeft(null);
+  assert.equal(never.expired, false);
+  assert.equal(never.days, null);
+  assert.equal(never.label, 'No expiry');
+  const gone = ctx.premiumTimeLeft('2020-01-01T00:00:00Z');
+  assert.equal(gone.expired, true);
+  assert.equal(gone.label, 'Expired');
+
+  const soon = ctx.premiumTimeLeft(new Date(Date.now() + 5 * 3600000).toISOString());
+  assert.equal(soon.expired, false);
+  assert.match(soon.label, /Ends in \d+h/);
+});
+
 test('live plan catalog matches pydebug.in/premium founding prices', () => {
   const ctx = fullCommonContext();
   assert.equal(ctx.planAmountPaise('monthly'), 14900);

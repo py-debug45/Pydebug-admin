@@ -516,16 +516,77 @@ async function fetchAdminRows(table, columns, orderColumn = "id") {
   }
 }
 
-function grantAmountPaise(grant) {
-  // Verified charged amount is authoritative, including discounts/old prices;
-  // falls back to linked order amount (if fetched), then plan catalog price.
+// Payment ledger helpers ---------------------------------------------------
+// A grant's `amount_paise` is what Razorpay actually captured, so coupons,
+// founding-offer prices and old prices are all reflected. Older grants were
+// written before the column was populated (see
+// db/migrations/20261024_payment_actual_amounts.sql), so we can also use the
+// linked checkout order's amount. Only when neither exists do we fall back to
+// the plan catalog price — and the UI marks that value as an estimate instead
+// of pretending it is the real charged amount.
+function grantPaidPaise(grant) {
+  if (!grant) return null;
   const amount = grant.amount_paise;
-  if (amount !== null && amount !== undefined && Number.isFinite(Number(amount))) {
+  if (amount !== null && amount !== undefined && amount !== "" && Number.isFinite(Number(amount))) {
     return Number(amount);
   }
   const orderAmount = grant.order_amount_paise;
-  if (orderAmount !== null && orderAmount !== undefined && Number.isFinite(Number(orderAmount))) {
+  if (orderAmount !== null && orderAmount !== undefined && orderAmount !== "" && Number.isFinite(Number(orderAmount))) {
     return Number(orderAmount);
   }
-  return planAmountPaise(grant.plan_key);
+  return null;
+}
+
+function grantAmountIsEstimated(grant) {
+  return grantPaidPaise(grant) === null;
+}
+
+function grantAmountPaise(grant) {
+  const paid = grantPaidPaise(grant);
+  return paid !== null ? paid : planAmountPaise(grant && grant.plan_key);
+}
+
+// Coupon percent when the ledger has it; otherwise inferred from the amount
+// actually paid versus the plan price (covers old grants without coupon data).
+function grantDiscountPercent(grant) {
+  const explicit = Number(grant && grant.discount_percent);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.min(99, Math.round(explicit));
+  const paid = grantPaidPaise(grant);
+  const list = planAmountPaise(grant && grant.plan_key);
+  if (paid !== null && list > 0 && paid < list) {
+    return Math.min(99, Math.round((1 - paid / list) * 100));
+  }
+  return 0;
+}
+
+// What the learner would have paid without the coupon.
+function grantListAmountPaise(grant) {
+  const paid = grantPaidPaise(grant);
+  const plan = planAmountPaise(grant && grant.plan_key);
+  const pct = grantDiscountPercent(grant);
+  if (paid !== null && pct > 0) {
+    // Reverse the coupon: paid = list * (100 - pct) / 100 (rounded to paise).
+    return Math.round((paid * 100) / (100 - pct));
+  }
+  return plan || paid || 0;
+}
+
+function grantDiscountPaise(grant) {
+  const paid = grantPaidPaise(grant);
+  if (paid === null) return 0; // never claim a saving we cannot verify
+  return Math.max(0, grantListAmountPaise(grant) - paid);
+}
+
+// Human label for an entitlement end date: "23 days left" / "Expired".
+function premiumTimeLeft(iso) {
+  if (!iso) return { expired: false, days: null, label: "No expiry" };
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return { expired: false, days: null, label: "" };
+  if (ms <= 0) return { expired: true, days: 0, label: "Expired" };
+  const days = Math.ceil(ms / 86400000);
+  if (ms < 86400000) {
+    const hours = Math.max(1, Math.ceil(ms / 3600000));
+    return { expired: false, days, label: `Ends in ${hours}h` };
+  }
+  return { expired: false, days, label: `${days} day${days === 1 ? "" : "s"} left` };
 }

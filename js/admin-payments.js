@@ -88,18 +88,26 @@ async function loadAllPaymentData() {
     ? entRes.value.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
     : [];
 
-  const orderAmountById = {};
+  const orderById = {};
   allOrders.forEach((o) => {
-    if (o.order_id && Number.isFinite(Number(o.amount))) {
-      orderAmountById[o.order_id] = Number(o.amount);
-    }
+    if (o.order_id) orderById[o.order_id] = o;
   });
 
+  // The ledger is authoritative for what was charged. If a grant predates
+  // amount capture, borrow the linked order's amount / coupon so the panel
+  // still shows the real price the learner paid.
   allGrants = (grantsRes.value || [])
-    .map((g) => ({
-      ...g,
-      order_amount_paise: orderAmountById[g.order_id] ?? null,
-    }))
+    .map((g) => {
+      const order = orderById[g.order_id] || null;
+      const orderAmount = order && Number.isFinite(Number(order.amount)) ? Number(order.amount) : null;
+      const orderPct = order && Number.isFinite(Number(order.discount_percent)) ? Number(order.discount_percent) : 0;
+      return {
+        ...g,
+        coupon_code: g.coupon_code || (order && order.coupon_code) || null,
+        discount_percent: Number(g.discount_percent) > 0 ? Number(g.discount_percent) : orderPct,
+        order_amount_paise: orderAmount,
+      };
+    })
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
   const userIds = new Set();
@@ -134,6 +142,10 @@ function renderPaymentStats() {
     .filter((g) => new Date(g.created_at).getTime() >= monthAgo)
     .reduce((s, g) => s + grantAmountPaise(g), 0);
 
+  const discountTotal = allGrants.reduce((s, g) => s + grantDiscountPaise(g), 0);
+  const discountedCount = allGrants.filter((g) => grantDiscountPercent(g) > 0).length;
+  const estimatedCount = allGrants.filter((g) => grantAmountIsEstimated(g)).length;
+
   const paidOrderIds = new Set(allGrants.map((g) => g.order_id).filter(Boolean));
   const convertedOrders = allOrders.filter((o) => paidOrderIds.has(o.order_id)).length;
   const abandonedOrders = Math.max(0, allOrders.length - convertedOrders);
@@ -142,9 +154,19 @@ function renderPaymentStats() {
   document.getElementById("pay-total-revenue").textContent = fmtINR(total / 100);
   document.getElementById("pay-month-revenue").textContent = fmtINR(monthTotal / 100);
   document.getElementById("pay-count").textContent = allGrants.length.toLocaleString("en-IN");
+  document.getElementById("pay-discount").textContent = fmtINR(discountTotal / 100);
+  document.getElementById("pay-discount-sub").textContent = discountedCount
+    ? `on ${discountedCount.toLocaleString("en-IN")} discounted purchase${discountedCount === 1 ? "" : "s"}`
+    : "no discounted purchases";
   document.getElementById("pay-orders-dropoff").textContent = abandonedOrders.toLocaleString("en-IN");
   document.getElementById("pay-conversion-rate").textContent = convPct;
   document.getElementById("pay-avg").textContent = allGrants.length ? fmtINR(total / allGrants.length / 100) : fmtINR(0);
+  const revenueSub = document.getElementById("pay-total-revenue-sub");
+  if (revenueSub) {
+    revenueSub.textContent = estimatedCount
+      ? `${estimatedCount} legacy amount${estimatedCount === 1 ? "" : "s"} not recorded (list price used)`
+      : "actually charged by Razorpay";
+  }
 }
 
 function renderPlanCharts() {
@@ -177,7 +199,7 @@ function applyPaymentFilters() {
     if (plan !== "all" && g.plan_key !== plan && g.product_key !== plan) return false;
     if (search) {
       const u = payUserMap[g.user_id] || {};
-      const hay = `${u.email || ""} ${u.display_name || ""} ${u.full_name || ""} ${g.payment_id || ""} ${g.order_id || ""}`.toLowerCase();
+      const hay = `${u.email || ""} ${u.display_name || ""} ${u.full_name || ""} ${g.payment_id || ""} ${g.order_id || ""} ${g.coupon_code || ""} ${planLabel(g.plan_key)}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -192,29 +214,104 @@ function renderPayments() {
   tbody.innerHTML = "";
 
   if (!filteredGrants.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">No payments found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">No payments found.</td></tr>`;
     document.getElementById("payments-load-more").style.display = "none";
     return;
   }
 
   tbody.innerHTML = filteredGrants.slice(0, payVisibleCount).map((g) => {
     const u = payUserMap[g.user_id] || {};
-    const expired = g.expires_at && new Date(g.expires_at) < new Date();
+    const paid = grantPaidPaise(g);
+    const estimated = paid === null;
+    const charged = grantAmountPaise(g);
+    const list = grantListAmountPaise(g);
+    const pct = grantDiscountPercent(g);
+    const saved = grantDiscountPaise(g);
+    const left = premiumTimeLeft(g.expires_at);
+    const until = g.expires_at
+      ? `<span class="${left.expired ? "muted" : ""}">${escapeHtml(fmtDateTime(g.expires_at))}</span>
+         <div class="muted" style="font-size:0.74rem">${escapeHtml(left.label)}</div>`
+      : `<span class="muted">No expiry</span>`;
+    const discount = pct > 0
+      ? `<span class="tag tag--solved">${pct}% off</span>
+         <div class="muted" style="font-size:0.74rem">${escapeHtml(g.coupon_code || "coupon")}${saved ? ` · ${escapeHtml(fmtINR(saved / 100))} saved` : ""}</div>`
+      : `<span class="muted">—</span>`;
+    const amountCell = estimated
+      ? `<strong title="Actual Razorpay amount was never recorded for this legacy payment — showing the plan list price.">${escapeHtml(fmtINR(charged / 100))}*</strong>
+         <div><button type="button" class="btn btn--secondary btn--sm" style="padding:2px 7px;font-size:.7rem;margin-top:4px"
+            data-grant-amount="${escapeHtml(g.payment_id || "")}" data-grant-list="${list}">Set paid ₹</button></div>`
+      : `<strong>${escapeHtml(fmtINR(paid / 100))}</strong>`;
     return `<tr>
-      <td class="muted" title="${escapeHtml(fmtDateTime(g.created_at))}">${escapeHtml(timeAgo(g.created_at))}</td>
+      <td title="${escapeHtml(fmtDateTime(g.created_at))}">
+        ${escapeHtml(fmtDateTime(g.created_at))}
+        <div class="muted" style="font-size:0.74rem">${escapeHtml(timeAgo(g.created_at))}</div>
+      </td>
       <td>
         <a href="user-detail.html?id=${encodeURIComponent(g.user_id || "")}">${escapeHtml(displayNameOf(u))}</a>
         <div class="muted" style="font-size:0.75rem">${escapeHtml(u.email || "")}</div>
       </td>
       <td><span class="tag tag--premium">${escapeHtml(planLabel(g.plan_key))}</span></td>
-      <td><strong>${escapeHtml(fmtINR(grantAmountPaise(g) / 100))}</strong></td>
-      <td class="muted" title="${escapeHtml(fmtDateTime(g.expires_at))}">${expired ? "Expired" : escapeHtml(fmtDateTime(g.expires_at))}</td>
-      <td class="mono muted" title="Order: ${escapeHtml(g.order_id || "")}">${escapeHtml((g.payment_id || "").slice(0, 16))}</td>
+      <td class="muted">${pct > 0 ? `<s>${escapeHtml(fmtINR(list / 100))}</s>` : escapeHtml(fmtINR(list / 100))}</td>
+      <td>${amountCell}</td>
+      <td>${discount}</td>
+      <td>${until}</td>
+      <td class="mono muted" title="Order: ${escapeHtml(g.order_id || "")}">${escapeHtml((g.payment_id || "").slice(0, 20))}
+        <div style="font-size:0.7rem">${escapeHtml((g.order_id || "").slice(0, 20))}</div>
+      </td>
     </tr>`;
   }).join("");
 
   document.getElementById("payments-load-more").style.display =
     filteredGrants.length > payVisibleCount ? "" : "none";
+
+  if (tbody.dataset.bound !== "1") {
+    tbody.dataset.bound = "1";
+    tbody.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-grant-amount]");
+      if (!btn) return;
+      recordPaidAmount(btn);
+    });
+  }
+}
+
+// Legacy grants written before payment_grants.amount_paise was populated have
+// no real charged amount anywhere. Let the admin type the Razorpay figure; the
+// RPC re-checks is_admin() and writes an audit-log entry.
+async function recordPaidAmount(btn) {
+  const paymentId = btn.dataset.grantAmount;
+  if (!paymentId) return;
+  const suggested = Number(btn.dataset.grantList) || 0;
+  const answer = window.prompt(
+    `Actual amount Razorpay charged for ${paymentId} (in ₹):`,
+    suggested ? String(Math.round(suggested / 100)) : ""
+  );
+  if (answer === null) return;
+  const rupees = Number(String(answer).replace(/[₹,\s]/g, ""));
+  if (!Number.isFinite(rupees) || rupees < 0) {
+    showToast("Enter a valid amount in ₹", "error");
+    return;
+  }
+
+  btn.disabled = true;
+  const { error } = await sb.rpc("admin_record_grant_amount", {
+    p_payment_id: paymentId,
+    p_amount_paise: Math.round(rupees * 100),
+  });
+  if (error) {
+    btn.disabled = false;
+    showToast(explainPaymentError(error), "error");
+    return;
+  }
+  showToast(`Recorded ${fmtINR(rupees)} as the paid amount`, "success");
+  await loadAllPaymentData();
+}
+
+function explainPaymentError(error) {
+  const message = error && error.message ? error.message : String(error || "Unknown error");
+  if (/could not find the function|does not exist|schema cache/i.test(message)) {
+    return "Run db/migrations/20261024_payment_actual_amounts.sql in Supabase, then retry.";
+  }
+  return message;
 }
 
 function applyOrderFilters() {
@@ -228,7 +325,7 @@ function applyOrderFilters() {
     if (state === "converted" && !isPaid) return false;
     if (search) {
       const u = payUserMap[o.user_id] || {};
-      const hay = `${o.order_id || ""} ${u.email || ""} ${u.display_name || ""} ${u.full_name || ""}`.toLowerCase();
+      const hay = `${o.order_id || ""} ${u.email || ""} ${u.display_name || ""} ${u.full_name || ""} ${o.coupon_code || ""}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -236,22 +333,33 @@ function applyOrderFilters() {
 
   const tbody = document.getElementById("orders-tbody");
   if (!filteredOrders.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">No checkout orders match your filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">No checkout orders match your filters.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filteredOrders.slice(0, 150).map((o) => {
     const u = payUserMap[o.user_id] || {};
     const isPaid = paidOrderIds.has(o.order_id);
-    const amt = Number.isFinite(Number(o.amount)) ? fmtINR(Number(o.amount) / 100) : fmtINR(planAmountPaise(o.plan_key) / 100);
+    const pct = Math.max(0, Math.min(99, Number(o.discount_percent) || 0));
+    const paid = Number.isFinite(Number(o.amount)) ? Number(o.amount) : planAmountPaise(o.plan_key);
+    const list = pct > 0 ? Math.round((paid * 100) / (100 - pct)) : (planAmountPaise(o.plan_key) || paid);
+    const discount = pct > 0
+      ? `<span class="tag tag--solved">${pct}% off</span>
+         <div class="muted" style="font-size:0.74rem">${escapeHtml(o.coupon_code || "coupon")} · ${escapeHtml(fmtINR(Math.max(0, list - paid) / 100))} off</div>`
+      : `<span class="muted">—</span>`;
     return `<tr>
-      <td class="muted" title="${escapeHtml(fmtDateTime(o.created_at))}">${escapeHtml(timeAgo(o.created_at))}</td>
+      <td title="${escapeHtml(fmtDateTime(o.created_at))}">
+        ${escapeHtml(fmtDateTime(o.created_at))}
+        <div class="muted" style="font-size:0.74rem">${escapeHtml(timeAgo(o.created_at))}</div>
+      </td>
       <td>
         <a href="user-detail.html?id=${encodeURIComponent(o.user_id || "")}">${escapeHtml(displayNameOf(u))}</a>
         <div class="muted" style="font-size:0.74rem">${escapeHtml(u.email || "")}</div>
       </td>
       <td><span class="tag tag--info">${escapeHtml(planLabel(o.plan_key))}</span></td>
-      <td><strong>${escapeHtml(amt)}</strong></td>
+      <td class="muted">${pct > 0 ? `<s>${escapeHtml(fmtINR(list / 100))}</s>` : escapeHtml(fmtINR(list / 100))}</td>
+      <td><strong>${escapeHtml(fmtINR(paid / 100))}</strong></td>
+      <td>${discount}</td>
       <td>${isPaid ? statusBadge("paid") : '<span class="tag tag--attempted">Abandoned</span>'}</td>
       <td class="mono muted">${escapeHtml(o.order_id || "—")}</td>
     </tr>`;
@@ -345,23 +453,38 @@ async function submitEntitlementGrant(e) {
 function exportPayments() {
   if (activePayTab === "orders") {
     const paidOrderIds = new Set(allGrants.map((g) => g.order_id).filter(Boolean));
-    downloadCSV("pydebug-checkout-orders.csv", filteredOrders.map((o) => ({
-      order_id: o.order_id,
-      created_at: o.created_at,
-      user: (payUserMap[o.user_id] || {}).email || o.user_id,
-      plan: o.plan_key,
-      amount_inr: ((Number(o.amount) || planAmountPaise(o.plan_key)) / 100).toFixed(2),
-      status: paidOrderIds.has(o.order_id) ? "converted" : "abandoned",
-    })));
+    downloadCSV("pydebug-checkout-orders.csv", filteredOrders.map((o) => {
+      const pct = Math.max(0, Math.min(99, Number(o.discount_percent) || 0));
+      const paid = Number(o.amount) || planAmountPaise(o.plan_key);
+      const list = pct > 0 ? Math.round((paid * 100) / (100 - pct)) : (planAmountPaise(o.plan_key) || paid);
+      return {
+        order_id: o.order_id,
+        created_at: o.created_at,
+        user: (payUserMap[o.user_id] || {}).email || o.user_id,
+        plan: o.plan_key,
+        list_price_inr: (list / 100).toFixed(2),
+        amount_inr: (paid / 100).toFixed(2),
+        coupon_code: o.coupon_code || "",
+        discount_percent: pct || "",
+        discount_inr: (Math.max(0, list - paid) / 100).toFixed(2),
+        status: paidOrderIds.has(o.order_id) ? "converted" : "abandoned",
+      };
+    }));
     return;
   }
   downloadCSV("pydebug-payments.csv", filteredGrants.map((g) => ({
     payment_id: g.payment_id,
     order_id: g.order_id,
-    date: g.created_at,
+    purchased_at: g.created_at,
     user: (payUserMap[g.user_id] || {}).email || g.user_id,
     plan: g.plan_key,
-    amount_inr: (grantAmountPaise(g) / 100).toFixed(2),
+    list_price_inr: (grantListAmountPaise(g) / 100).toFixed(2),
+    amount_paid_inr: (grantAmountPaise(g) / 100).toFixed(2),
+    amount_source: grantAmountIsEstimated(g) ? "plan list price (not recorded)" : "razorpay captured",
+    coupon_code: g.coupon_code || "",
+    discount_percent: grantDiscountPercent(g) || "",
+    discount_inr: (grantDiscountPaise(g) / 100).toFixed(2),
     premium_until: g.expires_at,
+    days_left: premiumTimeLeft(g.expires_at).days,
   })));
 }

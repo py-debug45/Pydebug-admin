@@ -106,8 +106,20 @@ create table if not exists public.payment_grants (
   user_id uuid not null references public.profiles (id) on delete cascade,
   plan_key text not null,
   expires_at timestamptz not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- What Razorpay actually charged (coupon / old price already applied).
+  -- Populated by fulfil_payment_order() + the capture trigger added in
+  -- db/migrations/20261024_payment_actual_amounts.sql.
+  amount_paise bigint,
+  product_key text,
+  coupon_code text,
+  discount_percent integer
 );
+-- Existing installs created before the columns above existed.
+alter table public.payment_grants add column if not exists amount_paise bigint;
+alter table public.payment_grants add column if not exists product_key text;
+alter table public.payment_grants add column if not exists coupon_code text;
+alter table public.payment_grants add column if not exists discount_percent integer;
 create index if not exists payment_grants_user_idx
   on public.payment_grants (user_id);
 create index if not exists payment_grants_order_idx
