@@ -62,7 +62,79 @@ async function reloadUser() {
   }
   detailProfile = data;
   renderProfile();
-  await Promise.all([renderUserSubmissions(), renderBadges(), renderCertsAndMocks()]);
+  await Promise.all([renderUserSubmissions(), renderBadges(), renderCertsAndMocks(), renderPurchases()]);
+}
+
+// Every Razorpay purchase this learner ever made: what they actually paid,
+// the list price, the coupon/discount, when they bought it and when premium
+// access runs out (payment_grants is the permanent ledger).
+async function renderPurchases() {
+  const tbody = document.getElementById("detail-purchases-tbody");
+  const countEl = document.getElementById("detail-purchase-count");
+  const spendEl = document.getElementById("detail-spend");
+  const spendSub = document.getElementById("detail-spend-sub");
+  if (!tbody) return;
+
+  const { data, error } = await sb
+    .from("payment_grants")
+    .select("*")
+    .eq("user_id", detailUserId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Could not load purchases (${escapeHtml(error.message || "unavailable")}).</td></tr>`;
+    if (countEl) countEl.textContent = "";
+    return;
+  }
+
+  const rows = data || [];
+  const total = rows.reduce((sum, g) => sum + grantAmountPaise(g), 0);
+  if (spendEl) spendEl.textContent = fmtINR(total / 100);
+  if (spendSub) {
+    const estimated = rows.filter((g) => grantAmountIsEstimated(g)).length;
+    spendSub.textContent = estimated
+      ? `${estimated} legacy amount${estimated === 1 ? "" : "s"} not recorded`
+      : "actually paid";
+  }
+  if (countEl) countEl.textContent = rows.length ? `${rows.length} payment${rows.length === 1 ? "" : "s"}` : "";
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">No premium purchase yet — access may have been granted manually.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map((g) => {
+    const paid = grantPaidPaise(g);
+    const pct = grantDiscountPercent(g);
+    const list = grantListAmountPaise(g);
+    const saved = grantDiscountPaise(g);
+    const left = premiumTimeLeft(g.expires_at);
+    const paidCell = paid === null
+      ? `<strong title="The charged amount was not recorded for this legacy payment.">${escapeHtml(fmtINR(grantAmountPaise(g) / 100))}*</strong>`
+      : `<strong>${escapeHtml(fmtINR(paid / 100))}</strong>`;
+    return `<tr>
+      <td title="${escapeHtml(fmtDateTime(g.created_at))}">
+        ${escapeHtml(fmtDateTime(g.created_at))}
+        <div class="muted" style="font-size:0.74rem">${escapeHtml(timeAgo(g.created_at))}</div>
+      </td>
+      <td><span class="tag tag--premium">${escapeHtml(planLabel(g.plan_key))}</span></td>
+      <td>
+        ${paidCell}
+        <div class="muted" style="font-size:0.74rem">${pct > 0 ? `list ${escapeHtml(fmtINR(list / 100))}` : ""}</div>
+      </td>
+      <td>
+        ${pct > 0
+          ? `<span class="tag tag--solved">${pct}% off</span>
+             <div class="muted" style="font-size:0.74rem">${escapeHtml(g.coupon_code || "coupon")}${saved ? ` · ${escapeHtml(fmtINR(saved / 100))} saved` : ""}</div>`
+          : `<span class="muted">—</span>`}
+      </td>
+      <td>
+        ${escapeHtml(fmtDateTime(g.expires_at))}
+        <div class="muted" style="font-size:0.74rem">${escapeHtml(left.label)}</div>
+      </td>
+      <td class="mono muted" title="${escapeHtml(g.payment_id || "")}">${escapeHtml((g.payment_id || "—").slice(0, 18))}</td>
+    </tr>`;
+  }).join("");
 }
 
 function renderProfile() {

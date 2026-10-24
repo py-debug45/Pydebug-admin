@@ -172,8 +172,10 @@ guessable from the main user-facing URL.
 - `submissions.html` — Every user's progress row: filter by status, search
   by user/problem, view saved code in a modal, delete, CSV export
 - `payments.html` — Revenue from the verified `payment_grants` ledger
-  (total / 30-day / by-plan donuts) + full grant log with plan filter,
-  search and CSV export
+  (total / 30-day / discounts-given / by-plan donuts) + full purchase log
+  showing list price, **what Razorpay actually charged**, coupon + % + ₹
+  saved, purchase date/time, premium expiry with days left, and CSV export
+  (checkout orders show the same list-vs-paid split)
 - `coupons.html` — **Coupon & Promo Codes Manager**: create / edit promo
   codes with a live price preview (₹149 monthly · ₹999 yearly), plan
   targeting, total & per-user limits, expiry presets, first-purchase-only
@@ -363,6 +365,41 @@ The pure helpers (`CouponCore` in `js/admin-coupons.js`) are covered by
 `node --test tests/coupons.test.cjs`; `.preview/server.cjs` runs the page with
 seeded demo data and a mocked Supabase client for UI review (git-ignored).
 
+## 💳 Real paid amounts, discounts & expiry (2026-10-24)
+
+**The bug:** `payment_grants.amount_paise` existed but nothing ever wrote to
+it, so the panel fell back to the plan catalog price. A learner who used
+`DIWALI01` (20% off) and paid **₹119** for Pro Monthly, or ₹799.20 for Pro
+Yearly, still showed as **₹149 / ₹999** — in the table, the revenue totals,
+the donuts, the user page and the CSV export.
+
+**The fix** (`db/migrations/20261024_payment_actual_amounts.sql` — run it in
+the Supabase SQL editor once, it is idempotent):
+
+1. `fulfil_payment_order()` now stores the Razorpay-captured amount in
+   `payment_grants.amount_paise` (it already verifies that amount against the
+   order, so a discount can never be mis-recorded).
+2. A `BEFORE INSERT/UPDATE` trigger (`payment_grants_capture_actuals`) fills
+   `amount_paise`, `coupon_code` and `discount_percent` from the linked
+   `payment_orders` row, so **any** grant writer — including an older copy of
+   the user app that doesn't send those columns — still records the truth.
+3. Existing grants are backfilled from their checkout order.
+4. `admin_record_grant_amount(p_payment_id, p_amount_paise)` lets an admin
+   correct a legacy grant whose amount predates the ledger columns; it
+   re-checks `is_admin()` and writes an `admin_audit_log` entry.
+
+**What the panel shows now:** list price (struck through when discounted),
+actual paid amount, coupon code + discount % + ₹ saved, full purchase
+date/time, and the exact premium end date with a “N days left / Expired”
+label. The Payments page also totals **Discounts given**, and the user detail
+page has a **Premium purchases** table plus **Lifetime spend** (actual
+amounts). The dashboard's “Lifetime revenue” is the same captured amount.
+
+Legacy grants that predate `payment_orders` have no amount anywhere, so they
+are shown with a `*` and a **Set paid ₹** button instead of silently
+pretending the list price was paid; revenue totals mark how many rows are
+estimates.
+
 ## Keep in sync with the user panel
 
 - **Plan prices** (`js/admin-common.js` → `PYDEBUG_PLANS`) must match the
@@ -383,6 +420,8 @@ learner-table grants or disabling RLS:
 2. `db/migrations/20261021_admin_compatibility.sql`
 3. `db/migrations/20261023_complete_admin_features.sql`
 4. `db/migrations/20261023_fix_admin_table_grants.sql`
+5. `db/migrations/20261024_payment_actual_amounts.sql` (real paid amounts +
+   coupon/discount capture; see the section above)
 
 The latest migrations are idempotent; re-run them after pulling updates. They
 grant the required `authenticated` table privileges (`SELECT` / append-only
@@ -401,7 +440,9 @@ server-side admin check and an explicit field allowlist, not unrestricted
 profile UPDATE grants.
 
 Insights and payment totals now paginate past PostgREST's response cap.
-Revenue uses the ledger's actual `amount_paise`, falling back to plan prices
-only for historical rows without an amount. Audit displays both server and
+Revenue uses the ledger's actual `amount_paise` (the amount Razorpay
+captured), then the linked order amount; the plan price is used only for
+historical rows where no charged amount was ever recorded, and those rows are
+labelled as estimates (`*` + **Set paid ₹**). Audit displays both server and
 panel ledger formats. Run regression checks with
 `node --test tests/*.test.cjs`.

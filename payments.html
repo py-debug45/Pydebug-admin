@@ -39,13 +39,18 @@
     </div>
 
     <div id="payments-hint"></div>
+    <p class="muted" style="font-size:0.8rem;margin:-12px 0 18px">
+      Every row shows what Razorpay actually charged — coupons, founding-offer prices and old prices included — plus the purchase date, the discount that was applied and exactly when premium access ends.
+      Rows marked <strong>*</strong> are legacy grants whose charged amount was never stored; use <em>Set paid ₹</em> to record the real amount from your Razorpay dashboard.
+    </p>
 
     <div class="admin-stats-row">
-      <div class="stat-card"><div class="value" id="pay-total-revenue">₹0</div><div class="label">Total revenue</div><div class="sub">verified Razorpay grants</div></div>
-      <div class="stat-card"><div class="value value--mint" id="pay-month-revenue">₹0</div><div class="label">Revenue (30 days)</div></div>
+      <div class="stat-card"><div class="value" id="pay-total-revenue">₹0</div><div class="label">Total revenue</div><div class="sub" id="pay-total-revenue-sub">actually charged by Razorpay</div></div>
+      <div class="stat-card"><div class="value value--mint" id="pay-month-revenue">₹0</div><div class="label">Revenue (30 days)</div><div class="sub">actual amounts paid</div></div>
       <div class="stat-card"><div class="value value--green" id="pay-count">0</div><div class="label">Paid conversions</div></div>
+      <div class="stat-card"><div class="value" id="pay-discount">₹0</div><div class="label">Discounts given</div><div class="sub" id="pay-discount-sub">no discounted purchases</div></div>
       <div class="stat-card"><div class="value" id="pay-orders-dropoff">0</div><div class="label">Abandoned checkouts</div><div class="sub" id="pay-conversion-rate">— conversion</div></div>
-      <div class="stat-card"><div class="value" id="pay-avg">₹0</div><div class="label">Avg. payment</div></div>
+      <div class="stat-card"><div class="value" id="pay-avg">₹0</div><div class="label">Avg. payment</div><div class="sub">per paid conversion</div></div>
     </div>
 
     <div class="admin-tabs" role="tablist" aria-label="Payment views">
@@ -76,10 +81,12 @@
         <table class="admin-table">
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Purchased</th>
               <th>User</th>
               <th>Plan</th>
-              <th>Amount</th>
+              <th>List price</th>
+              <th>Paid (actual)</th>
+              <th>Discount</th>
               <th>Premium until</th>
               <th>Payment ID</th>
             </tr>
@@ -110,7 +117,9 @@
               <th>Created</th>
               <th>User</th>
               <th>Product / Plan</th>
-              <th>Order Amount</th>
+              <th>List price</th>
+              <th>Order amount</th>
+              <th>Coupon / discount</th>
               <th>Status</th>
               <th>Order ID</th>
             </tr>
