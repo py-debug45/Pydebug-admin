@@ -339,9 +339,22 @@ create table if not exists public.admin_audit_log (
   action text not null,
   entity_type text not null,
   entity_id text,
+  target_id text,
+  resource text,
+  old_value jsonb not null default '{}'::jsonb,
+  new_value jsonb not null default '{}'::jsonb,
+  reason text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+-- Backfill columns on older installs where the table was created before the
+-- writeAudit / writeAdminAudit / admin_record_grant_amount fields existed.
+alter table public.admin_audit_log add column if not exists target_id text;
+alter table public.admin_audit_log add column if not exists resource text;
+alter table public.admin_audit_log add column if not exists old_value jsonb not null default '{}'::jsonb;
+alter table public.admin_audit_log add column if not exists new_value jsonb not null default '{}'::jsonb;
+alter table public.admin_audit_log add column if not exists reason text;
+alter table public.admin_audit_log add column if not exists admin_role text;
 create index if not exists admin_audit_log_created_idx on public.admin_audit_log(created_at desc);
 alter table public.admin_audit_log enable row level security;
 drop policy if exists "Admins can read audit log" on admin_audit_log;
