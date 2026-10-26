@@ -26,6 +26,14 @@ alter table profiles add column if not exists premium_expires_at timestamptz;
 alter table problems add column if not exists problem_number integer;
 alter table problems add column if not exists is_premium boolean default false;
 alter table problems add column if not exists hints jsonb default '[]'::jsonb;
+-- Columns required by AI problem generation (js/ai-brain.js, js/ai-content.js)
+-- and the manual problem form (js/admin-problem-form.js). Without them every
+-- insert into problems fails with "column does not exist".
+alter table problems add column if not exists starter_code text;
+alter table problems add column if not exists expected_output text;
+alter table problems add column if not exists solution_code text;
+alter table problems add column if not exists status text;
+alter table problems add column if not exists battle_error text;
 alter table submissions add column if not exists code text;
 
 -- Number any problems that don't have a problem_number yet, continuing
