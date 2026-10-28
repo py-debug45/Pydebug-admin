@@ -1,7 +1,49 @@
 # PyDebug — Admin App
 
-Standalone admin panel for PyDebug. Deploy this as its **own** Netlify site
-(separate from the user-facing app), connected to the **same Supabase project**.
+Standalone admin panel for PyDebug, separate from the user-facing app but
+connected to the **same Supabase project**.
+
+> **Security warning — action required:** The legacy login contains a shared
+> panel-password bypass, and the TOTP result is stored only in browser
+> `sessionStorage`. Supabase RLS and admin RPCs currently check `is_admin()`,
+> not a server-verified second factor. A user with an admin Supabase session can
+> therefore bypass this UI check. The shared passcode is exposed in the client
+> and must not be treated as a secret. Rotate any account password that reused
+> it, restrict access to the admin deployment, and migrate admin access to
+> Supabase Auth MFA with server-enforced `aal2` checks on RLS **and** all
+> privileged SECURITY DEFINER RPCs. Plan enrollment/recovery before enforcing
+> MFA so existing admins are not locked out. The changes in this repository do
+> not yet implement that rollout or make the legacy gate secure.
+
+## Notification safety and rollout (2026-10-28)
+
+- `db/migrations/20261028_admin_notification_safety.sql` adds an admin-only,
+  atomic broadcast RPC, safe same-origin links, audience-aware bell delivery,
+  idempotent retries, opt-in push requests and fanout beyond 250 rows. It also
+  scopes the existing targeted-announcement feed trigger. Push *requested*
+  does not mean delivered: the browser, OS, network and push service can still
+  reject a notification. An unchanged retry in the same tab reuses the request
+  ID to avoid duplicate broadcasts.
+- Unchecking Web Push stops this database trigger's push request, but the
+  deployed learner app's realtime listeners independently request push for new
+  bell rows. It is **not** a guaranteed bell-only switch until the learner app
+  and sender are changed; their deduplication also needs end-to-end testing.
+- **Stage and review the migration first.** It replaces shared notification
+  triggers used by the separate user-facing app. Test its `/api/push-send`
+  behavior, including legacy announcements and cron delivery, against a
+  staging project. Back up the existing trigger definitions, apply the SQL to
+  the shared database, and only then deploy this admin frontend. Until the SQL
+  is installed, the new form fails closed with a migration-required message.
+  No production database or deployment is changed by checking out this repo.
+- The mobile Settings error from the user-facing app arises during the
+  browser's push subscription step, **before** a subscription reaches this
+  database. That app's `js/push-notifications.js`, service worker and deploy
+  live in the separate Pydebug repository; this admin migration does not fix
+  or diagnose the browser-specific failure.
+- Standard checks: `node --test tests/*.test.cjs`. To include the optional
+  isolated PostgreSQL and mobile Chromium tests, first run
+  `npm install --no-save --no-package-lock --ignore-scripts @electric-sql/pglite@0.3.14 @sparticuz/chromium@143.0.0 playwright-core@1.58.1`.
+  These tools are test-only and are not part of the static deployment.
 
 ## ⚡ Speed, mobile menu & charts — what changed
 
@@ -50,22 +92,19 @@ really exists — with a readable banner instead of a silent blank screen.
 
 ## 1. Run the SQL setup in Supabase (SQL Editor) — required
 
-Open **`supabase-admin-setup.sql`** from this repo, paste it into
-Supabase → **SQL Editor**, and run it. It's idempotent, so it's safe to
-re-run after pulling new admin-panel upgrades.
+For a new installation, review **`supabase-admin-setup.sql`** and test it
+against a staging project before running it in Supabase → **SQL Editor**.
+It changes policies and functions shared with the user app; idempotence alone
+does not make a production rollout risk-free.
 
-Then run **`supabase-admin-totp-setup.sql`** the same way (one time). It
-adds the Google Authenticator second login step: a per-admin secret table
-(locked behind RLS — even admins can't read it directly) and the
-`verify_admin_totp()` / `admin_totp_status()` / `admin_totp_begin_setup()`
-functions the login page calls. Login = admin email + password → 6-digit
-code from Google Authenticator; the panel opens only after both.
+The legacy **`supabase-admin-totp-setup.sql`** adds the UI's authenticator
+check and a per-admin secret table, but it does **not** enforce MFA for database
+requests and includes a shared bypass. Do not rely on it as a security
+boundary; see the warning above before using or exposing this panel.
 
-What it does (assuming the user-panel tables already exist):
+What the base setup does (assuming the user-panel tables already exist):
 
-- Adds the DB-backed admin panel password verifier and seeds the initial
-  bcrypt password `imtiyaj khan 9329` (change it later with the SQL comment at
-  the bottom of the setup file)
+- Adds a legacy panel-password verifier without seeding a default password
 - Adds `profiles.is_admin` + an `is_admin()` helper for RLS checks
 - Backfills columns the user app expects (`problem_number`,
   `submissions.code`, `display_name`, `monthly_xp`, …) and numbers any
@@ -93,13 +132,13 @@ Work through these in order. Each step removes one cause; the login page now
 also tells you *which* one you hit.
 
 1. **Admin login.** The login form uses your **PyDebug admin account**
-   password (default: `imtiyaj khan 9329`). If you sign in with `imtiyaj khan 9329`,
-   the panel auto-unlocks directly into the dashboard. You can also verify with a
-   **6-digit code from Google Authenticator** or tap **Unlock with panel password**.
+   password. Do not reuse the exposed legacy panel password as an account
+   password. The existing TOTP screen is not a server-enforced second factor.
 2. **Run [`supabase-admin-login-fix.sql`](supabase-admin-login-fix.sql)** in
-   Supabase → SQL Editor. Edit the two config values at the top (email +
-   new password) and run everything. It confirms the email, sets the account
-   password, creates the missing `profiles` row, sets `is_admin = true`, and
+   Supabase → SQL Editor only after reviewing it. Set the intended email at
+   the top. Leave `new_password` blank to keep the current password, or supply
+   a strong unique password privately. It confirms the email, optionally sets
+   the account password, creates the missing `profiles` row, sets `is_admin = true`, and
    adds the own-row `profiles` RLS policy. The last query prints a table —
    `email_confirmed`, `has_password`, `has_profile_row`, `is_admin` must all
    be `true`.
@@ -130,37 +169,27 @@ ads calls, so there are no other secrets involved.
 
 ## 4. Deploy
 
-This is plain static HTML/CSS/JS with no serverless functions, so a simple
-Netlify deploy works:
-- Connect a **private** GitHub repo to Netlify (Import from Git), or
-- Drag-and-drop this folder directly into Netlify — both work fine here,
-  since (unlike the user app) there's no `netlify/functions` folder that
-  drag-and-drop would fail to deploy.
-
-Give it its own subdomain, e.g. `pydebug-admin.netlify.app`, so it's not
-guessable from the main user-facing URL.
+This is a static HTML/CSS/JS application. Connect the private repo to
+Vercel or Netlify using the included build configuration. For manual deployment,
+run the build command from `vercel.json` and upload **only `_site/`**; never
+upload the repository root (which includes SQL and documentation). Configure
+access restrictions independently: an obscure subdomain is not security.
 
 ## What's included
 
-- `index.html` — Admin login (only `is_admin = true` accounts get in, and
-  only after the Google Authenticator code verifies — first login shows the
-  secret once so it can be added to the app).
+- `index.html` — Admin login with a legacy client-side authenticator prompt;
+  it does not enforce MFA on database access (see the security warning above).
   Every failure — wrong password, unconfirmed email, rate limit, blocked
   network, missing admin flag — stays on screen with the exact fix, plus a
   built-in connection/permission check that can copy a report.
 - `reset-password.html` — the landing page for Supabase's recovery email
   (“Send a reset link” on the login page), so a forgotten account password no
   longer means a dead end.
-- `supabase-admin-login-fix.sql` — one-shot SQL that repairs a login: confirms
-  the email, sets a known password, creates the `profiles` row, grants
-  `is_admin`, and adds the own-row read policy.
-- `supabase-admin-totp-setup.sql` — the Google Authenticator (TOTP) login.
-  Secrets live in `public.admin_totp` (RLS on, no client access — only the
-  SECURITY DEFINER RPCs can use them), codes are verified in the database
-  with a ±30 s drift window, and 5 wrong codes lock the check for 15
-  minutes. The code is asked once per browser tab after the password passes;
-  admins can unlock using the Google Authenticator 6-digit code or the master
-  panel password (`imtiyaj khan 9329`).
+- `supabase-admin-login-fix.sql` — a reviewed, explicitly configured login
+  repair; the password is left unchanged unless the operator supplies one.
+- `supabase-admin-totp-setup.sql` — legacy authenticator UI support. It is
+  not a server-enforced MFA boundary and its shared bypass must be retired as
+  part of a coordinated MFA migration.
 - `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
   name, updates in real time + who practiced today by name) + a polished
   brand command center with real KPI comparisons (new learners and revenue

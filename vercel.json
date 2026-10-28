@@ -5,22 +5,63 @@
   "outputDirectory": "_site",
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/.env:rest*", "destination": "/__blocked__" },
-    { "source": "/:path*.env:rest*", "destination": "/__blocked__" },
-    { "source": "/:path*.sql", "destination": "/__blocked__" },
-    { "source": "/:path*.md", "destination": "/__blocked__" },
-    { "source": "/db/:path*", "destination": "/__blocked__" },
-    { "source": "/tests/:path*", "destination": "/__blocked__" }
+    {
+      "source": "/.env:rest*",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/:path*.env:rest*",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/:path*.sql",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/:path*.md",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/db/:path*",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/tests/:path*",
+      "destination": "/__blocked__"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cztosbchfqtyzxkhfrby.supabase.co wss://cztosbchfqtyzxkhfrby.supabase.co; img-src 'self' data: blob: https://cztosbchfqtyzxkhfrby.supabase.co; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000"
+        }
       ]
     }
   ]

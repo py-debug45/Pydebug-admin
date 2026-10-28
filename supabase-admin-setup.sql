@@ -253,10 +253,10 @@ alter table public.ai_logs enable row level security;
 drop policy if exists "Admins can manage ai logs" on ai_logs;
 create policy "Admins can manage ai logs" on ai_logs for all using (is_admin());
 
--- 12. DB-backed panel password -----------------------------------
--- The browser never receives this value or the hash. The client invokes a
--- SECURITY DEFINER verifier only after Supabase has authenticated an admin.
--- Default passcode: imtiyaj khan 9329
+-- 12. Legacy DB-backed panel password verifier -------------------
+-- Do not create a shared default password. Existing installations keep their
+-- current row; new installations have no verifier password until an operator
+-- explicitly configures one. This does NOT enforce MFA on RLS/RPC access.
 create extension if not exists pgcrypto with schema extensions;
 set search_path = public, extensions;
 
@@ -266,10 +266,6 @@ create table if not exists public.admin_panel_security (
   updated_at timestamptz not null default now()
 );
 alter table public.admin_panel_security enable row level security;
-
-insert into public.admin_panel_security (id, password_hash)
-values (1, crypt('imtiyaj khan 9329', gen_salt('bf')))
-on conflict (id) do nothing;
 
 create or replace function public.verify_admin_panel_password(input_password text)
 returns boolean
@@ -302,11 +298,8 @@ revoke all on function public.verify_admin_panel_password(text) from public;
 grant execute on function public.verify_admin_panel_password(text) to authenticated;
 revoke all on table public.admin_panel_security from anon, authenticated;
 
--- To rotate the passcode later, replace the text below and run only this
--- statement in the SQL editor:
--- update public.admin_panel_security
--- set password_hash = crypt('your new passcode', gen_salt('bf')), updated_at = now()
--- where id = 1;
+-- This verifier is legacy and does not protect database access by itself.
+-- Do not rely on it as a second factor; use server-enforced Supabase MFA.
 
 -- 13. Live activity: who is on the site RIGHT NOW + who practiced today ----
 -- user_presence: one row per user, rewritten by the user app every 25s
