@@ -1,10 +1,12 @@
 -- =============================================================
 -- PyDebug Admin — Google Authenticator (TOTP) login, run ONCE
 -- =============================================================
--- Restores the login flow from the earlier secure admin panel:
---   1. admin email + password  (Supabase Auth)
---   2. 6-digit code from Google Authenticator / any TOTP app
--- Only after BOTH does the panel open.
+-- SECURITY WARNING: this is a legacy UI gate, not enforced MFA. It includes
+-- a shared passcode bypass and records a successful check only in the browser.
+-- Admin RLS policies and SECURITY DEFINER RPCs still accept an admin session
+-- without a verified second factor. Do not rely on this script for security;
+-- plan a migration to Supabase Auth MFA with server-enforced AAL2 checks.
+-- Review enrollment and recovery before changing a live installation.
 --
 -- The secret key for each admin is kept in public.admin_totp, a
 -- table with RLS enabled and NO client policies — even a logged-in
@@ -12,7 +14,7 @@
 -- functions below can touch it, and they never return the secret
 -- except once during first-time setup.
 --
--- This script is idempotent — safe to re-run.
+-- Idempotent does not mean safe for every live database; test before applying.
 -- =============================================================
 
 -- 0. pgcrypto supplies hmac() + gen_random_bytes() used by TOTP.

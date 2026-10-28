@@ -43,7 +43,7 @@
                    autocomplete="current-password" placeholder="Your admin account password">
             <button type="button" class="password-toggle-btn" data-toggle-password aria-label="Show password">Show</button>
           </div>
-          <p class="field-hint">Your <strong>PyDebug account</strong> password (e.g. <code>imtiyaj khan 9329</code>).</p>
+          <p class="field-hint">Use your unique <strong>PyDebug account</strong> password.</p>
         </div>
 
         <button type="submit" class="btn btn--primary btn--full" id="login-submit">Log in</button>
@@ -58,7 +58,8 @@
     <!-- Step 2: Google Authenticator code or Panel Passcode -->
     <div class="auth-step" id="step-2fa" data-step="2fa" hidden>
       <h2 class="auth-step__title">Security verification</h2>
-      <p class="auth-step__sub">Enter the 6-digit code from Google Authenticator, or use your panel password.</p>
+      <p class="auth-step__sub">Enter the 6-digit code from Google Authenticator, or use the legacy panel unlock.</p>
+      <p class="field-hint">This legacy screen is not server-enforced MFA. Protect admin access separately.</p>
 
       <div class="auth-note" id="totp-setup-note" hidden>
         <p><strong>First-time setup:</strong> add this account to Google Authenticator (or any authenticator app), then enter the code below. Or unlock directly with your panel password.</p>
@@ -74,7 +75,7 @@
           <label for="totp-code">Authenticator code or panel password</label>
           <input type="text" id="totp-code" name="code" required
                  autocomplete="one-time-code" maxlength="40"
-                 autocapitalize="none" spellcheck="false" placeholder="6-digit code or imtiyaj khan 9329">
+                 autocapitalize="none" spellcheck="false" placeholder="6-digit authenticator code">
         </div>
         <button type="submit" class="btn btn--primary btn--full" id="totp-submit">Verify and enter</button>
         <button type="button" class="btn btn--secondary btn--full" id="quick-panel-pass-btn">Unlock with panel password</button>

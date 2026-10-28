@@ -1,10 +1,9 @@
 // admin-login.js — admin sign-in + the reasons it can fail.
 //
-// Second factor (restored from the earlier secure panel): after the
-// password passes, the panel asks for a Google Authenticator (TOTP) code —
-// the dashboard stays locked until verify_admin_totp() accepts one
-// (see supabase-admin-totp-setup.sql). First admin login shows the secret
-// once so it can be added to the authenticator app.
+// Legacy UI verification: the dashboard checks a browser sessionStorage flag
+// after verify_admin_totp(), and a shared passcode bypass remains available.
+// This is NOT server-enforced MFA; admin database policies and RPCs still
+// accept an admin session without a verified second factor. See README.md.
 //
 // History: this page used to hand every failure to showToast(), which hides
 // itself after 3 seconds. On a phone a failed login therefore looked exactly
@@ -167,7 +166,7 @@ onAdminReady(() => {
   /* ------------------------------------------------------- error texts --- */
 
   function accountPasswordExplainer() {
-    return "Enter your PyDebug <strong>account</strong> password (default: <code>imtiyaj khan 9329</code>).";
+    return "Enter your unique PyDebug <strong>account</strong> password.";
   }
 
   // Turns a Supabase Auth error into a title + plain-language fix.
@@ -186,7 +185,7 @@ onAdminReady(() => {
           accountPasswordExplainer(),
           "Tap <strong>Send a reset link</strong> below, or set a new password in Supabase → <strong>Authentication → Users → your user → Reset password</strong>.",
           "If this account was never created, create it in the user app (Sign up) or in Supabase → Authentication → Users → <strong>Add user</strong> (tick <em>Auto Confirm</em>).",
-          "Still stuck? Run <code>supabase-admin-login-fix.sql</code> from this repository — it confirms the email, sets a known password and grants <code>is_admin</code>."
+          "Still stuck? Review <code>supabase-admin-login-fix.sql</code> in this repository; it requires an explicitly chosen email and leaves the password unchanged by default."
         ],
       };
     }

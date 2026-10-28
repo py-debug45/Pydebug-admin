@@ -42,7 +42,7 @@
       <div class="stat-card"><div class="value" id="notif-db-total">—</div><div class="label">Total DB rows</div><div class="sub">in notifications table</div></div>
       <div class="stat-card"><div class="value value--mint" id="notif-auto-bloat">—</div><div class="label">Auto new-problem rows</div><div class="sub">safe to prune</div></div>
       <div class="stat-card"><div class="value value--green" id="push-sub-count">—</div><div class="label">Web Push devices</div><div class="sub">subscribed browsers/phones</div></div>
-      <div class="stat-card"><div class="value" id="push-ann-count">—</div><div class="label">Push announcements</div><div class="sub">queued / sent</div></div>
+      <div class="stat-card"><div class="value" id="push-ann-count">—</div><div class="label">Push announcements</div><div class="sub">legacy announcement records</div></div>
     </div>
 
     <div class="hygiene-banner">
@@ -59,7 +59,7 @@
     <div class="admin-cols" style="margin-top:0">
       <div class="section-card">
         <h3>Broadcast announcement</h3>
-        <p class="muted" style="font-size:0.84rem;margin:4px 0 14px">Sends to every matching learner's 🔔 in-app bell, and optionally queues a Browser Web Push announcement.</p>
+        <p class="muted" style="font-size:0.84rem;margin:4px 0 14px">Creates one in-app bell notification for each matching learner. Optionally request browser push for their subscribed devices.</p>
 
         <form id="broadcast-form" class="admin-form">
           <div class="field">
@@ -94,16 +94,17 @@
           </div>
           <div class="field checkbox-field" style="margin-bottom:12px">
             <input type="checkbox" id="broadcast-also-push" checked>
-            <label for="broadcast-also-push" style="margin:0">Also record in <code>push_announcements</code> for Web Push delivery</label>
+            <label for="broadcast-also-push" style="margin:0">Request server-side push for matching subscribed devices</label>
           </div>
+          <p class="muted" style="font-size:0.8rem;margin:0 0 12px">When unchecked, the database trigger will not request push. Open learner tabs can still initiate push; truly bell-only delivery requires a learner-app update.</p>
           <button type="submit" class="btn btn--primary" id="broadcast-send-btn">Send broadcast</button>
-          <div class="broadcast-progress" id="broadcast-progress"></div>
+          <div class="broadcast-progress" id="broadcast-progress" role="status" aria-live="polite"></div>
         </form>
       </div>
 
       <div class="section-card">
         <h3>Recent Web Push announcements <span class="count" id="push-list-count">0</span></h3>
-        <p class="muted" style="font-size:0.83rem;margin:4px 0 12px">Stored in <code>public.push_announcements</code> for opted-in mobile &amp; desktop browsers.</p>
+        <p class="muted" style="font-size:0.83rem;margin:4px 0 12px">Legacy announcements in <code>public.push_announcements</code>. New broadcasts appear in the bell list below.</p>
         <div class="admin-table-wrap">
           <table class="admin-table">
             <thead>

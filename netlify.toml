@@ -47,3 +47,6 @@
     Referrer-Policy = "no-referrer"
     X-Robots-Tag = "noindex, nofollow"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cztosbchfqtyzxkhfrby.supabase.co wss://cztosbchfqtyzxkhfrby.supabase.co; img-src 'self' data: blob: https://cztosbchfqtyzxkhfrby.supabase.co; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    Strict-Transport-Security = "max-age=31536000"

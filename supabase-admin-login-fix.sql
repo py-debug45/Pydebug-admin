@@ -5,9 +5,9 @@
 -- "Invalid login credentials", "This account is not an admin yet",
 -- "Admin check failed" or keeps bouncing back to the login page.
 --
--- It is idempotent (safe to re-run) and does exactly this:
+-- It does exactly this for the explicitly chosen account:
 --   1. confirms the account's email   (Supabase refuses sign-in until then)
---   2. sets a known account password  (bcrypt, the same hash GoTrue expects)
+--   2. optionally sets a new account password (blank leaves it unchanged)
 --   3. creates the profiles row if the signup trigger never made one
 --   4. sets profiles.is_admin = true  (the panel's gate)
 --   5. makes sure profiles has an "own row" SELECT policy, so the panel can
@@ -18,7 +18,7 @@
 -- =============================================================
 
 -- ⚙️ CONFIG ---------------------------------------------------
-drop table if exists _pydebug_login_fix_cfg;
+drop table if exists pg_temp._pydebug_login_fix_cfg;
 create temp table _pydebug_login_fix_cfg (
   email        text not null,   -- <<< your admin email
   new_password text             -- <<< new account password ('' = keep current)
@@ -26,9 +26,18 @@ create temp table _pydebug_login_fix_cfg (
 
 insert into _pydebug_login_fix_cfg (email, new_password)
 values (
-  'avenjr80@gmail.com',   -- 👈 change if your admin email is different
-  'Imtiyaj khan 9329'     -- 👈 this becomes the ACCOUNT password too
+  'replace-with-admin@example.invalid', -- REQUIRED: choose the intended account
+  ''                                  -- blank keeps the current password
 );
+
+-- Fail closed before touching the database if the example was not edited.
+do $$
+begin
+  if exists (select 1 from _pydebug_login_fix_cfg
+             where email = 'replace-with-admin@example.invalid' or btrim(email) = '') then
+    raise exception 'Set the intended admin email in _pydebug_login_fix_cfg before running this script';
+  end if;
+end $$;
 
 -- Do not show these rows to anyone else; already revoked from the panel.
 revoke all on _pydebug_login_fix_cfg from public;
@@ -76,7 +85,7 @@ begin
    where id = v_user_id;
   raise notice '1/5 ✓ email confirmed for %', v_user_email;
 
-  -- 2. Set a known password (bcrypt hash, same format GoTrue stores).
+  -- 2. Optionally set a password (bcrypt hash, same format GoTrue stores).
   if coalesce(btrim(v_password), '') <> '' then
     update auth.users
        set encrypted_password = crypt(v_password, gen_salt('bf')),
@@ -165,12 +174,8 @@ begin
   end if;
 end $$;
 
--- Optional: also reset the PANEL password (the one asked after login).
--- Uncomment and run if the unlock screen rejects the passcode.
--- update public.admin_panel_security
---    set password_hash = crypt('Imtiyaj khan 9329', gen_salt('bf')),
---        updated_at = now()
---  where id = 1;
+-- A panel password is not MFA: changing this legacy value does not secure
+-- admin RPCs or remove the shared bypass. Plan the MFA migration in README.md.
 
 -- ✅ VERIFY ---------------------------------------------------
 -- Expect: email_confirmed = true, has_password = true,
@@ -186,4 +191,4 @@ from auth.users u
 left join public.profiles p on p.id = u.id
 where lower(u.email) = lower((select email from _pydebug_login_fix_cfg limit 1));
 
-drop table if exists _pydebug_login_fix_cfg;
+drop table if exists pg_temp._pydebug_login_fix_cfg;
