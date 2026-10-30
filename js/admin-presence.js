@@ -1,40 +1,36 @@
-// admin-presence.js — Dashboard: "Live right now" + "Practiced today"
+// Dashboard: server-timed live presence and daily practice.
 //
-// "Live right now" shows which REAL users are on the PyDebug site THIS
-// second, by name. It is exact by design:
-//   * Data source: public.user_presence — each user's app upserts a row
-//     every 25s while in the foreground and deletes it on close
-//     (js/presence-heartbeat.js in the user app).
-//   * A user counts as ACTIVE only while last_seen_at is within
-//     PRESENCE_TTL_MS (60s). A closed page stops heartbeating, so its name
-//     drops out within a few seconds (immediate when the leave-delete lands,
-//     and within 60s worst-case for a force-killed browser).
-//   * Freshness: Supabase Realtime (postgres_changes) pushes each heartbeat
-//     to this page with a polling fallback, and a local 5s tick re-checks
-//     expiry — so removals show up even if the socket is down.
-//
-// "Practiced today" shows, of all users, who practiced today by name:
-// the union of profiles with last_active_date = today (the column the user
-// app's streaks use) and users with submissions since local midnight.
+// A live user is one whose latest heartbeat reached the database in the last
+// 60 seconds. This is an estimate of an open, foreground page, not proof that
+// someone is actively using it. A closed page can remain visible for up to
+// a minute if its final request is lost. The server supplies both the snapshot
+// time and the heartbeat timestamps, so neither browser's clock can create a
+// permanent "online" user.
 
-const PRESENCE_TTL_MS = 60 * 1000;        // "active" window
-const PRESENCE_POLL_MS = 25 * 1000;       // safety-net refresh (realtime is primary)
-const PRESENCE_TICK_MS = 5 * 1000;        // local expiry check + "8s ago" labels
-const PRESENCE_DEBOUNCE_MS = 900;         // coalesce bursts of heartbeat events
-const PRESENCE_MAX_ROWS = 25;             // live list shows top N, then "+N more"
+const PRESENCE_TTL_MS = 60 * 1000;
+const PRESENCE_POLL_MS = 25 * 1000;
+const PRESENCE_TICK_MS = 5 * 1000;
+const PRESENCE_DEBOUNCE_MS = 900;
+const PRESENCE_MAX_ROWS = 25;
+const DAILY_POLL_MS = 60 * 1000;
 const DAILY_MAX_ROWS = 20;
+const PRESENCE_PAGE_SIZE = 500;
+const PRESENCE_PROFILE_BATCH = 100;
 
-let presenceLive = new Map();      // user_id -> { userId, lastSeen, page, profile }
+let presenceLive = new Map();
 let presenceChannel = null;
 let presenceStarted = false;
-let presenceBroken = false;        // true once the table/RLS is known missing
+let presenceBroken = false;
 let presenceRefreshQueued = false;
+let presenceRefreshPending = false;
+let presenceInFlight = null;
+let presenceError = null;
 let lastPresenceRefresh = 0;
-let dailyStarted = false;
+let dailyInFlight = null;
+let lastLiveSignature = "";
 
 function presenceLocalTodayStr() {
-  // Local YYYY-MM-DD — same convention the user app uses for
-  // profiles.last_active_date (both run in the owner's timezone).
+  // profiles.last_active_date uses the user's local YYYY-MM-DD convention.
   const d = new Date();
   const p = (n) => String(n).padStart(2, "0");
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
@@ -42,62 +38,103 @@ function presenceLocalTodayStr() {
 
 function presenceUserName(p) {
   if (!p) return null;
-  return p.display_name || p.full_name || (p.email ? p.email.split("@")[0] : null) || "User";
+  return p.display_name || p.full_name || (p.email ? p.email.split("@")[0] : null) || null;
 }
 
-function presenceSecondsAgo(ms) {
-  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+function presenceFormatAge(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
   if (s < 60) return s + "s ago";
   const m = Math.floor(s / 60);
   if (m < 60) return m + "m ago";
   return Math.floor(m / 60) + "h ago";
 }
 
+// The snapshot's age is calculated on the server. Locally we only measure
+// elapsed time since the request began, conservatively including its latency.
+// performance.now() survives wall-clock corrections; Date.now() also handles
+// browsers whose monotonic clock pauses while a phone sleeps.
+function presenceClock() {
+  return {
+    wall: Date.now(),
+    monotonic: typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now() : null,
+  };
+}
+
+function presenceElapsed(clock) {
+  const wall = Date.now() - clock.wall;
+  const monotonic = clock.monotonic !== null && typeof performance !== "undefined"
+    ? performance.now() - clock.monotonic : 0;
+  return Math.max(0, wall, monotonic);
+}
+
+function presenceAge(user) {
+  return user.ageAtCheck + presenceElapsed(user.clock);
+}
+
+async function presenceProfiles(ids, columns) {
+  const profiles = new Map();
+  // Large .in() filters can exceed URL limits; don't lose users when a list
+  // grows beyond one batch or the PostgREST per-response row limit.
+  for (let i = 0; i < ids.length; i += PRESENCE_PROFILE_BATCH) {
+    const { data, error } = await sb.from("profiles").select(columns)
+      .in("id", ids.slice(i, i + PRESENCE_PROFILE_BATCH));
+    if (error) throw error;
+    (data || []).forEach((profile) => profiles.set(profile.id, profile));
+  }
+  return profiles;
+}
+
 // ---------- Live right now -------------------------------------------------
 
-function presenceTableMissing(err) {
-  const code = err && (err.code || (err.details ? "" : ""));
+function presenceSetupMissing(err) {
+  const code = err && err.code;
   const msg = String((err && (err.message || err.hint)) || "");
-  return code === "42P01" || code === "PGRST205" ||
-    /does not exist|not found in the schema cache|user_presence/i.test(msg);
+  return ["42P01", "42883", "PGRST202", "PGRST205"].includes(code) ||
+    /could not find (?:the )?function (?:public\.)?admin_get_live_presence/i.test(msg);
 }
 
 async function loadLiveUsers() {
-  const cutoff = new Date(Date.now() - PRESENCE_TTL_MS).toISOString();
-  const { data, error } = await sb
-    .from("user_presence")
-    .select("user_id, last_seen_at, page")
-    .gte("last_seen_at", cutoff)
-    .limit(500);
+  const clock = presenceClock();
+  const { data, error } = await sb.rpc("admin_get_live_presence");
   if (error) throw error;
+  const checkedAt = data && Date.parse(data.checked_at);
+  if (!data || !Array.isArray(data.rows) || !Number.isFinite(checkedAt)) {
+    throw new Error("Invalid live presence snapshot");
+  }
 
-  const rows = data || [];
-  const ids = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
-  const profiles = {};
+  const users = [];
+  data.rows.forEach((row) => {
+    const seenAt = Date.parse(row.last_seen_at);
+    const ageAtCheck = checkedAt - seenAt;
+    // Also validate the result in the browser. In particular a legacy future
+    // timestamp must never be clamped to "0s ago" and shown indefinitely.
+    if (!row.user_id || !Number.isFinite(ageAtCheck) || ageAtCheck < 0 || ageAtCheck >= PRESENCE_TTL_MS) return;
+    const user = { userId: row.user_id, ageAtCheck, clock, page: row.page || "", profile: null };
+    if (presenceAge(user) < PRESENCE_TTL_MS) users.push(user);
+  });
+  users.sort((a, b) => a.ageAtCheck - b.ageAtCheck);
+
+  // Names are only needed for the visible rows. The snapshot itself contains
+  // all active IDs, so the count is not silently truncated at 500 or 1,000.
+  const ids = [...new Set(users.slice(0, PRESENCE_MAX_ROWS).map((user) => user.userId))];
+  let profiles = new Map();
   if (ids.length) {
-    const { data: ups, error: pErr } = await sb
-      .from("profiles")
-      .select("id, display_name, full_name, email, is_premium")
-      .in("id", ids);
-    if (!pErr) (ups || []).forEach((u) => { profiles[u.id] = u; });
+    try {
+      profiles = await presenceProfiles(ids, "id, display_name, full_name, email, is_premium");
+    } catch (e) {
+      console.warn("presence profiles:", e.message);
+    }
   }
 
   const next = new Map();
-  rows.forEach((r) => {
-    const ms = new Date(r.last_seen_at).getTime();
-    if (isNaN(ms) || Date.now() - ms > PRESENCE_TTL_MS) return; // stale row
-    next.set(r.user_id, {
-      userId: r.user_id,
-      lastSeen: ms,
-      page: r.page || "",
-      profile: profiles[r.user_id] || null,
-    });
+  users.forEach((user) => {
+    if (presenceAge(user) >= PRESENCE_TTL_MS) return;
+    user.profile = profiles.get(user.userId) || null;
+    next.set(user.userId, user);
   });
-  presenceLive = next;
-  renderLiveList();
+  return next;
 }
-
-let lastLiveSignature = "";
 
 function renderLiveList() {
   const countEl = document.getElementById("live-count");
@@ -105,55 +142,55 @@ function renderLiveList() {
   const listEl = document.getElementById("live-list");
   if (!listEl) return;
 
-  const items = [...presenceLive.values()].sort((a, b) => b.lastSeen - a.lastSeen);
+  if (presenceError) {
+    lastLiveSignature = "";
+    if (statEl) statEl.textContent = "—";
+    if (countEl) countEl.textContent = "—";
+    listEl.innerHTML = `<li class="empty-row">${escapeHtml(presenceError)}</li>`;
+    return;
+  }
 
-  // Heartbeats arrive every few seconds but the *names on screen* rarely
-  // change. Skip the innerHTML rewrite (and the icon/observer work it
-  // triggers) when the visible set is identical — only the "Ns ago" labels
-  // need updating, and the 5s tick already does that.
-  const signature = items.map((u) => u.userId + ":" + (u.page || "")).join("|");
+  const items = [...presenceLive.values()].sort((a, b) => a.ageAtCheck - b.ageAtCheck);
+  const signature = JSON.stringify(items.map((user) => [
+    user.userId, user.page, presenceUserName(user.profile), !!(user.profile && user.profile.is_premium),
+  ]));
+  if (statEl) statEl.textContent = String(items.length);
+  if (countEl) countEl.textContent = String(items.length);
+
+  // Do not rebuild the list for every heartbeat, but do use the latest
+  // heartbeat from the map when updating its age labels.
   if (signature === lastLiveSignature && listEl.childElementCount) {
-    if (statEl) statEl.textContent = String(items.length);
-    if (countEl) countEl.textContent = String(items.length);
     tickPresenceTimes();
     return;
   }
   lastLiveSignature = signature;
-  if (statEl) statEl.textContent = String(items.length);
-  if (countEl) countEl.textContent = String(items.length);
 
   if (!items.length) {
     listEl.innerHTML = `<li class="empty-row">Nobody is on the site right now.</li>`;
     return;
   }
 
-  const shown = items.slice(0, PRESENCE_MAX_ROWS);
-  listEl.innerHTML = shown.map((u) => {
-    const name = escapeHtml(presenceUserName(u.profile) || "User " + String(u.userId).slice(0, 6));
-    const premium = u.profile && u.profile.is_premium ? ' <span class="tag tag--premium">Pro</span>' : "";
-    const page = u.page && u.page !== "/" ? `<span class="live-item__page">${escapeHtml(u.page)}</span>` : "";
+  listEl.innerHTML = items.slice(0, PRESENCE_MAX_ROWS).map((user) => {
+    const name = escapeHtml(presenceUserName(user.profile) || "User " + String(user.userId).slice(0, 6));
+    const premium = user.profile && user.profile.is_premium ? ' <span class="tag tag--premium">Pro</span>' : "";
+    const page = user.page && user.page !== "/" ? `<span class="live-item__page">${escapeHtml(user.page)}</span>` : "";
     return `<li>
       <span class="live-item__dot"></span>
       <span class="live-item__name">${name}${premium}</span>
       ${page}
-      <span class="live-item__time" data-last-seen="${u.lastSeen}"></span>
+      <span class="live-item__time" data-presence-id="${escapeHtml(user.userId)}"></span>
     </li>`;
   }).join("") +
   (items.length > PRESENCE_MAX_ROWS
-    ? `<li class="empty-row">…and ${items.length - PRESENCE_MAX_ROWS} more</li>`
-    : "");
+    ? `<li class="empty-row">…and ${items.length - PRESENCE_MAX_ROWS} more</li>` : "");
   tickPresenceTimes();
 }
 
-// Local 5s tick: re-label "Ns ago" and drop anyone whose 60s window lapsed.
-// This is what guarantees a closed page leaves the list even with zero
-// realtime events (their last row just stops being fresh).
 function tickPresenceTimes() {
-  const now = Date.now();
+  if (presenceError) return;
   let changed = false;
-  [...presenceLive.keys()].forEach((id) => {
-    const u = presenceLive.get(id);
-    if (u && now - u.lastSeen > PRESENCE_TTL_MS) {
+  presenceLive.forEach((user, id) => {
+    if (presenceAge(user) >= PRESENCE_TTL_MS) {
       presenceLive.delete(id);
       changed = true;
     }
@@ -162,66 +199,78 @@ function tickPresenceTimes() {
 
   const listEl = document.getElementById("live-list");
   if (listEl) {
-    listEl.querySelectorAll("[data-last-seen]").forEach((el) => {
-      el.textContent = presenceSecondsAgo(Number(el.dataset.lastSeen));
+    listEl.querySelectorAll("[data-presence-id]").forEach((el) => {
+      const user = presenceLive.get(el.dataset.presenceId);
+      if (user) el.textContent = presenceFormatAge(presenceAge(user));
     });
   }
   const upd = document.getElementById("live-updated");
-  if (upd) upd.textContent = lastPresenceRefresh ? "updated " + presenceSecondsAgo(lastPresenceRefresh) : "";
+  if (upd) upd.textContent = lastPresenceRefresh ? "updated " + presenceFormatAge(Date.now() - lastPresenceRefresh) : "";
 }
 
-async function refreshLive() {
-  if (presenceBroken) return;
-  try {
-    await loadLiveUsers();
-    lastPresenceRefresh = Date.now();
-    tickPresenceTimes();
-  } catch (e) {
-    if (presenceTableMissing(e)) {
-      presenceBroken = true; // table not created yet — stop hammering
-      const listEl = document.getElementById("live-list");
-      if (listEl) listEl.innerHTML =
-        `<li class="empty-row">Run the latest <code>supabase-admin-setup.sql</code> in Supabase, then reload.</li>`;
-      return;
-    }
-    console.warn("presence refresh:", e.message);
-    // Keep the last good list on screen; the tick keeps expiring it.
+function refreshLive() {
+  if (presenceBroken) return Promise.resolve(false);
+  if (presenceInFlight) {
+    // Coalesce overlapping poll/realtime events, then perform one fresh read.
+    // An older slow response can never overwrite a newer snapshot.
+    presenceRefreshPending = true;
+    return presenceInFlight;
   }
+  presenceInFlight = (async () => {
+    try {
+      presenceLive = await loadLiveUsers();
+      presenceError = null;
+      lastPresenceRefresh = Date.now();
+      renderLiveList();
+      tickPresenceTimes();
+      return true;
+    } catch (e) {
+      presenceBroken = presenceSetupMissing(e);
+      presenceError = presenceBroken
+        ? "Live activity needs the latest presence database migration. Apply it and reload."
+        : "Live activity is unavailable. Retrying…";
+      presenceLive = new Map();
+      renderLiveList();
+      const upd = document.getElementById("live-updated");
+      if (upd) upd.textContent = presenceBroken ? "setup needed" : "refresh failed";
+      console.warn("presence refresh:", e && e.message);
+      return false;
+    }
+  })().finally(() => {
+    presenceInFlight = null;
+    if (presenceRefreshPending) {
+      presenceRefreshPending = false;
+      if (!presenceBroken && !document.hidden) refreshLive();
+    }
+  });
+  return presenceInFlight;
 }
 
-// Best-effort cleanup of rows older than 24h (RLS allows only that).
-async function purgeStalePresence() {
-  try {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    await sb.from("user_presence").delete().lt("last_seen_at", cutoff);
-  } catch (e) { /* harmless */ }
-}
-
+// user_presence has at most one row per user. Do not delete from the client
+// using the admin phone's clock: if that clock is wrong it can erase live rows.
 function initLivePresence() {
   if (presenceStarted || !document.getElementById("live-list")) return;
   presenceStarted = true;
-
   refreshLive();
-  purgeStalePresence();
-  // Both timers idle out while the tab is in the background: a hidden admin
-  // tab used to keep querying Supabase every 25s and repainting every 5s,
-  // which drains phones and makes the tab sluggish when you come back.
   setInterval(() => { if (!document.hidden) tickPresenceTimes(); }, PRESENCE_TICK_MS);
   setInterval(() => { if (!document.hidden) refreshLive(); }, PRESENCE_POLL_MS);
+  setInterval(() => { if (!document.hidden) loadDailyPractice(); }, DAILY_POLL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refreshLive();
+    if (document.visibilityState === "visible") {
+      tickPresenceTimes();
+      refreshLive();
+      loadDailyPractice();
+    }
   });
 
   try {
     presenceChannel = sb
       .channel("pydebug-admin-live-presence")
-      .on("postgres_changes",
-        { event: "*", schema: "public", table: "user_presence" },
-        () => {
-          if (presenceRefreshQueued) return;
-          presenceRefreshQueued = true;
-          setTimeout(() => { presenceRefreshQueued = false; refreshLive(); }, PRESENCE_DEBOUNCE_MS);
-        })
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_presence" }, () => {
+        if (document.hidden || presenceRefreshQueued) return;
+        presenceRefreshQueued = true;
+        setTimeout(() => { presenceRefreshQueued = false; if (!document.hidden) refreshLive(); }, PRESENCE_DEBOUNCE_MS);
+      })
       .subscribe();
   } catch (e) {
     console.warn("presence realtime:", e.message); // polling still covers it
@@ -230,10 +279,38 @@ function initLivePresence() {
 
 // ---------- Practiced today ------------------------------------------------
 
-async function loadDailyPractice() {
-  if (dailyStarted) return;
-  dailyStarted = true;
+async function presenceReadAll(buildQuery) {
+  const rows = [];
+  for (let offset = 0; ; offset += PRESENCE_PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(offset, offset + PRESENCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < PRESENCE_PAGE_SIZE) return rows;
+  }
+}
 
+function dailyUnavailable() {
+  ["daily-count", "stat-daily-practice"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = "—";
+  });
+  const sub = document.getElementById("stat-daily-sub");
+  if (sub) sub.textContent = "practice data unavailable";
+  const list = document.getElementById("daily-list");
+  if (list) list.innerHTML = `<li class="empty-row">Practice data is unavailable. Retrying…</li>`;
+}
+
+function loadDailyPractice() {
+  if (dailyInFlight) return dailyInFlight;
+  dailyInFlight = loadDailyPracticeData().catch((e) => {
+    console.warn("daily practice:", e && e.message);
+    dailyUnavailable();
+    return false;
+  }).finally(() => { dailyInFlight = null; });
+  return dailyInFlight;
+}
+
+async function loadDailyPracticeData() {
   const listEl = document.getElementById("daily-list");
   const countEls = [document.getElementById("daily-count"), document.getElementById("stat-daily-practice")];
   const subEl = document.getElementById("stat-daily-sub");
@@ -242,91 +319,82 @@ async function loadDailyPractice() {
   startOfToday.setHours(0, 0, 0, 0);
   const startIso = startOfToday.toISOString();
 
-  // (a) Submissions since local midnight — hard proof of practice today,
-  //     plus per-user count + last practice time.
+  const [subResult, markedResult] = await Promise.allSettled([
+    presenceReadAll(() => sb.from("submissions").select("id, user_id, created_at")
+      .gte("created_at", startIso).order("id", { ascending: true })),
+    presenceReadAll(() => sb.from("profiles").select("id")
+      .eq("last_active_date", today).order("id", { ascending: true })),
+  ]);
+  if (subResult.status === "rejected") console.warn("daily submissions:", subResult.reason);
+  if (markedResult.status === "rejected") console.warn("daily last_active_date:", markedResult.reason);
+  if (subResult.status === "rejected" && markedResult.status === "rejected") {
+    dailyUnavailable();
+    return false;
+  }
+  const partial = subResult.status === "rejected" || markedResult.status === "rejected";
   const subCounts = {};
   const lastSubAt = {};
   const subUserIds = new Set();
-  try {
-    const { data: subs, error } = await sb
-      .from("submissions")
-      .select("user_id, created_at")
-      .gte("created_at", startIso)
-      .limit(5000);
-    if (error) throw error;
-    (subs || []).forEach((s) => {
-      if (!s.user_id) return;
-      subUserIds.add(s.user_id);
-      subCounts[s.user_id] = (subCounts[s.user_id] || 0) + 1;
-      const t = new Date(s.created_at).getTime();
-      if (t > (lastSubAt[s.user_id] || 0)) lastSubAt[s.user_id] = t;
-    });
-  } catch (e) {
-    console.warn("daily submissions:", e.message);
-  }
-
-  // (b) Users the user app itself marked active today (streaks use this).
-  const markedIds = new Set();
-  try {
-    const { data: marked, error } = await sb
-      .from("profiles")
-      .select("id")
-      .eq("last_active_date", today)
-      .limit(5000);
-    if (error) throw error;
-    (marked || []).forEach((p) => markedIds.add(p.id));
-  } catch (e) {
-    // 42703 = profiles.last_active_date missing on this project — the
-    // submissions set (a) is then the only source. Anything else is noise.
-    if (e.code !== "42703") console.warn("daily last_active_date:", e.message);
-  }
-
+  (subResult.status === "fulfilled" ? subResult.value : []).forEach((s) => {
+    if (!s.user_id) return;
+    subUserIds.add(s.user_id);
+    subCounts[s.user_id] = (subCounts[s.user_id] || 0) + 1;
+    const t = new Date(s.created_at).getTime();
+    if (t > (lastSubAt[s.user_id] || 0)) lastSubAt[s.user_id] = t;
+  });
+  const markedIds = (markedResult.status === "fulfilled" ? markedResult.value : []).map((p) => p.id).filter(Boolean);
   const ids = [...new Set([...markedIds, ...subUserIds])];
-  let profiles = [];
+
+  let profiles = new Map();
+  let namesUnavailable = false;
   if (ids.length) {
-    const { data, error } = await sb
-      .from("profiles")
-      .select("id, display_name, full_name, email, streak, is_premium")
-      .in("id", ids);
-    if (!error) profiles = data || [];
+    try {
+      profiles = await presenceProfiles(ids, "id, display_name, full_name, email, streak, is_premium");
+    } catch (e) {
+      namesUnavailable = true;
+      console.warn("daily profiles:", e.message);
+    }
   }
 
   let totalUsers = null;
   try {
     const { count, error } = await sb.from("profiles").select("*", { count: "exact", head: true });
-    if (!error) totalUsers = count;
+    if (!error && Number.isFinite(count) && count >= 0) totalUsers = count;
   } catch (e) { /* keep sub label generic */ }
 
-  const rows = profiles
-    .map((p) => ({
-      profile: p,
-      name: presenceUserName(p) || "User",
-      submitted: subUserIds.has(p.id),
-      times: subCounts[p.id] || 0,
-      lastAt: lastSubAt[p.id] || null,
-    }))
-    .sort((a, b) => (b.times - a.times) || ((b.lastAt || 0) - (a.lastAt || 0)) || ((b.profile.streak || 0) - (a.profile.streak || 0)));
+  const rows = ids.map((id) => {
+    const profile = profiles.get(id) || { id };
+    return {
+      profile,
+      name: presenceUserName(profile) || "User " + String(id).slice(0, 6),
+      times: subCounts[id] || 0,
+      lastAt: lastSubAt[id] || null,
+    };
+  }).sort((a, b) => (b.times - a.times) || ((b.lastAt || 0) - (a.lastAt || 0)) || ((b.profile.streak || 0) - (a.profile.streak || 0)));
 
-  countEls.forEach((el) => { if (el) el.textContent = String(rows.length); });
-  if (subEl && totalUsers) {
+  countEls.forEach((el) => { if (el) el.textContent = String(rows.length) + (partial ? "+" : ""); });
+  if (subEl && totalUsers !== null) {
     const pct = totalUsers ? Math.round((rows.length / totalUsers) * 100) : 0;
-    subEl.textContent = `of ${totalUsers.toLocaleString("en-IN")} total users (${pct}%)`;
+    subEl.textContent = `of ${totalUsers.toLocaleString("en-IN")} total users (${pct}%)${partial ? " · partial" : ""}`;
   } else if (subEl) {
-    subEl.textContent = "since midnight";
+    subEl.textContent = partial ? "since midnight · partial" : "since midnight";
   }
 
-  if (!listEl) return;
+  if (!listEl) return !partial && !namesUnavailable;
   if (!rows.length) {
-    listEl.innerHTML = `<li class="empty-row">Nobody has practiced yet today.</li>`;
-    return;
+    listEl.innerHTML = partial
+      ? `<li class="empty-row">No activity found in the available data; some sources could not be loaded.</li>`
+      : `<li class="empty-row">Nobody has practiced yet today.</li>`;
+    return !partial && !namesUnavailable;
   }
 
   const fmtTime = (ms) => new Date(ms).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
   listEl.innerHTML = rows.slice(0, DAILY_MAX_ROWS).map((r, i) => {
     const premium = r.profile.is_premium ? ' <span class="tag tag--premium">Pro</span>' : "";
+    const streak = Number(r.profile.streak) || 0;
     const meta = [
       r.times ? `${r.times} submission${r.times === 1 ? "" : "s"} today` : "practiced today",
-      (r.profile.streak || 0) > 0 ? `🔥 ${r.profile.streak}` : null,
+      streak > 0 ? `🔥 ${streak}` : null,
     ].filter(Boolean).join(" · ");
     const time = r.lastAt ? fmtTime(r.lastAt) : "";
     return `<li>
@@ -336,5 +404,8 @@ async function loadDailyPractice() {
       ${time ? `<span class="live-item__time">${escapeHtml(time)}</span>` : ""}
     </li>`;
   }).join("") +
-  (rows.length > DAILY_MAX_ROWS ? `<li class="empty-row">…and ${rows.length - DAILY_MAX_ROWS} more</li>` : "");
+  (rows.length > DAILY_MAX_ROWS ? `<li class="empty-row">…and ${rows.length - DAILY_MAX_ROWS} more</li>` : "") +
+  (partial ? `<li class="empty-row">Some practice sources could not be loaded.</li>` : "") +
+  (namesUnavailable ? `<li class="empty-row">Some names could not be loaded.</li>` : "");
+  return !partial && !namesUnavailable;
 }

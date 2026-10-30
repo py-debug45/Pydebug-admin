@@ -309,12 +309,9 @@ revoke all on table public.admin_panel_security from anon, authenticated;
 -- where id = 1;
 
 -- 13. Live activity: who is on the site RIGHT NOW + who practiced today ----
--- user_presence: one row per user, rewritten by the user app every 25s
--- (js/presence-heartbeat.js) while the site is in the foreground, and deleted
--- the moment the user closes/leaves the page (best-effort). The admin panel
--- only counts rows whose last_seen_at is within the last 60 seconds, so a
--- closed app NEVER lingers in the "Live right now" list — even if the
--- browser was force-killed before the delete could run.
+-- user_presence: one ephemeral row per user, refreshed by the learner app.
+-- The trigger and admin snapshot below use the server clock; a stopped
+-- heartbeat expires from the dashboard after approximately 60 seconds.
 create table if not exists public.user_presence (
   user_id uuid primary key references public.profiles(id) on delete cascade,
   last_seen_at timestamptz not null default now(),
@@ -334,11 +331,86 @@ drop policy if exists "Admins can read all presence" on user_presence;
 create policy "Admins can read all presence" on user_presence
   for select using (is_admin());
 
--- ...and may purge rows older than 24h (storage hygiene; the admin panel
--- runs this on load). Nothing recent can ever be deleted through RLS.
+-- Optional permission to purge rows older than 24h for storage hygiene.
+-- The dashboard itself does not delete rows based on a device clock. Other
+-- admin policies may grant broader delete access on existing installations.
 drop policy if exists "Admins can purge stale presence" on user_presence;
 create policy "Admins can purge stale presence" on user_presence
   for delete using (is_admin() and last_seen_at < now() - interval '24 hours');
+
+-- Server-clock presence (also available as a standalone migration).
+-- Keep live presence independent of both the learner's and the admin's
+-- device clocks. Safe to re-run on an existing installation.
+--
+-- The table intentionally has one short-lived row per user. The learner's
+-- heartbeat may still send last_seen_at, but the database is authoritative.
+create or replace function public.set_user_presence_server_timestamp()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $$
+begin
+  new.last_seen_at := clock_timestamp();
+  return new;
+end;
+$$;
+
+revoke all on function public.set_user_presence_server_timestamp() from public, anon, authenticated;
+
+drop trigger if exists user_presence_server_timestamp on public.user_presence;
+create trigger user_presence_server_timestamp
+  before insert or update on public.user_presence
+  for each row execute function public.set_user_presence_server_timestamp();
+
+-- An old client may already have written a date hours or days in the future.
+-- Such rows cannot establish that a user is currently online. They are only
+-- ephemeral presence rows: an actually active user will heartbeat again.
+delete from public.user_presence
+where last_seen_at > clock_timestamp() + interval '10 seconds';
+
+-- Return a server-timed snapshot, including a timestamp even when it is empty.
+-- SECURITY INVOKER keeps table RLS in force. The explicit admin check and
+-- execute grants prevent normal users from using the dashboard endpoint.
+create or replace function public.admin_get_live_presence()
+returns jsonb
+language plpgsql
+security invoker
+set search_path = pg_catalog
+as $$
+declare
+  checked_at timestamptz := clock_timestamp();
+  snapshot jsonb;
+begin
+  if not coalesce(public.is_admin(), false) then
+    raise exception 'Administrator access required' using errcode = '42501';
+  end if;
+
+  select jsonb_build_object(
+    'checked_at', checked_at,
+    'rows', coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'user_id', p.user_id,
+          'last_seen_at', p.last_seen_at,
+          'page', p.page
+        ) order by p.last_seen_at desc, p.user_id
+      ),
+      '[]'::jsonb
+    )
+  ) into snapshot
+  from public.user_presence as p
+  where p.last_seen_at > checked_at - interval '60 seconds'
+    and p.last_seen_at <= checked_at;
+
+  return snapshot;
+end;
+$$;
+
+revoke all on function public.admin_get_live_presence() from public, anon;
+grant execute on function public.admin_get_live_presence() to authenticated;
+
+-- Refresh PostgREST's RPC cache without waiting for its automatic reload.
+notify pgrst, 'reload schema';
 
 -- 12. Admin audit log: records sensitive changes made from this panel.
 create table if not exists public.admin_audit_log (

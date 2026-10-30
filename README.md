@@ -201,59 +201,51 @@ guessable from the main user-facing URL.
   private code diagnostic lab for common Python mistakes, and the AI activity
   log
 
-## 🟢 Live activity — who's on the site RIGHT NOW + who practiced today
+## 🟢 Live activity — recent site activity and daily practice
 
-The dashboard opens with a **Live activity** section (plus an "Active now"
-stat card):
+- **Live right now** estimates which signed-in users have sent a site
+  heartbeat during the last **60 seconds**. It is not proof of human activity.
+  A user who closes or backgrounds the site can remain on the list for about
+  a minute, plus the dashboard's local refresh interval.
+- **Practiced today** combines users with submissions since the admin's local
+  midnight and users whose `last_active_date` is today. It refreshes on the
+  dashboard refresh button, on returning to the tab and every minute while
+  visible. A `+`/`partial` label means one data source could not be read.
 
-- **Live right now** — every REAL user currently using the PyDebug site,
-  by name, with the page they're on and "Ns ago". A green pulsing dot shows
-  it's live. This is *exact*: it updates the instant a user joins, and the
-  moment a user **closes the page/app, their name disappears** (within a few
-  seconds — no stale "ghost" users ever linger).
-- **Practiced today** — of *all* users, the ones who opened PyDebug to
-  practice today, by name, with submissions-today count and streak 🔥. The
-  "Practiced today" stat card also shows the share of total users.
+### Reliable timestamps and setup
 
-### How the "exact / instant" guarantee works
-
-1. The user-facing app writes a tiny heartbeat row into
-   `public.user_presence` every 25s while the site is in the foreground,
-   and deletes it the instant the user closes/leaves the page.
-2. The admin panel reads that table and subscribes to it via **Supabase
-   Realtime**, so every heartbeat/change lands on the dashboard immediately
-   (with a 25s polling fallback + a 5s local expiry tick as safety nets).
-3. A user only counts as **active** while their `last_seen_at` is within the
-   last **60 seconds**. Closing the page stops the heartbeats, so the name
-   drops out on its own — even if the browser is force-killed before the
-   leave-delete can run. Reopening the site puts them back instantly.
-
-### One-time setup for the live list (2 steps)
-
-1. **Re-run `supabase-admin-setup.sql`** in the Supabase SQL editor. It is
-   idempotent; the new section creates `user_presence`, its RLS (users only
-   ever touch their own row; admins read all) and adds the table to the
-   Realtime publication.
-2. **Add the heartbeat to the user-facing PyDebug app:** copy
-   `js/presence-heartbeat.js` into that app's `js/` folder and add ONE script
-   tag on its main pages, after the Supabase client script:
+1. For an existing database, apply
+   `db/migrations/20261030_presence_server_clock.sql` (after the base setup).
+   New installations can run `supabase-admin-setup.sql`, which includes the
+   same change. The trigger replaces client-supplied heartbeat timestamps
+   with the database clock, and removes legacy rows more than 10 seconds in
+   the future. These are ephemeral presence rows; an active user sends another
+   heartbeat. The migration does not delete accounts or activity history.
+2. Deploy this admin panel. The dashboard calls the admin-only,
+   **security-invoker** `admin_get_live_presence()` RPC, which keeps RLS in
+   force and uses one server time for the 60-second window. Realtime events
+   prompt a refresh, with 25-second polling and a 5-second local expiry tick
+   as fallbacks. A failed query shows an unavailable indicator, not a false 0.
+3. The learner app is a **separate deployment**. To use the improved
+   foreground/sign-out behaviour, copy `js/presence-heartbeat.js` from this
+   repository into that app and load it after its Supabase client on the main
+   pages, then deploy that app:
 
    ```html
    <script src="js/supabaseClient.js"></script>
    <script src="js/presence-heartbeat.js"></script>
    ```
 
-   Then re-deploy the user app. From that moment, its real users populate
-   "Live right now" here. Until that file is live in the user app, the list
-   correctly shows *Nobody is on the site right now* (it never fakes anyone).
+   It writes only the user's ID and page path every 25 seconds while visible,
+   and stops after sign-out or when hidden. It intentionally does not delete
+   the shared per-user row on page close: another tab or device may still be
+   open. The server-side trigger also fixes clocks for older heartbeat clients,
+   even before the separate learner app is updated.
 
-> **Privacy / safety:** the heartbeat stores only the user's own id and the
-> page path — RLS prevents any user from reading or touching another user's
-> row. The file is fully fail-safe and never affects the user app's own
-> behaviour. "Active" = the site is in the *foreground*; a backgrounded tab
-> (phone locked, other tab focused) drops out after 60s and reappears
-> instantly on return, which is the intended "really using it right now"
-> semantics.
+> **Privacy / safety:** ordinary users can only access their own presence row;
+> the snapshot requires an administrator and remains subject to RLS. Network
+> delays, browser throttling, multiple tabs and older learner-app code can
+> affect how closely a heartbeat represents an actually open foreground page.
 
 ## 🤖 Own-AI (built-in, zero API keys)
 
@@ -422,6 +414,8 @@ learner-table grants or disabling RLS:
 4. `db/migrations/20261023_fix_admin_table_grants.sql`
 5. `db/migrations/20261024_payment_actual_amounts.sql` (real paid amounts +
    coupon/discount capture; see the section above)
+6. `db/migrations/20261030_presence_server_clock.sql` (server-timed live
+   presence; see the live activity section above)
 
 The latest migrations are idempotent; re-run them after pulling updates. They
 grant the required `authenticated` table privileges (`SELECT` / append-only

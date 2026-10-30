@@ -121,18 +121,23 @@ async function refreshDashboard() {
   button.disabled = true;
   button.textContent = "↻ Refreshing…";
   try {
-    await Promise.all([
+    const [liveOk, dailyOk] = await Promise.all([
+      refreshLive(),
+      loadDailyPractice(),
       loadStats(),
       loadProblems(problemsPage),
       loadAnalytics(),
       loadActivity(),
       loadTopProblems(),
-      loadDailyPractice(),
       loadAIBrief(),
       loadDashboardCampuses(),
     ]);
     updateSyncStamp();
-    showToast("Dashboard refreshed", "success");
+    if (liveOk === false || dailyOk === false) {
+      showToast("Some live activity could not be refreshed", "error");
+    } else {
+      showToast("Dashboard refreshed", "success");
+    }
   } catch (error) {
     console.warn("dashboard refresh:", error);
     showToast("Some dashboard data could not be refreshed", "error");
