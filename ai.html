@@ -55,6 +55,96 @@
       </label>
     </div>
 
+    <!-- Company-pattern coding interview studio -->
+    <section class="section-card ai-interview-studio" id="ai-interview-studio" aria-labelledby="ai-interview-title">
+      <div class="ai-interview-head">
+        <div>
+          <div class="ai-interview-eyebrow">NEW · WRITE-CODE INTERVIEW PREP</div>
+          <h2 id="ai-interview-title">🎯 Interview Studio</h2>
+          <p>Generate company-pattern Python challenges with deep functional tests, reference solutions, complexity targets and interviewer follow-ups—not just output guessing.</p>
+        </div>
+        <span class="ai-interview-badge" id="ai-interview-library">28 blueprints · 17 patterns</span>
+      </div>
+
+      <div class="ai-interview-features" aria-label="Challenge quality features">
+        <span><strong>8–12</strong> tests per challenge</span>
+        <span><strong>3</strong> progressive hints</span>
+        <span><strong>100</strong> point interview rubric</span>
+        <span><strong>Edge-first</strong> hidden judge cases</span>
+      </div>
+
+      <div class="ai-interview-controls">
+        <div class="field">
+          <label for="ai-interview-track">Company-pattern track</label>
+          <select id="ai-interview-track">
+            <option value="mixed">Mixed company patterns</option>
+            <option value="google">Google-style patterns</option>
+            <option value="microsoft">Microsoft-style patterns</option>
+            <option value="amazon">Amazon-style patterns</option>
+            <option value="meta">Meta-style patterns</option>
+            <option value="apple">Apple-style patterns</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ai-interview-pattern">Algorithm pattern</label>
+          <select id="ai-interview-pattern">
+            <option value="all">All patterns</option>
+            <option value="hashing">Hash Map / Frequency</option>
+            <option value="two-pointers">Two Pointers</option>
+            <option value="sliding-window">Sliding Window</option>
+            <option value="stack">Stack / State Tracking</option>
+            <option value="sorting">Sorting + Sweep</option>
+            <option value="binary-search">Binary Search</option>
+            <option value="heap">Heap / Priority Queue</option>
+            <option value="graph">Graph / Topological Sort</option>
+            <option value="dynamic-programming">Dynamic Programming</option>
+            <option value="recursion">Recursion / Tree DFS</option>
+            <option value="tree-bfs">Tree Construction + BFS</option>
+            <option value="backtracking">Backtracking</option>
+            <option value="prefix-suffix">Prefix &amp; Suffix</option>
+            <option value="greedy">Greedy / One Pass</option>
+            <option value="bit-manipulation">Bit Manipulation / Math</option>
+            <option value="matrix">Matrix Transformation</option>
+            <option value="oop">OOP / Cache Design</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ai-interview-difficulty">Difficulty</label>
+          <select id="ai-interview-difficulty">
+            <option value="mixed">Mixed</option>
+            <option value="easy">Easy · warm-up</option>
+            <option value="medium">Medium · core interview</option>
+            <option value="hard">Hard · advanced round</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ai-interview-count">Challenges per set</label>
+          <select id="ai-interview-count">
+            <option value="1">1 challenge</option>
+            <option value="3">3 challenges</option>
+            <option value="5">5 challenges</option>
+            <option value="10">10 challenges</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ai-interview-status">Save mode</label>
+          <select id="ai-interview-status">
+            <option value="draft">Draft · review first</option>
+            <option value="published">Published · ready for users</option>
+          </select>
+        </div>
+      </div>
+
+      <p class="ai-interview-track-note" id="ai-interview-track-note" aria-live="polite"></p>
+      <div class="ai-actions">
+        <button class="btn btn--secondary btn--sm" id="ai-btn-interview-preview">👁️ Preview full challenge</button>
+        <button class="btn btn--primary btn--sm" id="ai-btn-interview-generate">🚀 Generate interview set</button>
+      </div>
+      <p class="ai-interview-disclaimer">Company tracks tune practice patterns only. These are original questions, not leaked/verified company questions. Consistent practice can improve readiness; no interview or selection outcome is guaranteed.</p>
+      <div id="ai-interview-result" class="ai-interview-result" aria-live="polite"></div>
+      <div id="ai-interview-preview" class="ai-interview-preview" style="display:none"></div>
+    </section>
+
     <!-- Stats -->
     <div class="admin-stats-row">
       <div class="stat-card"><div class="value value--red" id="ai-stat-removed">0</div><div class="label">Abusive comments removed</div></div>
@@ -325,6 +415,7 @@
 <script src="js/utils.js" defer></script>
 <script src="js/admin-icons.js" defer></script>
 <script src="js/admin-common.js" defer></script>
+<script src="js/admin-interview.js" defer></script>
 <script src="js/admin-ai.js" defer></script>
 </body>
 </html>

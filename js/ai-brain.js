@@ -53,6 +53,11 @@ const AI_DEFAULTS = {
   premium_mix: false,  // mark a share of factory problems as Premium
   premium_percent: 25, // % of factory problems marked Premium (~2-3 of 10)
   error_guard: false,  // auto-delete Fix-the-Bug code that runs without error
+  interview_track: "mixed",     // company-pattern weighting (never attribution)
+  interview_difficulty: "mixed",// mixed | easy | medium | hard
+  interview_pattern: "all",    // algorithm pattern or all
+  interview_count: 3,           // Write-Code challenges per Interview Studio run
+  interview_status: "draft",    // review first by default; published is opt-in
 };
 
 function AI_getSettings() {
@@ -2515,6 +2520,18 @@ function AI_fingerprint(starterCode, expectedOutput) {
   return AI_hash(n);
 }
 
+// Write-Code scaffolds are intentionally similar (def solve...), so the old
+// scaffold + sample-output fingerprint would reject genuinely fresh judge
+// suites. Coding rows therefore fingerprint their complete ordered test suite;
+// Bug/Output rows retain the original behaviour.
+function AI_problemFingerprint(p) {
+  if (p && p.type === "coding" && Array.isArray(p.test_cases) && p.test_cases.length) {
+    const suite = p.test_cases.map((t) => [String((t && t.call) || ""), String((t && t.expected) ?? "")]);
+    return AI_hash("coding§" + AI_normCode(p.starter_code) + "§" + AI_normCode(JSON.stringify(suite)));
+  }
+  return AI_fingerprint(p && p.starter_code, p && p.expected_output);
+}
+
 // Validate a generated problem. `knownFps` = Set of existing fingerprints.
 // Returns { ok, checks: [{label, pass}] }.
 function AI_validateProblem(p, knownFps) {
@@ -2596,7 +2613,7 @@ async function AI_fetchProblemsIndex() {
   for (;;) {
     const { data, error } = await sb
       .from("problems")
-      .select("id, title, starter_code, expected_output, problem_number, created_at")
+      .select("id, title, type, starter_code, expected_output, test_cases, problem_number, created_at")
       .order("created_at", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
@@ -2607,7 +2624,7 @@ async function AI_fetchProblemsIndex() {
   const fps = new Set();
   let maxNum = 0;
   rows.forEach((r) => {
-    const fp = AI_fingerprint(r.starter_code, r.expected_output);
+    const fp = AI_problemFingerprint(r);
     if (fp) fps.add(fp);
     const n = Number(r.problem_number) || 0;
     if (n > maxNum) maxNum = n;
@@ -2855,7 +2872,7 @@ async function AI_runDedup(opts) {
   const { rows } = await AI_fetchProblemsIndex();
   const groups = {};
   rows.forEach((r) => {
-    const fp = AI_fingerprint(r.starter_code, r.expected_output);
+    const fp = AI_problemFingerprint(r);
     if (!fp) return;
     (groups[fp] = groups[fp] || []).push(r);
   });
@@ -3221,7 +3238,7 @@ async function AI_healthCheck() {
     let from = 0;
     for (;;) {
       const { data, error } = await sb.from("problems")
-        .select("id,title,type,difficulty,topic,hints,starter_code,expected_output,description,problem_number,created_at")
+        .select("id,title,type,difficulty,topic,hints,starter_code,expected_output,test_cases,description,problem_number,created_at")
         .order("created_at", { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) throw error;
@@ -3282,7 +3299,7 @@ async function AI_healthCheck() {
   // Duplicates.
   const seen = {};
   probs.forEach((r) => {
-    const fp = AI_fingerprint(r.starter_code, r.expected_output);
+    const fp = AI_problemFingerprint(r);
     if (!fp) return;
     (seen[fp] = seen[fp] || []).push(r);
   });

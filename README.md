@@ -251,8 +251,8 @@ guessable from the main user-facing URL.
 
 This panel ships its own AI engine — pure in-browser JavaScript, no OpenAI /
 Gemini / external calls at all, so there is nothing to pay for and no key to
-leak. Brain: `js/ai-brain.js`, background watcher: `js/ai-watch.js` (loaded on every protected admin page
-after the authenticator check is passed), control UI: `ai.html` + `js/admin-ai.js`.
+leak. Brain: `js/ai-brain.js`, interview engine: `js/ai-interview.js`, background watcher: `js/ai-watch.js` (loaded on every protected admin page
+after the authenticator check is passed), control UI: `ai.html` + `js/admin-ai.js` + `js/admin-interview.js`.
 
 - **Discussion moderation** — scans English comments for abuse/gaali
   (incl. leetspeak like `sh1t`, `f*ck`, `fuuuck`, spaced-out `f u c k`),
@@ -270,6 +270,21 @@ after the authenticator check is passed), control UI: `ai.html` + `js/admin-ai.j
   Predict-Output expected output is COMPUTED from the same values in the
   code, never guessed. Use "👁️ Preview" to inspect buggy code + fixed
   reference code + the validation checklist before inserting.
+- **🎯 Interview Studio** (`js/ai-interview.js`) — generates full **Write Code**
+  challenges rather than only Bug/Output questions. It includes 28 original
+  blueprints across 17 patterns (hashing, two pointers, sliding windows,
+  graphs, heaps, trees, backtracking, DP, OOP and more), mixed/easy/medium/hard
+  selection, and weighted Google/Microsoft/Amazon/Meta/Apple-style practice
+  tracks. Every challenge has a function scaffold, 8–12 deterministic judge
+  cases (two statement samples + unseen edge cases), exactly 3 progressive
+  hints, constraints, time/space targets, an independent Python reference,
+  two interviewer follow-ups and a 100-point rubric. A strict pre-insert
+  contract rejects missing/duplicate tests, weak prompts, invalid scaffolds,
+  missing references and existing-content duplicates. Draft is the default;
+  publishing is explicit. Company tracks are preparation heuristics—not
+  claims of actual company questions—and no selection rate is guaranteed.
+  Existing databases can apply `db/migrations/20261102_interview_studio.sql`
+  to ensure `test_cases`, `solution_code` and `status` are available.
 - **⭐ Premium mix** — optionally marks a configurable share of factory
   problems as Premium (default 25% ≈ 2–3 of every 10, hardest first);
   gap-filler honors it too, and broadcasts mention the Premium count.
@@ -278,8 +293,9 @@ after the authenticator check is passed), control UI: `ai.html` + `js/admin-ai.j
   while ON, plus a manual "Delete error-free bugs now" button (dry-run +
   confirm), a ❤️ health-check entry and a 🔎 quality-report `no-error`
   flag for review.
-- **Duplicate guard** — fingerprints every problem (code + output); new
-  problems that already exist are skipped, and "🧹 Remove duplicates"
+- **Duplicate guard** — fingerprints Bug/Output problems by code + output and
+  Write-Code problems by their complete ordered judge suite (so fresh hidden
+  tests are not false positives); new problems that already exist are skipped, and "🧹 Remove duplicates"
   deletes existing dupes (keeping the oldest), including their
   submissions/discussions.
 - **Auto notifications** — offender warnings, new-problem broadcasts to

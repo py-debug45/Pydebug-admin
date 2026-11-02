@@ -18,6 +18,7 @@ function hasTotpPass() {
 
 const ADMIN_AI_FILES = [
   "js/ai-brain.js",
+  "js/ai-interview.js",
   "js/ai-growth.js",
   "js/ai-content.js",
   "js/ai-safety.js",
@@ -26,10 +27,10 @@ const ADMIN_AI_FILES = [
 let adminAILoadPromise = null;
 
 // AI automation is loaded only after the admin has unlocked the panel, and
-// the five files are fetched IN PARALLEL (script.async = false keeps them
+// the modules are fetched IN PARALLEL (script.async = false keeps them
 // executing in order). The old version chained them with
-// `promise.then(next)`, so the ~250 KB bundle downloaded one file at a time
-// and every page waited for all five before it rendered any data — that was
+// `promise.then(next)`, so the bundle downloaded one file at a time
+// and every page waited for every module before it rendered any data — that was
 // the single biggest cause of the panel feeling slow.
 function loadAdminAI() {
   if (adminAILoadPromise) return adminAILoadPromise;
