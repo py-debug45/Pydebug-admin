@@ -97,8 +97,34 @@ async function AI_generateVariations(problemId, n) {
   n = Math.max(1, Math.min(10, Number(n) || 3));
   const { data: src, error: srcErr } = await sb.from("problems").select("*").eq("id", problemId).single();
   if (srcErr || !src) throw new Error("Source problem not found.");
+
+  // Write-Code rows need algorithmic variations, not an unrelated Bug/Output
+  // template. Interview Studio keeps the original pattern/topic/difficulty,
+  // generates a fresh judge suite and saves reviewable drafts.
+  if (src.type === "coding") {
+    if (typeof AI_generateInterviewProblems !== "function" || typeof AI_INTERVIEW_TEMPLATES === "undefined") {
+      throw new Error("Interview engine is unavailable; no unrelated Bug/Output variation was created.");
+    }
+    const pattern = typeof AI_interviewPatternOf === "function" ? AI_interviewPatternOf(src) : "all";
+    const opts = {
+      difficulty: src.difficulty,
+      pattern,
+      topic: src.topic,
+      track: "mixed",
+      status: "draft",
+      premium: !!src.is_premium,
+    };
+    const hasExactBlueprint = AI_INTERVIEW_TEMPLATES.some((tpl) =>
+      tpl.topic === opts.topic && tpl.difficulty === opts.difficulty && (pattern === "all" || tpl.pattern === pattern)
+    );
+    if (!hasExactBlueprint) delete opts.topic;
+    const result = await AI_generateInterviewProblems(n, opts);
+    if (result.added.length) AI_log("interview_variation", `Created ${result.added.length} Write-Code variation(s) of #${src.problem_number ?? "?"} "${src.title}".`, "success");
+    return { ...result, source: src };
+  }
+
   const { fps, maxNum } = await AI_fetchProblemsIndex();
-  const srcFp = AI_fingerprint(src.starter_code, src.expected_output);
+  const srcFp = AI_problemFingerprint(src);
   if (srcFp) fps.add(srcFp);
   let nextNum = maxNum;
   const added = [];

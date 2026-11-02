@@ -44,6 +44,7 @@ function renderAll(s) {
   document.getElementById("ai-difficulty").value = s.difficulty || "mixed";
   const pctEl = document.getElementById("ai-premium-pct");
   if (pctEl) pctEl.value = String(s.premium_percent || 25);
+  if (typeof AdminInterviewStudio !== "undefined") AdminInterviewStudio.render(s);
 }
 
 function setToggle(id, on) {
@@ -127,6 +128,7 @@ function bindControls() {
     renderLogs();
     refreshStats();
   });
+  if (typeof AdminInterviewStudio !== "undefined") AdminInterviewStudio.bind();
 }
 
 function setBusy(btnId, busy, idleText) {

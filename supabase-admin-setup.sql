@@ -32,7 +32,8 @@ alter table problems add column if not exists hints jsonb default '[]'::jsonb;
 alter table problems add column if not exists starter_code text;
 alter table problems add column if not exists expected_output text;
 alter table problems add column if not exists solution_code text;
-alter table problems add column if not exists status text;
+alter table problems add column if not exists test_cases jsonb default '[]'::jsonb;
+alter table problems add column if not exists status text default 'published';
 alter table problems add column if not exists battle_error text;
 alter table submissions add column if not exists code text;
 
@@ -52,10 +53,10 @@ set problem_number = b.mx + n.rn
 from numbered n, bounds b
 where p.id = n.id;
 
--- NOTE: the user panel does NOT have a problems.solution_code column —
--- the admin panel no longer writes one. If your database has a leftover
--- solution_code column from an experiment, you may drop it:
---   alter table problems drop column if exists solution_code;
+-- Write-Code / Interview Studio problems use solution_code for the reference
+-- implementation and test_cases for the judge. Keep both columns; existing
+-- bug/output generators simply leave them unused. For an older deployment,
+-- db/migrations/20261102_interview_studio.sql applies the same additive fix.
 
 -- 1. Notifications table (used by the user app's bell + the admin
 --    broadcast page). Created only if it doesn't exist yet.
