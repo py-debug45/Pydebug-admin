@@ -28,7 +28,6 @@ test('platform migration defines the full RPC surface used by the panel', () => 
     'admin_members',
     'admin_role_permissions',
     'app_settings',
-    'feature_flags',
     'deletion_archive',
     'admin_sessions',
     'saved_views',
@@ -175,12 +174,15 @@ test('settings page calls the exact RPC parameter names from the migration', () 
   assert.ok(keys.length >= 0);
 });
 
-test('feature flags seed every product switch the UI expects', () => {
+test('feature flags reuse server_flags so existing product switches stay in one place', () => {
+  assert.match(migration, /alter table public\.server_flags add column if not exists rollout_percent/);
+  assert.match(migration, /from public\.server_flags/);
+  assert.match(migration, /update public\.server_flags/);
   for (const key of ['ai_interview', 'ai_hints', 'community_hub', 'mock_tests', 'battles',
     'study_plans', 'certificates', 'referrals', 'write_code', 'weekly_wordle']) {
-    assert.match(migration, new RegExp(`\\('${key}'`), `feature flag ${key} is not seeded`);
+    assert.match(migration, new RegExp(`\\('${key}',`), `feature flag ${key} is not seeded`);
   }
-  assert.match(migration, /rollout_percent between 0 and 100/);
+  assert.match(migration, /server_flags_rollout_check check \(rollout_percent between 0 and 100\)/);
 });
 
 test('⌘K palette is loaded on every protected page and is permission-aware', () => {

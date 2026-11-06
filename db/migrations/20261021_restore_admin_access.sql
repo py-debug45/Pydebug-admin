@@ -11,7 +11,7 @@ begin
     'user_certificates','mock_attempts','battles','study_plans',
     'classrooms','classroom_members','institute_enquiries','learner_feedback','referrals',
     'deletion_archive','admin_members','admin_role_permissions','app_settings',
-    'feature_flags','admin_sessions','saved_views'] loop
+    'server_flags','admin_sessions','saved_views'] loop
     if to_regclass('public.' || t) is not null then
       execute format('alter table public.%I enable row level security', t);
       execute format('grant select on public.%I to authenticated', t);

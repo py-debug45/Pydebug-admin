@@ -7,7 +7,7 @@
 --
 --   1. Team accounts + role based permissions  (admin_members, has_perm)
 --   2. Runtime settings                        (app_settings)
---   3. Feature flags / kill switches           (feature_flags)
+--   3. Feature flags / kill switches           (server_flags)
 --   4. Soft delete + restore (Trash)           (deletion_archive)
 --   5. Admin sessions (revoke / force logout)  (admin_sessions)
 --   6. Audit hardening                         (ip, user_agent, session_id, append-only)
@@ -95,7 +95,34 @@ drop policy if exists "Admins read role permissions" on public.admin_role_permis
 create policy "Admins read role permissions" on public.admin_role_permissions
   for select using ((select public.is_admin()));
 
--- Seed every legacy admin as owner so nobody loses access when this runs.
+-- Seed existing operators so nobody loses access when this runs.
+-- 1) The older `admin_users` roster (superadmin / content_editor / analyst ...)
+--    is mapped onto the new role names. This runs first so a content editor is
+--    not accidentally seeded as an owner by the profiles pass below.
+do $$
+begin
+  if to_regclass('public.admin_users') is not null then
+    execute $seed$
+      insert into public.admin_members (user_id, role, added_by)
+      select a.user_id,
+             case a.role
+               when 'superadmin' then 'owner'
+               when 'content_editor' then 'content'
+               when 'analyst' then 'support'
+               when 'moderator' then 'moderator'
+               when 'support' then 'support'
+               when 'finance' then 'finance'
+               else 'support'
+             end,
+             null
+      from public.admin_users a
+      where exists (select 1 from public.profiles p where p.id = a.user_id)
+      on conflict (user_id) do nothing
+    $seed$;
+  end if;
+end $$;
+
+-- 2) Legacy profiles.is_admin = true accounts become owners.
 insert into public.admin_members (user_id, role, added_by)
 select p.id, 'owner', null
 from public.profiles p
@@ -265,6 +292,26 @@ begin
   values (v_target, p_role, v_uid)
   on conflict (user_id) do update set role = excluded.role, added_by = v_uid;
 
+  -- Login + 2FA gate (`_require_totp_admin`) reads profiles.is_admin, and the
+  -- older admin roster lives in admin_users. Keep both in step so a teammate
+  -- added here can actually sign in and set up Google Authenticator.
+  update public.profiles set is_admin = true where id = v_target;
+
+  if to_regclass('public.admin_users') is not null then
+    insert into public.admin_users (user_id, email, role, created_by)
+    select p.id, p.email,
+           case p_role
+             when 'owner' then 'superadmin'
+             when 'admin' then 'superadmin'
+             when 'content' then 'content_editor'
+             else p_role
+           end,
+           v_uid
+    from public.profiles p
+    where p.id = v_target
+    on conflict (user_id) do update set role = excluded.role;
+  end if;
+
   insert into public.admin_audit_log (admin_id, action, entity_type, entity_id, new_value, metadata)
   values (v_uid, 'team_member_added', 'admin_members', v_target::text,
           jsonb_build_object('role', p_role), jsonb_build_object('previous_role', v_old));
@@ -304,6 +351,19 @@ begin
   values (p_user_id, p_role, v_uid)
   on conflict (user_id) do update set role = excluded.role;
 
+  update public.profiles set is_admin = true where id = p_user_id;
+
+  if to_regclass('public.admin_users') is not null then
+    update public.admin_users
+       set role = case p_role
+                    when 'owner' then 'superadmin'
+                    when 'admin' then 'superadmin'
+                    when 'content' then 'content_editor'
+                    else p_role
+                  end
+     where user_id = p_user_id;
+  end if;
+
   insert into public.admin_audit_log (admin_id, action, entity_type, entity_id, new_value, metadata)
   values (v_uid, 'team_role_changed', 'admin_members', p_user_id::text,
           jsonb_build_object('role', p_role), jsonb_build_object('previous_role', v_old));
@@ -336,18 +396,70 @@ begin
 
   delete from public.admin_members where user_id = p_user_id;
 
-  if p_clear_legacy then
-    update public.profiles set is_admin = false
-    where id = p_user_id
-      and coalesce(is_admin, false) = true
-      and not exists (select 1 from public.admin_members m where m.user_id = p_user_id);
+  -- Removing panel access must remove it everywhere, not just from the new
+  -- table: profiles.is_admin gates every RLS policy and the TOTP login, and
+  -- admin_users is the legacy roster. `p_clear_legacy` is kept for API
+  -- compatibility but access is always revoked.
+  update public.profiles set is_admin = false where id = p_user_id;
+
+  if to_regclass('public.admin_users') is not null then
+    delete from public.admin_users where user_id = p_user_id;
   end if;
 
   insert into public.admin_audit_log (admin_id, action, entity_type, entity_id, new_value)
   values (v_uid, 'team_member_removed', 'admin_members', p_user_id::text,
-          jsonb_build_object('cleared_legacy_flag', p_clear_legacy));
+          jsonb_build_object('cleared_legacy_flag', true,
+                             'requested_clear_legacy', p_clear_legacy));
 end;
 $$;
+
+-- -----------------------------------------------------------------------------
+-- 1b. LEGACY PROFILE GUARD (profiles.is_admin sync)
+--
+-- The pre-existing `guard_profile_self_write()` trigger only lets a user touch
+-- their own row, so the team RPCs above would fail while mirroring membership
+-- into the legacy `profiles.is_admin` flag. This block patches that single
+-- function: a caller holding `team.write` may write a row whose only differing
+-- column is `is_admin`. Every other protection in the trigger is left as is.
+-- Idempotent, and skipped when the trigger is not installed.
+-- -----------------------------------------------------------------------------
+
+do $$
+declare
+  v_src text;
+  v_old text := $anchor$  if new.id is distinct from auth.uid() and not v_is_founder then
+    raise exception 'You can only update your own profile' using errcode = '42501';
+  end if;$anchor$;
+  v_new text := $patch$  if new.id is distinct from auth.uid() and not v_is_founder then
+    -- Admin panel team management mirrors membership into profiles.is_admin.
+    -- Only that one column may differ, and only for a team.write holder.
+    if public.has_perm('team.write', auth.uid())
+       and (to_jsonb(new) - 'is_admin') = (to_jsonb(old) - 'is_admin') then
+      return new;
+    end if;
+
+    raise exception 'You can only update your own profile' using errcode = '42501';
+  end if;$patch$;
+begin
+  select pg_get_functiondef(p.oid) into v_src
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'guard_profile_self_write'
+   limit 1;
+
+  if v_src is null then
+    raise notice 'guard_profile_self_write not present; skipping patch';
+    return;
+  end if;
+  if position('public.has_perm(''team.write'', auth.uid())' in v_src) > 0 then
+    return; -- already patched
+  end if;
+  if position(v_old in v_src) = 0 then
+    raise exception 'guard_profile_self_write anchor not found - refusing to patch';
+  end if;
+
+  execute replace(v_src, v_old, v_new);
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- 2. RUNTIME SETTINGS
@@ -361,11 +473,28 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- The table already existed before this migration in some installs, without a
+-- public/private marker. Add it, then stop the old "anyone can read every row"
+-- policy from exposing limits, AI budgets and security policy.
+alter table public.app_settings add column if not exists is_public boolean not null default false;
+
 alter table public.app_settings enable row level security;
 
+-- The learner app reads these four legacy keys directly with the anon key.
+update public.app_settings
+   set is_public = true
+ where key in ('maintenance_mode', 'battles_enabled', 'new_user_offer_enabled', 'signups_enabled');
+
+drop policy if exists "public read settings" on public.app_settings;
+drop policy if exists "Public read public settings" on public.app_settings;
+create policy "Public read public settings" on public.app_settings
+  for select to anon, authenticated using (is_public = true);
+
+drop policy if exists "Admins read all settings" on public.app_settings;
+create policy "Admins read all settings" on public.app_settings
+  for select to authenticated using ((select public.is_admin()));
+
 drop policy if exists "Admins read settings" on public.app_settings;
-create policy "Admins read settings" on public.app_settings
-  for select using ((select public.is_admin()));
 
 insert into public.app_settings (key, value, is_public) values
   ('general.site_name', '"PyDebug"'::jsonb, true),
@@ -407,6 +536,15 @@ insert into public.app_settings (key, value, is_public) values
   ('plans.catalog', '[{"key":"weekly","name":"Weekly","amount_paise":4900,"days":7},{"key":"monthly","name":"Monthly","amount_paise":14900,"days":30},{"key":"yearly","name":"Yearly","amount_paise":99900,"days":365}]'::jsonb, true)
 on conflict (key) do nothing;
 
+-- Keep the new names in sync with the legacy keys the learner app already
+-- reads, so the panel shows the real current state on first load.
+update public.app_settings a
+   set value = l.value, updated_at = now()
+  from public.app_settings l
+ where a.key = 'maintenance.enabled'
+   and l.key = 'maintenance_mode'
+   and l.value is not null;
+
 create or replace function public.admin_get_settings()
 returns jsonb
 language plpgsql stable security definer
@@ -447,6 +585,13 @@ begin
   on conflict (key) do update
     set value = excluded.value, updated_by = v_uid, updated_at = now();
 
+  -- The learner app still reads the legacy maintenance_mode switch.
+  if p_key = 'maintenance.enabled' then
+    insert into public.app_settings (key, value, is_public)
+    values ('maintenance_mode', coalesce(p_value, 'false'::jsonb), true)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  end if;
+
   insert into public.admin_audit_log (admin_id, action, entity_type, entity_id, old_value, new_value)
   values (v_uid, 'setting_updated', 'app_settings', p_key, coalesce(v_old, '{}'::jsonb), p_value);
 end;
@@ -468,36 +613,58 @@ grant execute on function public.public_settings() to anon, authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 3. FEATURE FLAGS / KILL SWITCHES
+--
+-- The learner app is already driven by `server_flags` (key + enabled). Instead
+-- of introducing a second, competing flag table, this migration extends that
+-- one with labels, descriptions, rollout % and an author — so a toggle here
+-- changes the product immediately, and every existing flag (for example
+-- `db_solve_xp`) shows up in the panel.
 -- -----------------------------------------------------------------------------
 
-create table if not exists public.feature_flags (
-  key text primary key,
-  label text not null,
-  description text,
-  enabled boolean not null default false,
-  rollout_percent int not null default 100 check (rollout_percent between 0 and 100),
-  updated_by uuid references public.profiles(id) on delete set null,
-  updated_at timestamptz not null default now()
-);
+do $$
+begin
+  if to_regclass('public.server_flags') is null then
+    create table public.server_flags (
+      key text primary key,
+      enabled boolean not null default false,
+      updated_at timestamptz not null default now()
+    );
+  end if;
+end $$;
 
-alter table public.feature_flags enable row level security;
+alter table public.server_flags add column if not exists label text;
+alter table public.server_flags add column if not exists description text;
+alter table public.server_flags add column if not exists rollout_percent int not null default 100;
+alter table public.server_flags add column if not exists updated_by uuid references public.profiles(id) on delete set null;
 
-drop policy if exists "Admins read feature flags" on public.feature_flags;
-create policy "Admins read feature flags" on public.feature_flags
-  for select using ((select public.is_admin()));
+alter table public.server_flags drop constraint if exists server_flags_rollout_check;
+alter table public.server_flags
+  add constraint server_flags_rollout_check check (rollout_percent between 0 and 100);
 
-insert into public.feature_flags (key, label, description, enabled, rollout_percent) values
-  ('ai_interview',  'AI Interview Studio', 'Mock interview generator + rubric scoring', true, 100),
-  ('ai_hints',      'AI hints & review',   'In-problem hint unlock and code review coach', true, 100),
-  ('community_hub', 'Community Hub',       'Posts, comments, likes and campus discussions', true, 100),
-  ('mock_tests',    'Mock tests',          'Timed full-length mock tests', true, 100),
-  ('battles',       '1v1 Battles',         'Live head-to-head coding battles', true, 100),
-  ('study_plans',   'Study plans',         'Personalised multi-week prep plans', true, 100),
-  ('certificates',  'Certificates',        'Verifiable completion certificates', true, 100),
-  ('referrals',     'Referral programme',  'Invite friends, both get premium days', false, 0),
-  ('write_code',    'Write-Code judge',    'Run hidden test cases against learner code', true, 100),
-  ('weekly_wordle', 'Weekly Wordle',       "Today's Wordle challenge", true, 100)
+insert into public.server_flags (key, enabled, label, description, rollout_percent) values
+  ('ai_interview',  true,  'AI Interview Studio', 'Mock interview generator + rubric scoring', 100),
+  ('ai_hints',      true,  'AI hints & review',   'In-problem hint unlock and code review coach', 100),
+  ('community_hub', true,  'Community Hub',       'Posts, comments, likes and campus discussions', 100),
+  ('mock_tests',    true,  'Mock tests',          'Timed full-length mock tests', 100),
+  ('battles',       true,  '1v1 Battles',         'Live head-to-head coding battles', 100),
+  ('study_plans',   true,  'Study plans',         'Personalised multi-week prep plans', 100),
+  ('certificates',  true,  'Certificates',        'Verifiable completion certificates', 100),
+  ('referrals',     false, 'Referral programme',  'Invite friends, both get premium days', 0),
+  ('write_code',    true,  'Write-Code judge',    'Run hidden test cases against learner code', 100),
+  ('weekly_wordle', true,  'Weekly Wordle',       'Today''s Wordle challenge', 100)
 on conflict (key) do nothing;
+
+-- Friendly names for flags that existed before this migration.
+update public.server_flags set label = coalesce(label, 'DB-backed solve XP'),
+       description = coalesce(description, 'Award solve XP from the database instead of the client')
+ where key = 'db_solve_xp';
+
+-- The legacy product switch lives in app_settings; mirror its current value.
+update public.server_flags f
+   set enabled = (l.value = 'true'::jsonb)
+  from public.app_settings l
+ where f.key = 'battles'
+   and l.key = 'battles_enabled';
 
 create or replace function public.admin_list_flags()
 returns table (key text, label text, description text, enabled boolean, rollout_percent int, updated_at timestamptz)
@@ -510,9 +677,14 @@ begin
   end if;
 
   return query
-  select f.key, f.label, f.description, f.enabled, f.rollout_percent, f.updated_at
-  from public.feature_flags f
-  order by f.label;
+  select f.key,
+         coalesce(f.label, f.key),
+         f.description,
+         f.enabled,
+         coalesce(f.rollout_percent, 100),
+         f.updated_at
+  from public.server_flags f
+  order by coalesce(f.label, f.key);
 end;
 $$;
 
@@ -523,28 +695,36 @@ set search_path = public, pg_temp
 as $$
 declare
   v_uid uuid := auth.uid();
-  v_old feature_flags%rowtype;
+  v_old public.server_flags%rowtype;
 begin
   if not public.has_perm('settings.write') then
     raise exception 'Permission denied: settings.write' using errcode = '42501';
   end if;
 
-  select * into v_old from public.feature_flags where key = p_key;
+  select * into v_old from public.server_flags where key = p_key;
   if not found then
     raise exception 'Unknown feature flag %', p_key using errcode = 'P0002';
   end if;
 
-  update public.feature_flags
+  update public.server_flags
      set enabled = coalesce(p_enabled, enabled),
          rollout_percent = coalesce(greatest(0, least(100, p_rollout)), rollout_percent),
          updated_by = v_uid,
          updated_at = now()
    where key = p_key;
 
+  -- Keep the legacy product switch in step with the flag.
+  if p_key = 'battles' then
+    insert into public.app_settings (key, value, is_public)
+    values ('battles_enabled', to_jsonb(coalesce(p_enabled, v_old.enabled)), true)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  end if;
+
   insert into public.admin_audit_log (admin_id, action, entity_type, entity_id, old_value, new_value)
-  values (v_uid, 'feature_flag_updated', 'feature_flags', p_key,
+  values (v_uid, 'feature_flag_updated', 'server_flags', p_key,
           jsonb_build_object('enabled', v_old.enabled, 'rollout', v_old.rollout_percent),
-          jsonb_build_object('enabled', p_enabled, 'rollout', p_rollout));
+          jsonb_build_object('enabled', coalesce(p_enabled, v_old.enabled),
+                             'rollout', coalesce(p_rollout, v_old.rollout_percent)));
 end;
 $$;
 
@@ -554,13 +734,17 @@ language sql stable security definer
 set search_path = public, pg_temp
 as $$
   select coalesce(
-    (select jsonb_object_agg(key, jsonb_build_object('enabled', enabled, 'rollout', rollout_percent))
-     from public.feature_flags where enabled = true),
+    (select jsonb_object_agg(key, jsonb_build_object('enabled', enabled,
+                                                     'rollout', coalesce(rollout_percent, 100)))
+     from public.server_flags where enabled = true),
     '{}'::jsonb
   );
 $$;
 
 grant execute on function public.public_feature_flags() to anon, authenticated;
+
+-- The panel never reads or writes this table directly (RPC only), and no anon
+-- grant is added, so learner-side access stays exactly as it was.
 
 -- -----------------------------------------------------------------------------
 -- 4. SOFT DELETE + TRASH
@@ -918,11 +1102,11 @@ create policy "Admins manage own saved views" on public.saved_views
 -- -----------------------------------------------------------------------------
 
 grant select on public.admin_members, public.admin_role_permissions, public.app_settings,
-      public.feature_flags, public.deletion_archive, public.admin_sessions, public.saved_views
+      public.deletion_archive, public.admin_sessions, public.saved_views
   to authenticated;
 
 revoke insert, update, delete on public.admin_members, public.admin_role_permissions,
-       public.app_settings, public.feature_flags, public.deletion_archive, public.admin_sessions
+       public.app_settings, public.deletion_archive, public.admin_sessions
   from authenticated, anon;
 
 -- New RPCs: authenticated only, never anon.

@@ -5,22 +5,32 @@ Standalone admin panel for PyDebug. Deploy this as its **own** Netlify site
 
 ## 🆕 Platform core: settings, flags, roles, Trash, ⌘K, audit hardening
 
-Run **one** new migration in Supabase → SQL Editor:
+**Status: already applied** to the live PyDebug project
+(`cztosbchfqtyzxkhfrby`, ap-south-1) on 2026-11-06. It was applied in three
+chunks (roles → settings/flags → Trash/sessions/audit) plus a small guard patch,
+because the project already had `app_settings`, `admin_settings`, `admin_users`
+and `server_flags` with older shapes.
+
+For any other environment, run **one** migration in Supabase → SQL Editor:
 
 ```
 db/migrations/20261106_admin_platform_core.sql
 ```
 
-It is idempotent. Until you run it the panel keeps working exactly as before
-(every helper fails open), but the new screens stay empty and tell you which
-migration is missing.
+It is idempotent and backward compatible. Every existing admin keeps access:
+legacy `admin_users` rows and `profiles.is_admin = true` are seeded into the new
+`admin_members` table as `owner`, and `is_admin()` accepts either source. It
+never recreates or renames an existing table — it only extends them
+(`is_public` on `app_settings`, labels/rollout on `server_flags`). Until you run
+it the panel keeps working exactly as before (every helper fails open), but the
+new screens stay empty and tell you which migration is missing.
 
 What it adds:
 
 | Area | What you get | Where |
 |---|---|---|
 | **Runtime settings** | Site name, support email, timezone, announcement bar, plan catalog, free-tier limits, XP/streak economy, AI switches + monthly budget, maintenance mode, login policy | `settings.html` |
-| **Feature flags** | 10 seeded kill-switches (`ai_interview`, `write_code`, `battles`, …) with on/off + 0–100% rollout, no deploy needed | `settings.html#flags` |
+| **Feature flags** | Extends the existing `server_flags` table: 10 product kill-switches (`ai_interview`, `write_code`, `battles`, …) plus every legacy flag, with on/off + 0–100% rollout | `settings.html#flags` |
 | **Team & roles** | Six roles (owner/admin/moderator/support/finance/content), invite existing accounts by email, live permission matrix, remove access | `settings.html#team` |
 | **Admin sessions** | Every tab is a real row in `admin_sessions`; revoke one or "all other sessions"; revoked tabs sign out on next navigation | `settings.html#security` |
 | **Trash (soft delete)** | Problems, submissions, discussions, community posts, notifications and snippets are archived first, then deleted. Restore with one click, purge with typed confirmation | `trash.html` |
