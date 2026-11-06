@@ -11,7 +11,7 @@ const PAY_PAGE_SIZE = 100;
 let payVisibleCount = PAY_PAGE_SIZE;
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("payments.read");
   if (!admin) return;
 
   bindPayTabs();
@@ -442,6 +442,7 @@ function renderEntitlements() {
 }
 
 async function submitEntitlementGrant(e) {
+  if (!ensureCan("payments.write")) return;
   e.preventDefault();
   const raw = document.getElementById("ent-user").value.trim();
   const product = document.getElementById("ent-product").value;

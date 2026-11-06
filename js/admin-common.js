@@ -272,6 +272,11 @@ async function requireAdmin() {
   }
   document.body.classList.remove("admin-panel-locked");
 
+  // Real, revocable panel session (no-op until the platform migration runs).
+  await ensureAdminSession();
+  // Role + permission list: drives nav filtering and data-perm gating.
+  await refreshAdminIdentity();
+
   // The AI bundle is still loaded on every admin page (the master switch
   // controls what it DOES, not whether it is available) — but it is now
   // kicked off in the background instead of being awaited here. Page data
@@ -291,6 +296,275 @@ async function logoutAdmin() {
   try { sessionStorage.removeItem(ADMIN_UNLOCK_SESSION_KEY); } catch (e) {}
   await sb.auth.signOut();
   window.location.href = "index.html";
+}
+
+// =============================================================================
+// Roles, permissions & panel sessions
+// -----------------------------------------------------------------------------
+// The database is the source of truth (db/migrations/20261106_admin_platform_core.sql):
+//   admin_members / admin_role_permissions -> has_perm(perm)
+//   admin_identity() -> { role, perms[] }
+//   admin_sessions   -> per-tab session that an owner can revoke
+//
+// Every helper below fails OPEN when the migration has not been applied yet:
+// the panel keeps behaving exactly like before (any admin can do anything)
+// instead of locking a working install out of its own admin.
+// =============================================================================
+
+const ADMIN_IDENTITY_KEY = "pydebug_admin_identity_v1";
+const ADMIN_SESSION_STORE_KEY = "pydebug_admin_session_v1";
+const ADMIN_IDENTITY_TTL_MS = 120000;
+let adminIdentity = null;
+
+const ADMIN_ROLE_LABELS = {
+  owner: "Owner",
+  admin: "Admin",
+  moderator: "Moderator",
+  support: "Support",
+  finance: "Finance",
+  content: "Content",
+};
+
+function readCachedAdminIdentity() {
+  try {
+    const raw = sessionStorage.getItem(ADMIN_IDENTITY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.at || Date.now() - parsed.at > ADMIN_IDENTITY_TTL_MS) return null;
+    if (!parsed.identity || !Array.isArray(parsed.identity.perms)) return null;
+    return parsed.identity;
+  } catch (e) {
+    return null;
+  }
+}
+
+function cacheAdminIdentity(identity) {
+  try {
+    sessionStorage.setItem(ADMIN_IDENTITY_KEY, JSON.stringify({ at: Date.now(), identity }));
+  } catch (e) {}
+}
+
+function getAdminSessionId() {
+  try { return sessionStorage.getItem(ADMIN_SESSION_STORE_KEY) || null; } catch (e) { return null; }
+}
+
+function getAdminIdentity() {
+  return adminIdentity || readCachedAdminIdentity();
+}
+
+function currentAdminRole() {
+  const identity = getAdminIdentity();
+  return identity && identity.role ? identity.role : null;
+}
+
+// `can()` is optimistic before the identity loads (null => allow) so a slow
+// network never hides a legitimate button. Once the role is known it is exact.
+function can(perm) {
+  const identity = getAdminIdentity();
+  if (!identity) return true;
+  const perms = Array.isArray(identity.perms) ? identity.perms : [];
+  return perms.includes("*") || perms.includes(perm);
+}
+
+async function refreshAdminIdentity(force) {
+  if (!force) {
+    const cached = getAdminIdentity();
+    if (cached) {
+      adminIdentity = cached;
+      applyPermissionGating();
+      return cached;
+    }
+  }
+  if (typeof sb === "undefined" || !sb) return adminIdentity;
+
+  let identity = null;
+  try {
+    const { data, error } = await sb.rpc("admin_identity");
+    if (error) throw error;
+    if (data && typeof data === "object") {
+      identity = {
+        role: data.role || "owner",
+        perms: Array.isArray(data.perms) ? data.perms : ["*"],
+        signedIn: data.signed_in !== false,
+      };
+    }
+  } catch (e) {
+    // Pre-migration install (function does not exist). Full access, as before.
+    identity = { role: "owner", perms: ["*"], fallback: true };
+  }
+
+  if (identity) {
+    adminIdentity = identity;
+    cacheAdminIdentity(identity);
+    applyPermissionGating();
+  }
+  return identity;
+}
+
+// Hide sidebar rows and any element marked data-perm="..." the role cannot use.
+// Hiding (not just disabling) keeps the panel honest: a support agent should
+// not be able to see a role they cannot perform.
+function applyPermissionGating() {
+  const identity = getAdminIdentity();
+  if (!identity) return;
+
+  const role = identity.role || "owner";
+  if (document.documentElement) {
+    document.documentElement.dataset.adminRole = role;
+  }
+
+  const permByHref = {};
+  ADMIN_NAV_ITEMS.forEach((item) => { permByHref[item.href] = item.perm; });
+
+  document.querySelectorAll(".admin-sidebar nav a[href]").forEach((link) => {
+    const href = (link.getAttribute("data-admin-nav") || link.getAttribute("href") || "").split("#")[0];
+    const perm = link.dataset.adminPerm || permByHref[href];
+    if (!perm) return;
+    const allowed = can(perm);
+    link.hidden = !allowed;
+    link.setAttribute("aria-hidden", allowed ? "false" : "true");
+    link.classList.toggle("is-perm-denied", !allowed);
+  });
+
+  document.querySelectorAll("[data-perm]").forEach((el) => {
+    const perms = String(el.dataset.perm || "").split(",").map((p) => p.trim()).filter(Boolean);
+    if (!perms.length) return;
+    const allowed = perms.some((perm) => can(perm));
+    el.hidden = !allowed;
+    el.classList.toggle("is-perm-denied", !allowed);
+  });
+
+  // Role badge in the sidebar footer (next to the admin name).
+  const account = document.querySelector(".admin-sidebar__account");
+  if (account && !account.querySelector(".admin-role-badge")) {
+    const badge = document.createElement("span");
+    badge.className = "admin-role-badge";
+    badge.textContent = ADMIN_ROLE_LABELS[role] || role;
+    badge.title = "Your admin role — ask an owner to change it in Settings → Team";
+    account.insertBefore(badge, account.querySelector("button[data-admin-logout]") || null);
+  } else if (account) {
+    const badge = account.querySelector(".admin-role-badge");
+    if (badge) badge.textContent = ADMIN_ROLE_LABELS[role] || role;
+  }
+}
+
+// Inline guard for buttons rendered after load (table rows, modals). Use it at
+// the top of every destructive handler: hiding a button is not enough when the
+// row itself is injected later.
+function ensureCan(perm, message) {
+  // Accepts "payments.write", or an any-of list like "payments.write,users.write".
+  const perms = String(perm || "").split(",").map((p) => p.trim()).filter(Boolean);
+  if (!perms.length || perms.some((p) => can(p))) return true;
+  const role = ADMIN_ROLE_LABELS[currentAdminRole()] || "your role";
+  if (typeof showToast === "function") {
+    showToast(message || `${role} cannot perform this action (${perms.join(" / ")}).`, "error");
+  }
+  return false;
+}
+
+// Page-level guard for a specific permission. Mirrors requireAdmin(): a UX
+// gate backed by RPC/RLS checks on the database side.
+async function requirePerm(perm) {
+  const admin = await requireAdmin();
+  if (!admin) return null;
+  await refreshAdminIdentity();
+  if (!can(perm)) {
+    showToast(`Your role (${ADMIN_ROLE_LABELS[currentAdminRole()] || "limited"}) cannot open this page.`, "error");
+    setTimeout(() => { window.location.href = "dashboard.html"; }, 900);
+    return null;
+  }
+  return admin;
+}
+
+// Registers this tab as a real admin session and enforces revocations. If an
+// owner revokes a session from Settings, the affected tab is signed out on its
+// next navigation instead of silently keeping a valid token.
+async function ensureAdminSession() {
+  if (typeof sb === "undefined" || !sb) return null;
+  try {
+    let id = getAdminSessionId();
+
+    if (id) {
+      const { data, error } = await sb.rpc("admin_session_state", { p_id: id });
+      if (error) return id; // pre-migration
+      if (data === "revoked") {
+        try { sessionStorage.clear(); } catch (e) {}
+        await sb.auth.signOut();
+        window.location.href = "index.html?revoked=1";
+        return null;
+      }
+      if (data === "missing") {
+        id = null;
+      } else {
+        sb.rpc("admin_touch_session", { p_id: id }).catch(() => {});
+        return id;
+      }
+    }
+
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : null;
+    const { data, error } = await sb.rpc("admin_start_session", { p_user_agent: ua });
+    if (error) return null;
+    if (data) {
+      try { sessionStorage.setItem(ADMIN_SESSION_STORE_KEY, data); } catch (e) {}
+      id = data;
+    }
+    return id;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =============================================================================
+// Soft delete — every destructive button goes through Trash first.
+// Returns { ok: true, archiveId } or { ok: false, error } so callers can fall
+// back to the legacy hard delete on installs without the archive table.
+// =============================================================================
+// True when the database has not been upgraded with the Trash RPC yet.
+// Callers only then fall back to a hard delete, so a genuine permission error
+// can never silently bypass the safety net.
+function isMissingRpc(error) {
+  if (!error) return false;
+  const msg = String(error.message || error.details || "").toLowerCase();
+  return error.code === "PGRST202" ||
+    msg.includes("could not find the function") ||
+    msg.includes("schema cache") ||
+    (msg.includes("function") && msg.includes("does not exist"));
+}
+
+async function softDeleteRow(table, id, reason, label) {
+  if (typeof sb === "undefined" || !sb) return { ok: false, error: new Error("Supabase unavailable") };
+  try {
+    const { data, error } = await sb.rpc("admin_soft_delete", {
+      p_table: table,
+      p_row_id: String(id),
+      p_reason: reason || null,
+    });
+    if (!error) {
+      showToast(`${label || "Row"} moved to Trash — restore it any time from Trash.`, "success");
+      return { ok: true, archiveId: data };
+    }
+    return { ok: false, error };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+// Adds the ⌘K affordance to every page's top bar. The palette itself lives in
+// js/admin-command.js (loaded on every page after admin-common.js).
+function injectCommandPaletteButton() {
+  const actions = document.querySelector(".admin-topbar__actions");
+  if (!actions || actions.querySelector(".admin-cmdk-btn")) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn--secondary btn--sm admin-cmdk-btn";
+  btn.setAttribute("aria-label", "Open command palette (Ctrl or Command + K)");
+  btn.innerHTML = '<span class="admin-cmdk-btn__label">Search</span><kbd>⌘K</kbd>';
+  btn.addEventListener("click", () => {
+    if (window.AdminCommand && typeof window.AdminCommand.open === "function") {
+      window.AdminCommand.open();
+    }
+  });
+  actions.prepend(btn);
 }
 
 function debounce(fn, delay) {
@@ -816,16 +1090,35 @@ async function writeAdminAudit(action, entityType, entityId, metadata = {}) {
     if (typeof sb === "undefined" || !sb || !sb.auth) return;
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
-    await sb.from("admin_audit_log").insert({
+
+    const base = {
       admin_id: user.id,
       action,
       entity_type: entityType,
       entity_id: String(entityId || ""),
       target_id: String(entityId || ""),
       metadata: metadata || {},
+    };
+
+    // Session + user-agent make an audit row actionable ("which browser/tab did
+    // this?"). Older installs may not have these columns yet, so fall back to
+    // the original payload instead of losing the audit entry.
+    const enriched = Object.assign({}, base, {
+      user_agent: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 400) : null,
+      session_id: getAdminSessionId() || null,
     });
+
+    let { error } = await sb.from("admin_audit_log").insert(enriched);
+    if (error) {
+      ({ error } = await sb.from("admin_audit_log").insert(base));
+    }
+    if (error) throw error;
   } catch (e) {
-    console.warn("[admin] audit log:", e.message);
+    // Never silent: a lost audit row is a compliance problem, so surface it.
+    console.error("[admin] audit log failed:", e.message);
+    if (typeof showToast === "function") {
+      showToast("Action saved, but the audit log entry failed — check the console.", "error");
+    }
   }
 }
 
@@ -862,20 +1155,22 @@ function markAdminActiveNav() {
 // looked ragged and misaligned. The SVG set from admin-icons.js gives every
 // row the same stroke weight, size and alignment.
 const ADMIN_NAV_ITEMS = [
-  { href: "dashboard.html", label: "Dashboard", icon: "dashboard" },
-  { href: "insights.html", label: "Growth insights", icon: "chart" },
-  { href: "certificates.html", label: "Certificates", icon: "certificate" },
-  { href: "arenas.html", label: "Mocks & Battles", icon: "target" },
-  { href: "community.html", label: "Community & Hub", icon: "message" },
-  { href: "submissions.html", label: "Submissions", icon: "code" },
-  { href: "payments.html", label: "Payments", icon: "card" },
-  { href: "coupons.html", label: "Coupons & Creators", icon: "ticket" },
-  { href: "discussions.html", label: "Discussions", icon: "chat" },
-  { href: "notifications.html", label: "Notifications", icon: "bell" },
-  { href: "ai.html", label: "AI Control", icon: "bot" },
-  { href: "audit.html", label: "Audit log", icon: "shield" },
-  { href: "problem-form.html", label: "Add Problem", icon: "plus" },
-  { href: "users.html", label: "Users", icon: "users" },
+  { href: "dashboard.html", label: "Dashboard", icon: "dashboard", perm: "dashboard.read" },
+  { href: "insights.html", label: "Growth insights", icon: "chart", perm: "dashboard.read" },
+  { href: "certificates.html", label: "Certificates", icon: "certificate", perm: "certificates.read" },
+  { href: "arenas.html", label: "Mocks & Battles", icon: "target", perm: "dashboard.read" },
+  { href: "community.html", label: "Community & Hub", icon: "message", perm: "community.read" },
+  { href: "submissions.html", label: "Submissions", icon: "code", perm: "submissions.read" },
+  { href: "payments.html", label: "Payments", icon: "card", perm: "payments.read" },
+  { href: "coupons.html", label: "Coupons & Creators", icon: "ticket", perm: "coupons.read" },
+  { href: "discussions.html", label: "Discussions", icon: "chat", perm: "community.read" },
+  { href: "notifications.html", label: "Notifications", icon: "bell", perm: "notifications.read" },
+  { href: "ai.html", label: "AI Control", icon: "bot", perm: "ai.read" },
+  { href: "audit.html", label: "Audit log", icon: "shield", perm: "audit.read" },
+  { href: "problem-form.html", label: "Add Problem", icon: "plus", perm: "problems.write" },
+  { href: "users.html", label: "Users", icon: "users", perm: "users.read" },
+  { href: "trash.html", label: "Trash", icon: "trash", perm: "trash.read" },
+  { href: "settings.html", label: "Settings", icon: "settings", perm: "settings.read" },
 ];
 
 // One <a> body for every nav row: icon + single-line label. The label is
@@ -912,6 +1207,7 @@ function ensureAdminNavigation() {
     }
     link.dataset.adminNav = item.href;
     link.dataset.navIcon = item.icon;
+    link.dataset.adminPerm = item.perm || "";
     // Re-render every row (even ones already in the page markup) so older
     // pages, hand-written pages and this canonical list all look identical.
     link.innerHTML = adminNavLinkContent(item);
@@ -1000,6 +1296,7 @@ function bootAdminChrome() {
   ensureAdminNavigation();
   ensureFounderQuickTools();
   injectAdminMobileNavigation();
+  injectCommandPaletteButton();
   markAdminActiveNav();
   document.querySelectorAll("[data-admin-logout]").forEach((btn) =>
     btn.addEventListener("click", (e) => {

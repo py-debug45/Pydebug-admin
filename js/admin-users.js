@@ -6,7 +6,7 @@ let usersPage = 0;
 let usersTotal = 0;
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("users.read");
   if (!admin) return;
 
   await Promise.all([loadUsers(0), loadCampusRollup()]);

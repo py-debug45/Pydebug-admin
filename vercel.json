@@ -5,22 +5,84 @@
   "outputDirectory": "_site",
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/.env:rest*", "destination": "/__blocked__" },
-    { "source": "/:path*.env:rest*", "destination": "/__blocked__" },
-    { "source": "/:path*.sql", "destination": "/__blocked__" },
-    { "source": "/:path*.md", "destination": "/__blocked__" },
-    { "source": "/db/:path*", "destination": "/__blocked__" },
-    { "source": "/tests/:path*", "destination": "/__blocked__" }
+    {
+      "source": "/.env:rest*",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/:path*.env:rest*",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/:path*.sql",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/:path*.md",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/db/:path*",
+      "destination": "/__blocked__"
+    },
+    {
+      "source": "/tests/:path*",
+      "destination": "/__blocked__"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'self' blob:"
+        }
+      ]
+    },
+    {
+      "source": "/*.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "Pragma",
+          "value": "no-cache"
+        }
       ]
     }
   ]

@@ -9,7 +9,7 @@ let allPlans = [];
 let arenaUsers = {};
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("dashboard.read");
   if (!admin) return;
 
   bindArenaTabs();

@@ -12,7 +12,7 @@ const DISC_PAGE_SIZE = 100;
 let discVisibleCount = DISC_PAGE_SIZE;
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("community.read");
   if (!admin) return;
 
   await loadComments();
@@ -191,17 +191,28 @@ function closeCommentModal() {
 }
 
 async function deleteComment(id, btn) {
-  if (!confirm("Delete this comment? Its likes will be removed too.")) return;
+  if (!ensureCan("community.write")) return;
+  if (!confirm("Move this comment to Trash?\n\nThe comment text is archived and can be restored from Trash.")) return;
   btn.disabled = true;
-  // Likes first (in case there's no ON DELETE CASCADE), then the comment.
-  await sb.from("discussion_likes").delete().eq("comment_id", id);
-  const { error } = await sb.from("problem_discussions").delete().eq("id", id);
+
+  const soft = await softDeleteRow("problem_discussions", id, "deleted from discussions", "Comment");
+  let error = soft.ok ? null : soft.error;
+
+  if (!soft.ok && isMissingRpc(soft.error)) {
+    // Pre-migration: likes first (in case there's no ON DELETE CASCADE).
+    await sb.from("discussion_likes").delete().eq("comment_id", id);
+    ({ error } = await sb.from("problem_discussions").delete().eq("id", id));
+    if (!error) await writeAdminAudit("comment_deleted", "problem_discussions", id, { permanent: true });
+  } else if (soft.ok) {
+    // Keep the row restorable without dangling reactions.
+    await sb.from("discussion_likes").delete().eq("comment_id", id);
+  }
+
   if (error) {
     showToast("Could not delete: " + error.message + " (run supabase-admin-setup.sql?)", "error");
     btn.disabled = false;
     return;
   }
-  showToast("Comment deleted", "success");
   allComments = allComments.filter((c) => String(c.id) !== String(id));
   renderDiscussionStats();
   applyDiscussionFilters();

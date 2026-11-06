@@ -30,11 +30,17 @@
         <h1>Audit log</h1>
       </div>
       <div class="admin-topbar__actions">
+        <button id="audit-export-btn" class="btn btn--secondary btn--sm">Export CSV</button>
         <button id="refresh-audit" class="btn btn--secondary btn--sm">↻ Refresh</button>
       </div>
     </div>
-    <p class="page-intro">Every sensitive admin action across profiles, certificates, entitlements, community moderation, problems, and broadcasts.</p>
+    <p class="page-intro">
+      Every sensitive admin action, append-only. Rows carry the acting admin, their device and
+      session where available; this table can be filtered by date for incident reviews.
+    </p>
     <div class="admin-toolbar">
+      <input type="date" id="audit-from" aria-label="From date">
+      <input type="date" id="audit-to" aria-label="To date">
       <input type="text" id="audit-search" placeholder="Search action, target ID, resource, or JSON details...">
       <select id="audit-action">
         <option value="all">All actions</option>
@@ -65,17 +71,20 @@
         <thead>
           <tr>
             <th>When</th>
+            <th>Admin</th>
             <th>Action</th>
             <th>Resource</th>
             <th>Target</th>
+            <th>Device</th>
             <th>Details</th>
           </tr>
         </thead>
         <tbody id="audit-body">
-          <tr><td colspan="5" class="empty-row">Loading…</td></tr>
+          <tr><td colspan="7" class="empty-row">Loading…</td></tr>
         </tbody>
       </table>
     </div>
+    <div id="audit-pagination" class="pagination" style="margin-top:14px"></div>
   </main>
 </div>
 <script src="js/vendor/supabase.min.js" defer></script>
@@ -84,6 +93,8 @@
 <script src="js/utils.js" defer></script>
 <script src="js/admin-icons.js" defer></script>
 <script src="js/admin-common.js" defer></script>
+<script src="js/admin-command.js" defer></script>
+<script src="js/admin-export.js" defer></script>
 <script src="js/admin-audit.js" defer></script>
 </body>
 </html>

@@ -12,7 +12,7 @@ let commUsers = {};
 let flagComments = {};
 
 onAdminReady(async () => {
-  currentCommAdmin = await requireAdmin();
+  currentCommAdmin = await requirePerm("community.read");
   if (!currentCommAdmin) return;
 
   suggestJoinCode();
@@ -226,6 +226,7 @@ function openPostModal(id) {
 }
 
 async function deleteCommunityPost(id, btn) {
+  if (!ensureCan("community.write")) return;
   if (!confirm("Delete this community post (and any replies to it) for everyone?")) return;
   btn.disabled = true;
   const { error } = await sb.rpc("admin_delete_community_post", {

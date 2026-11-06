@@ -6,7 +6,7 @@ let certUserMap = {};
 let certsPage = 0;
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("certificates.read");
   if (!admin) return;
 
   await loadCertificates();
@@ -231,6 +231,7 @@ function closeCertModal() {
 }
 
 async function revokeCertificate(verifyId, btn) {
+  if (!ensureCan("certificates.write")) return;
   const reason = prompt(
     `IRREVERSIBLE ACTION:\nRevoking certificate "${verifyId}" permanently marks it as REVOKED on public verification.\n\nOptional reason for audit log:`,
     "Policy / integrity violation"

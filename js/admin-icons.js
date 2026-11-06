@@ -61,6 +61,12 @@
     // emoji with text symbols (they rendered at different sizes and weights).
     certificate: '<circle cx="12" cy="9" r="5.5"/><path d="m8.6 13.4-.9 7.1 4.3-1.9 4.3 1.9-.9-7.1"/>',
     chat: '<path d="M8 9h8M8 13h5"/><path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7.9 7.9 0 0 0-1.7-1L15 4H9l-.3 2.5a7.9 7.9 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.9 7.9 0 0 0 1.7 1L9 20h6l.3-2.5a7.9 7.9 0 0 0 1.7-1l2.4 1 2-3.5z"/>',
+    command: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    note: '<path d="M4 4h11l5 5v11H4z"/><path d="M15 4v5h5M8 13h8M8 17h5"/>',
+    filter: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+    external: '<path d="M14 3h7v7M21 3l-9 9M10 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/>',
   };
 
   const aliases = {

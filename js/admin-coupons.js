@@ -494,7 +494,7 @@ function setRowCommission(code, mode, pct) {
 }
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("coupons.read");
   if (!admin) return;
   initCouponManager();
 });

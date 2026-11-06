@@ -12,7 +12,7 @@ const PAGE_SIZE = 100;
 let visibleCount = PAGE_SIZE;
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("submissions.read");
   if (!admin) return;
 
   await loadSubmissions();
@@ -178,15 +178,22 @@ function closeSubmissionModal() {
 }
 
 async function deleteSubmission(id, btn) {
-  if (!confirm("Delete this submission? The user will lose this progress row (their XP stays).")) return;
+  if (!ensureCan("submissions.write")) return;
+  if (!confirm("Move this submission to Trash?\n\nYou can restore it from Trash; the learner's XP is never touched.")) return;
   btn.disabled = true;
-  const { error } = await sb.from("submissions").delete().eq("id", id);
+
+  const soft = await softDeleteRow("submissions", id, "deleted from submissions", "Submission");
+  let error = soft.ok ? null : soft.error;
+  if (!soft.ok && isMissingRpc(soft.error)) {
+    ({ error } = await sb.from("submissions").delete().eq("id", id));
+    if (!error) await writeAdminAudit("submission_deleted", "submissions", id, { permanent: true });
+  }
+
   if (error) {
     showToast("Could not delete: " + error.message + " (run supabase-admin-setup.sql?)", "error");
     btn.disabled = false;
     return;
   }
-  showToast("Submission deleted", "success");
   allSubmissions = allSubmissions.filter((s) => String(s.id) !== String(id));
   renderSubmissionStats();
   applySubmissionFilters();
