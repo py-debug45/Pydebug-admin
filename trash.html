@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d111a">
+<meta name="robots" content="noindex, nofollow">
+<title>Trash — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav></nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <div class="admin-eyebrow">SAFETY NET · RESTORE ANYTHING</div>
+        <h1>Trash <span class="pill-count" id="trash-count"></span></h1>
+      </div>
+      <div class="admin-topbar__actions">
+        <button class="btn btn--secondary btn--sm" id="trash-refresh-btn">↻ Refresh</button>
+        <button class="btn btn--secondary btn--sm" id="trash-export-btn">Export CSV</button>
+      </div>
+    </div>
+
+    <div class="trash-note">
+      <strong>Nothing is gone forever.</strong>
+      <span>Panel se delete ki gayi problems, submissions, discussions, community posts aur notifications pehle yahan aate hain.
+      Restore karte hi original row wapas ban jaati hai; purged rows permanently gone hote hain aur audit log me record rehte hain.</span>
+    </div>
+
+    <div class="trash-toolbar">
+      <input type="text" id="trash-search" placeholder="Search row id, reason or title in the archived payload…" autocomplete="off">
+      <select id="trash-table-filter">
+        <option value="all">All tables</option>
+        <option value="problems">Problems</option>
+        <option value="submissions">Submissions</option>
+        <option value="problem_discussions">Discussions</option>
+        <option value="community_posts">Community posts</option>
+        <option value="notifications">Notifications</option>
+        <option value="shared_snippets">Shared snippets</option>
+      </select>
+      <select id="trash-state-filter">
+        <option value="archived">In Trash</option>
+        <option value="restored">Restored</option>
+        <option value="purged">Purged</option>
+        <option value="all">Everything</option>
+      </select>
+      <button class="btn btn--secondary btn--sm" id="trash-clear-btn">Clear filters</button>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Deleted</th>
+            <th>Table</th>
+            <th>Row</th>
+            <th>Preview</th>
+            <th>Reason</th>
+            <th>State</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="trash-tbody">
+          <tr><td colspan="7" class="empty-row">Loading Trash…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="trash-pagination" class="pagination" style="margin-top:14px"></div>
+  </main>
+</div>
+
+<script src="js/vendor/supabase.min.js" defer></script>
+<script src="js/admin-boot.js" defer></script>
+<script src="js/supabaseClient.js" defer></script>
+<script src="js/utils.js" defer></script>
+<script src="js/admin-icons.js" defer></script>
+<script src="js/admin-common.js" defer></script>
+<script src="js/admin-command.js" defer></script>
+<script src="js/admin-export.js" defer></script>
+<script src="js/admin-trash.js" defer></script>
+</body>
+</html>

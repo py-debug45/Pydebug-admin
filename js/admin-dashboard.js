@@ -74,7 +74,7 @@ function updateSyncStamp() {
 }
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("dashboard.read");
   if (!admin) return;
 
   const name = admin.display_name || admin.full_name || admin.email || "admin";
@@ -603,19 +603,26 @@ async function exportProblems() {
 }
 
 async function deleteProblem(id, btn) {
-  if (!confirm("Delete this problem? This can't be undone.")) return;
+  if (!ensureCan("problems.delete")) return;
+  if (!confirm("Move this problem to Trash?\n\nYou can restore it from Trash any time — nothing is lost.")) return;
   btn.disabled = true;
   btn.textContent = "Deleting...";
 
-  const { error } = await sb.from("problems").delete().eq("id", id);
+  const soft = await softDeleteRow("problems", id, "deleted from dashboard", "Problem");
+  let error = soft.ok ? null : soft.error;
+
+  // Pre-migration install: keep the old behaviour instead of blocking the admin.
+  if (!soft.ok && isMissingRpc(soft.error)) {
+    ({ error } = await sb.from("problems").delete().eq("id", id));
+    if (!error) await writeAudit("problem_deleted", "problem", id, { permanent: true });
+  }
+
   if (error) {
     showToast("Could not delete: " + error.message, "error");
     btn.disabled = false;
     btn.textContent = "Delete";
     return;
   }
-  await writeAudit("problem_deleted", "problem", id, {});
-  showToast("Problem deleted", "success");
   await loadStats();
   await loadProblems(problemsPage);
 }

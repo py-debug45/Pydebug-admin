@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d111a">
+<meta name="robots" content="noindex, nofollow">
+<title>Settings &amp; Team — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-sidebar__logo">&gt;_ PyDebug</div>
+    <div class="admin-sidebar__tag">ADMIN PANEL</div>
+    <nav></nav>
+    <div class="admin-sidebar__account">
+      <span id="admin-name">...</span>
+      <button data-admin-logout aria-label="Log out" title="Log out">⇥</button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <div class="admin-eyebrow">PLATFORM · RUNTIME CONTROL</div>
+        <h1>Settings</h1>
+      </div>
+      <div class="admin-topbar__actions">
+        <span class="settings-status" id="settings-status"></span>
+        <button class="btn btn--secondary btn--sm" id="settings-reload-btn">↻ Reload</button>
+      </div>
+    </div>
+
+    <p class="page-intro">
+      Product configuration, feature kill-switches, team roles and admin sessions — sab kuch
+      code deploy ke bina. Har change <code>admin_audit_log</code> me record hota hai.
+    </p>
+
+    <div class="settings-layout">
+      <nav class="settings-nav" role="tablist" aria-label="Settings sections">
+        <div class="settings-nav__group">Workspace</div>
+        <button type="button" role="tab" data-settings-tab="general" class="is-active" aria-selected="true" aria-controls="settings-general">General</button>
+        <button type="button" role="tab" data-settings-tab="plans" aria-selected="false" aria-controls="settings-plans">Plans &amp; limits</button>
+        <button type="button" role="tab" data-settings-tab="gamification" aria-selected="false" aria-controls="settings-gamification">Gamification</button>
+        <button type="button" role="tab" data-settings-tab="ai" aria-selected="false" aria-controls="settings-ai">AI control</button>
+        <div class="settings-nav__group">Release</div>
+        <button type="button" role="tab" data-settings-tab="flags" aria-selected="false" aria-controls="settings-flags">Feature flags</button>
+        <button type="button" role="tab" data-settings-tab="maintenance" aria-selected="false" aria-controls="settings-maintenance">Maintenance</button>
+        <div class="settings-nav__group">People &amp; security</div>
+        <button type="button" role="tab" data-settings-tab="team" aria-selected="false" aria-controls="settings-team">Team &amp; roles</button>
+        <button type="button" role="tab" data-settings-tab="security" aria-selected="false" aria-controls="settings-security">Sessions &amp; security</button>
+        <div class="settings-nav__group">Advanced</div>
+        <button type="button" role="tab" data-settings-tab="danger" aria-selected="false" aria-controls="settings-danger">Danger zone</button>
+      </nav>
+
+      <div class="settings-panels">
+
+        <!-- GENERAL ------------------------------------------------------- -->
+        <section class="settings-panel is-active" id="settings-general" role="tabpanel" aria-labelledby="settings-general">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Workspace</h3>
+                <p>Naam, support email aur region — receipts, emails aur reports yahin se pick karte hain.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field">
+                <label for="set-site-name">Site name</label>
+                <input type="text" id="set-site-name" data-setting="general.site_name" data-type="text" placeholder="PyDebug">
+              </div>
+              <div class="setting-field">
+                <label for="set-support-email">Support email</label>
+                <input type="email" id="set-support-email" data-setting="general.support_email" data-type="text" placeholder="support@pydebug.in">
+              </div>
+              <div class="setting-field">
+                <label for="set-timezone">Timezone</label>
+                <select id="set-timezone" data-setting="general.timezone" data-type="text">
+                  <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                  <option value="UTC">UTC</option>
+                  <option value="Asia/Dubai">Asia/Dubai</option>
+                  <option value="America/New_York">America/New_York</option>
+                </select>
+              </div>
+              <div class="setting-field">
+                <label for="set-currency">Currency</label>
+                <select id="set-currency" data-setting="general.currency" data-type="text">
+                  <option value="INR">INR (₹)</option>
+                  <option value="USD">USD ($)</option>
+                </select>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Changes apply to new emails, invoices and reports.</span>
+              <button type="button" class="btn btn--primary btn--sm" data-save-panel="general" data-perm="settings.write">Save workspace</button>
+            </div>
+          </div>
+
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Announcement bar</h3>
+                <p>Ek site-wide banner — sale, maintenance heads-up ya naya feature launch ke liye.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field setting-field--wide">
+                <span class="switch">
+                  <input type="checkbox" id="set-ann-enabled" data-setting="announcement.enabled" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-ann-enabled">Show the announcement bar</label>
+                </span>
+              </div>
+              <div class="setting-field setting-field--wide">
+                <label for="set-ann-text">Message</label>
+                <input type="text" id="set-ann-text" data-setting="announcement.text" data-type="text" placeholder="Founding offer ends tonight — 40% off yearly Pro">
+              </div>
+              <div class="setting-field">
+                <label for="set-ann-link">Link (optional)</label>
+                <input type="url" id="set-ann-link" data-setting="announcement.link" data-type="text" placeholder="https://pydebug.in/pricing">
+              </div>
+              <div class="setting-field">
+                <label for="set-ann-level">Tone</label>
+                <select id="set-ann-level" data-setting="announcement.level" data-type="text">
+                  <option value="info">Info (mint)</option>
+                  <option value="success">Success (green)</option>
+                  <option value="warning">Warning (amber)</option>
+                  <option value="danger">Urgent (red)</option>
+                </select>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Empty message = bar hidden even when enabled.</span>
+              <button type="button" class="btn btn--primary btn--sm" data-save-panel="general" data-perm="settings.write">Save announcement</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANS --------------------------------------------------------- -->
+        <section class="settings-panel" id="settings-plans" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Premium catalog</h3>
+                <p>Panel aur checkout dono isi catalog se price padhte hain. Amount rupees me likho.</p>
+              </div>
+              <button type="button" class="btn btn--secondary btn--sm" id="plan-add-row" data-perm="settings.write">+ Add plan</button>
+            </div>
+            <div id="plans-rows" class="flag-list"></div>
+            <div class="settings-actions">
+              <span class="settings-actions__note" id="plans-note">Coupon, GST aur sachet pricing isi base price se calculate hoti hai.</span>
+              <button type="button" class="btn btn--primary btn--sm" id="plans-save-btn" data-perm="settings.write">Save catalog</button>
+            </div>
+          </div>
+
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Free tier limits</h3>
+                <p>Daily caps jo learner app enforce karta hai. Abuse spike par turant kam karo.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field">
+                <label for="set-limit-sub">Free submissions / day</label>
+                <input type="number" min="1" max="500" id="set-limit-sub" data-setting="limits.free_daily_submissions" data-type="number">
+              </div>
+              <div class="setting-field">
+                <label for="set-limit-hints">Free hint unlocks / day</label>
+                <input type="number" min="0" max="100" id="set-limit-hints" data-setting="limits.free_hint_unlocks" data-type="number">
+              </div>
+              <div class="setting-field">
+                <label for="set-limit-mocks">Free mock tests / month</label>
+                <input type="number" min="0" max="50" id="set-limit-mocks" data-setting="limits.free_mock_tests" data-type="number">
+              </div>
+              <div class="setting-field">
+                <label for="set-limit-play">Playground runs / day</label>
+                <input type="number" min="0" max="1000" id="set-limit-play" data-setting="limits.max_playground_runs_per_day" data-type="number">
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">0 = feature band (premium only).</span>
+              <button type="button" class="btn btn--primary btn--sm" data-save-panel="plans" data-perm="settings.write">Save limits</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- GAMIFICATION -------------------------------------------------- -->
+        <section class="settings-panel" id="settings-gamification" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>XP &amp; streaks</h3>
+                <p>Economy numbers. Badalne se pehle ek baar leaderboard impact soch lo.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field">
+                <label for="set-xp">XP per accepted solve</label>
+                <input type="number" min="0" max="500" id="set-xp" data-setting="gamification.xp_per_solve" data-type="number">
+              </div>
+              <div class="setting-field">
+                <label for="set-streak-bonus">Daily streak bonus XP</label>
+                <input type="number" min="0" max="500" id="set-streak-bonus" data-setting="gamification.streak_bonus" data-type="number">
+              </div>
+              <div class="setting-field">
+                <label for="set-freeze-cost">Streak freeze cost (XP)</label>
+                <input type="number" min="0" max="5000" id="set-freeze-cost" data-setting="gamification.freeze_cost" data-type="number">
+              </div>
+              <div class="setting-field">
+                <span class="switch">
+                  <input type="checkbox" id="set-monthly-reset" data-setting="gamification.monthly_leaderboard_reset" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-monthly-reset">Reset monthly leaderboard on the 1st</label>
+                </span>
+                <small>Monthly XP tab isi switch se reset hota hai.</small>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Existing XP ledger rewrite nahi hota — sirf future awards badalte hain.</span>
+              <button type="button" class="btn btn--primary btn--sm" data-save-panel="gamification" data-perm="settings.write">Save economy</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- AI ------------------------------------------------------------ -->
+        <section class="settings-panel" id="settings-ai" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>AI master switch</h3>
+                <p>Cost ya quality issue ho to ek toggle se saare AI features band karo.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field">
+                <span class="switch">
+                  <input type="checkbox" id="set-ai-master" data-setting="ai.master_enabled" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-ai-master">AI enabled for learners</label>
+                </span>
+                <small>Off = hints, review aur interview requests gracefully disabled.</small>
+              </div>
+              <div class="setting-field">
+                <label for="set-ai-budget">Monthly budget (₹)</label>
+                <input type="number" min="0" step="100" id="set-ai-budget" data-setting="ai.monthly_budget_paise" data-type="rupees" placeholder="5000">
+                <small>Panel ₹5,000 default rakhta hai. Exceed hone par alert lagao.</small>
+              </div>
+              <div class="setting-field setting-field--wide">
+                <label>Feature switches</label>
+                <div class="flag-list" id="ai-feature-switches">
+                  <label class="switch"><input type="checkbox" data-ai-feature="interview"><span class="switch__track" aria-hidden="true"></span>Interview Studio</label>
+                  <label class="switch"><input type="checkbox" data-ai-feature="hints"><span class="switch__track" aria-hidden="true"></span>Hints</label>
+                  <label class="switch"><input type="checkbox" data-ai-feature="review"><span class="switch__track" aria-hidden="true"></span>Code review coach</label>
+                  <label class="switch"><input type="checkbox" data-ai-feature="safety"><span class="switch__track" aria-hidden="true"></span>Safety &amp; moderation</label>
+                  <label class="switch"><input type="checkbox" data-ai-feature="growth"><span class="switch__track" aria-hidden="true"></span>Growth nudges</label>
+                </div>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Ye panel-side switch hai; AI Control page detailed controls deta hai.</span>
+              <button type="button" class="btn btn--primary btn--sm" id="ai-save-btn" data-perm="settings.write">Save AI settings</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- FEATURE FLAGS -------------------------------------------------- -->
+        <section class="settings-panel" id="settings-flags" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Feature flags &amp; kill switches</h3>
+                <p>Deploy ke bina kisi bhi feature ko band karo, ya partial rollout karo.</p>
+              </div>
+              <button type="button" class="btn btn--secondary btn--sm" id="flags-refresh-btn">↻ Refresh</button>
+            </div>
+            <div class="flag-list" id="flags-root">
+              <div class="empty-row">Loading feature flags…</div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Rollout % sirf naye sessions par lagta hai. 0% + off = fully dark.</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- MAINTENANCE --------------------------------------------------- -->
+        <section class="settings-panel" id="settings-maintenance" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Maintenance mode</h3>
+                <p>Learner app ko "upgrade in progress" dikhao — admins andar reh sakte hain.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field setting-field--wide">
+                <span class="switch">
+                  <input type="checkbox" id="set-maint-enabled" data-setting="maintenance.enabled" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-maint-enabled">Put the learner app in maintenance</label>
+                </span>
+              </div>
+              <div class="setting-field setting-field--wide">
+                <label for="set-maint-message">Message</label>
+                <textarea id="set-maint-message" data-setting="maintenance.message" data-type="text"></textarea>
+              </div>
+              <div class="setting-field">
+                <span class="switch">
+                  <input type="checkbox" id="set-maint-admins" data-setting="maintenance.allow_admins" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-maint-admins">Keep admin panel accessible</label>
+                </span>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Public values <code>public_settings()</code> RPC se read hote hain.</span>
+              <button type="button" class="btn btn--primary btn--sm" data-save-panel="maintenance" data-perm="settings.write">Save maintenance</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- TEAM ---------------------------------------------------------- -->
+        <section class="settings-panel" id="settings-team" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Team members</h3>
+                <p>Sirf owner/admin naye members add kar sakte hain. Har role ka scope neeche matrix me hai.</p>
+              </div>
+              <button type="button" class="btn btn--secondary btn--sm" id="team-refresh-btn">↻ Refresh</button>
+            </div>
+
+            <form class="team-add" id="team-add-form" data-perm="team.write">
+              <div class="setting-field">
+                <label for="team-email">Existing PyDebug account email</label>
+                <input type="email" id="team-email" placeholder="teammate@pydebug.in" required autocomplete="off">
+              </div>
+              <div class="setting-field">
+                <label for="team-role">Role</label>
+                <select id="team-role">
+                  <option value="support">Support</option>
+                  <option value="moderator">Moderator</option>
+                  <option value="finance">Finance</option>
+                  <option value="content">Content</option>
+                  <option value="admin">Admin</option>
+                  <option value="owner">Owner</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn--primary btn--sm">Add member</button>
+            </form>
+
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Role</th>
+                    <th>Added</th>
+                    <th>Last seen</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="team-tbody">
+                  <tr><td colspan="5" class="empty-row">Loading team…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Permission matrix</h3>
+                <p>Ye panel-side scope hai. Owner sab kuch, Support sirf padh sakta hai.</p>
+              </div>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="perm-matrix">
+                <thead>
+                  <tr>
+                    <th>Permission</th>
+                    <th>Owner</th><th>Admin</th><th>Moderator</th><th>Support</th><th>Finance</th><th>Content</th>
+                  </tr>
+                </thead>
+                <tbody id="perm-matrix-body">
+                  <tr><td colspan="7" class="empty-row">Loading matrix…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECURITY ------------------------------------------------------ -->
+        <section class="settings-panel" id="settings-security" role="tabpanel">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Login policy</h3>
+                <p>Second factor aur session rules. TOTP setup SQL already applied hona chahiye.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-field">
+                <label for="set-idle">Session idle timeout (minutes)</label>
+                <input type="number" min="5" max="1440" id="set-idle" data-setting="security.session_idle_minutes" data-type="number">
+              </div>
+              <div class="setting-field">
+                <span class="switch">
+                  <input type="checkbox" id="set-totp" data-setting="security.enforce_totp" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-totp">Require Google Authenticator code</label>
+                </span>
+                <small>Off karne se panel sirf password par khulega — recommended nahi.</small>
+              </div>
+              <div class="setting-field">
+                <span class="switch">
+                  <input type="checkbox" id="set-alerts" data-setting="security.login_alerts" data-type="bool">
+                  <span class="switch__track" aria-hidden="true"></span>
+                  <label for="set-alerts">Email me on new admin logins</label>
+                </span>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <span class="settings-actions__note">Idle timeout agle page load par lagta hai.</span>
+              <button type="button" class="btn btn--primary btn--sm" data-save-panel="security" data-perm="settings.write">Save login policy</button>
+            </div>
+          </div>
+
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Admin sessions</h3>
+                <p>Har tab ek session hai. Revoke karte hi wo tab agle navigation par sign out ho jayega.</p>
+              </div>
+              <button type="button" class="btn btn--danger btn--sm" id="revoke-others-btn">Revoke all other sessions</button>
+            </div>
+            <div class="session-list" id="sessions-root">
+              <div class="empty-row">Loading sessions…</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DANGER -------------------------------------------------------- -->
+        <section class="settings-panel" id="settings-danger" role="tabpanel" data-perm="settings.write">
+          <div class="section-card settings-card">
+            <div class="section-card__head">
+              <div>
+                <h3>Danger zone</h3>
+                <p>Owner-only actions. Har ek audit log me record hota hai.</p>
+              </div>
+            </div>
+            <div class="flag-list">
+              <div class="flag-row">
+                <div>
+                  <div class="flag-row__title">Download a settings snapshot</div>
+                  <div class="flag-row__desc">Saari <code>app_settings</code> keys ka JSON — backup ya review ke liye.</div>
+                </div>
+                <div class="flag-row__controls">
+                  <button type="button" class="btn btn--secondary btn--sm" id="export-settings-btn">Export JSON</button>
+                </div>
+              </div>
+              <div class="flag-row">
+                <div>
+                  <div class="flag-row__title">Sign out every admin session</div>
+                  <div class="flag-row__desc">Aapka current tab bhi sign out ho jayega. Stolen laptop / token leak ke liye.</div>
+                </div>
+                <div class="flag-row__controls">
+                  <button type="button" class="btn btn--danger btn--sm" id="revoke-all-btn">Sign out all</button>
+                </div>
+              </div>
+              <div class="flag-row">
+                <div>
+                  <div class="flag-row__title">Rotate the panel password</div>
+                  <div class="flag-row__desc">Supabase → SQL Editor me run karo, phir dobara login.</div>
+                </div>
+                <div class="flag-row__controls">
+                  <button type="button" class="btn btn--secondary btn--sm" id="copy-rotate-sql">Copy SQL</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/vendor/supabase.min.js" defer></script>
+<script src="js/admin-boot.js" defer></script>
+<script src="js/supabaseClient.js" defer></script>
+<script src="js/utils.js" defer></script>
+<script src="js/admin-icons.js" defer></script>
+<script src="js/admin-common.js" defer></script>
+<script src="js/admin-command.js" defer></script>
+<script src="js/admin-settings.js" defer></script>
+</body>
+</html>

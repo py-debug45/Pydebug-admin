@@ -62,14 +62,14 @@
             <input type="text" id="campus-tag-input" maxlength="45" placeholder="College / Campus tag (e.g. DAVV Indore, VIT)">
           </div>
           <div class="btn-row" style="margin-bottom:10px">
-            <button class="btn btn--secondary btn--sm" id="campus-tag-save-btn" data-keep-emoji="1">🎓 Save campus tag</button>
-            <button class="btn btn--danger btn--sm" id="campus-tag-clear-btn">✕ Clear campus tag</button>
+            <button class="btn btn--secondary btn--sm" id="campus-tag-save-btn" data-perm="users.write" data-keep-emoji="1">🎓 Save campus tag</button>
+            <button class="btn btn--danger btn--sm" id="campus-tag-clear-btn" data-perm="users.write">✕ Clear campus tag</button>
           </div>
           <div class="field">
             <input type="text" id="display-name-input" maxlength="60" placeholder="Full display name (Base Name · Campus Tag)">
           </div>
           <div class="btn-row">
-            <button class="btn btn--secondary btn--sm" id="display-name-save-btn">Save raw display name</button>
+            <button class="btn btn--secondary btn--sm" id="display-name-save-btn" data-perm="users.write">Save raw display name</button>
           </div>
           <div class="manage-note">Stored in <code>profiles.display_name</code> as <code>Base Name · Campus Tag</code> (max 60 chars).</div>
         </div>
@@ -80,8 +80,8 @@
             <input type="number" id="xp-amount" placeholder="e.g. 100" step="1">
           </div>
           <div class="btn-row">
-            <button class="btn btn--secondary btn--sm" id="xp-add-btn">Add XP</button>
-            <button class="btn btn--secondary btn--sm" id="xp-set-btn">Set XP to…</button>
+            <button class="btn btn--secondary btn--sm" id="xp-add-btn" data-perm="users.write">Add XP</button>
+            <button class="btn btn--secondary btn--sm" id="xp-set-btn" data-perm="users.write">Set XP to…</button>
           </div>
           <div class="manage-note">Add updates total + monthly XP (like a real solve). Set changes total XP only.</div>
         </div>
@@ -89,8 +89,8 @@
         <div class="manage-card">
           <h3>Streak freezes ❄️</h3>
           <div class="btn-row">
-            <button class="btn btn--secondary btn--sm" id="freeze-add-btn">+1 freeze</button>
-            <button class="btn btn--secondary btn--sm" id="freeze-remove-btn">−1 freeze</button>
+            <button class="btn btn--secondary btn--sm" id="freeze-add-btn" data-perm="users.write">+1 freeze</button>
+            <button class="btn btn--secondary btn--sm" id="freeze-remove-btn" data-perm="users.write">−1 freeze</button>
           </div>
           <div class="manage-note">Freezes protect a streak for a missed day.</div>
         </div>
@@ -108,8 +108,8 @@
             </select>
           </div>
           <div class="btn-row">
-            <button class="btn btn--primary btn--sm" id="premium-grant-btn">Grant / Extend Pro</button>
-            <button class="btn btn--secondary btn--sm" id="premium-revoke-btn">Revoke</button>
+            <button class="btn btn--primary btn--sm" id="premium-grant-btn" data-perm="payments.write,users.write">Grant / Extend Pro</button>
+            <button class="btn btn--secondary btn--sm" id="premium-revoke-btn" data-perm="payments.write,users.write">Revoke</button>
           </div>
         </div>
 
@@ -136,7 +136,7 @@
             <input type="text" id="mod-reason" maxlength="200" placeholder="Reason (shown in audit log)...">
           </div>
           <div class="btn-row">
-            <button class="btn btn--secondary btn--sm" id="mod-save-btn">Save moderation status</button>
+            <button class="btn btn--secondary btn--sm" id="mod-save-btn" data-perm="users.write">Save moderation status</button>
           </div>
         </div>
 
@@ -151,7 +151,7 @@
         <div class="manage-card manage-card--danger">
           <h3>Reset progress</h3>
           <div class="btn-row">
-            <button class="btn btn--danger btn--sm" id="reset-progress-btn">Reset XP &amp; streak</button>
+            <button class="btn btn--danger btn--sm" id="reset-progress-btn" data-perm="users.write">Reset XP &amp; streak</button>
           </div>
           <div class="manage-note">Sets total + monthly XP and streak back to 0. Submissions and badges are kept.</div>
         </div>
@@ -206,6 +206,7 @@
 <script src="js/utils.js" defer></script>
 <script src="js/admin-icons.js" defer></script>
 <script src="js/admin-common.js" defer></script>
+<script src="js/admin-command.js" defer></script>
 <script src="js/admin-user-detail.js" defer></script>
 </body>
 </html>

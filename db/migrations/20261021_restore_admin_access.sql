@@ -9,7 +9,9 @@ begin
     'notifications','push_subscriptions','push_announcements','push_broadcast_log','user_achievements',
     'user_presence','admin_audit_log','admin_settings','ai_settings','ai_logs',
     'user_certificates','mock_attempts','battles','study_plans',
-    'classrooms','classroom_members','institute_enquiries','learner_feedback','referrals'] loop
+    'classrooms','classroom_members','institute_enquiries','learner_feedback','referrals',
+    'deletion_archive','admin_members','admin_role_permissions','app_settings',
+    'feature_flags','admin_sessions','saved_views'] loop
     if to_regclass('public.' || t) is not null then
       execute format('alter table public.%I enable row level security', t);
       execute format('grant select on public.%I to authenticated', t);
@@ -51,4 +53,15 @@ end $$;
 drop policy if exists "Admin panel update" on public.profiles;
 create policy "Admin panel update" on public.profiles for update to authenticated
   using ((select public.is_admin())) with check ((select public.is_admin()));
+-- Soft-delete archive (Trash). Added later by
+-- 20261106_admin_platform_core.sql; guarded here so this file stays runnable
+-- on an older schema.
+do $$
+begin
+  if to_regclass('public.deletion_archive') is not null then
+    grant select on public.deletion_archive to authenticated;
+    execute 'drop policy if exists "Admins read trash" on public.deletion_archive';
+    execute 'create policy "Admins read trash" on public.deletion_archive for select to authenticated using ((select public.is_admin()))';
+  end if;
+end $$;
 notify pgrst, 'reload schema';

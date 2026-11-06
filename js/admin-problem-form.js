@@ -9,7 +9,7 @@ let hintValues = [];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 onAdminReady(async () => {
-  const admin = await requireAdmin();
+  const admin = await requirePerm("problems.write");
   if (!admin) return;
 
   editingId = qs("id");

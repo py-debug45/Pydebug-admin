@@ -1,7 +1,7 @@
 let insightRows = { profiles: [], submissions: [], problems: [], grants: [] };
 
 onAdminReady(async () => {
-  if (!(await requireAdmin())) return;
+  if (!(await requirePerm("dashboard.read"))) return;
   await loadInsights();
   document.getElementById("refresh-insights").onclick = loadInsights;
 });

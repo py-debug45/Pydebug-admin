@@ -46,4 +46,16 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     X-Robots-Tag = "noindex, nofollow"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Cache-Control = "no-cache, must-revalidate"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'self' blob:"
+
+# Admin HTML is authenticated content: never let a shared device or a proxy
+# serve it from cache after logout.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+    Pragma = "no-cache"

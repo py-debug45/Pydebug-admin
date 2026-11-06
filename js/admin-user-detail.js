@@ -28,7 +28,7 @@ let detailUserId = null;
 let detailProfile = null;
 
 onAdminReady(async () => {
-  currentAdmin = await requireAdmin();
+  currentAdmin = await requirePerm("users.read");
   if (!currentAdmin) return;
 
   detailUserId = qs("id");
@@ -341,11 +341,13 @@ async function adjustFreezes(delta) {
 }
 
 async function saveDisplayName(e) {
+  if (!ensureCan("users.write")) return;
   const val = document.getElementById("display-name-input").value.trim().slice(0, 60);
   await updateProfile({ display_name: val || null }, val ? "Display name saved" : "Display name cleared (fallback active)", e.target);
 }
 
 async function saveCampusTag(e) {
+  if (!ensureCan("users.write")) return;
   const campusVal = (document.getElementById("campus-tag-input").value || "").trim();
   const parsed = parseDisplayNameCampus(detailProfile.display_name);
   const baseName = parsed.baseName || detailProfile.full_name || (detailProfile.email ? detailProfile.email.split("@")[0] : "Learner");
@@ -379,6 +381,7 @@ function expiryForDuration(d, currentExpiresAt) {
 }
 
 async function grantPremium(e) {
+  if (!ensureCan("payments.write,users.write")) return;
   const duration = document.getElementById("premium-duration").value;
   const nextExpiry = expiryForDuration(duration, detailProfile && detailProfile.premium_expires_at);
   const labelMap = {
@@ -404,6 +407,7 @@ async function grantPremium(e) {
 }
 
 async function revokePremium(e) {
+  if (!ensureCan("payments.write,users.write")) return;
   const ok = await updateProfile({ is_premium: false, premium_expires_at: null }, "Premium revoked", e.target);
   if (ok) {
     await sb.rpc("admin_manage_entitlement", {
@@ -416,6 +420,7 @@ async function revokePremium(e) {
 }
 
 async function saveModeration(e) {
+  if (!ensureCan("users.write")) return;
   const status = document.getElementById("mod-status").value;
   const dur = document.getElementById("mod-duration").value;
   const reason = document.getElementById("mod-reason").value.trim();
@@ -454,6 +459,7 @@ async function toggleAdmin(e) {
 }
 
 async function resetProgress(e) {
+  if (!ensureCan("users.write")) return;
   if (!confirm("Reset this user's total + monthly XP and streak to 0? Submissions and badges will be kept.")) return;
   await updateProfile({ xp: 0, monthly_xp: 0, streak: 0 }, "Progress reset", e.target);
 }

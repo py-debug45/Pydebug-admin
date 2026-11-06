@@ -3,6 +3,57 @@
 Standalone admin panel for PyDebug. Deploy this as its **own** Netlify site
 (separate from the user-facing app), connected to the **same Supabase project**.
 
+## 🆕 Platform core: settings, flags, roles, Trash, ⌘K, audit hardening
+
+Run **one** new migration in Supabase → SQL Editor:
+
+```
+db/migrations/20261106_admin_platform_core.sql
+```
+
+It is idempotent. Until you run it the panel keeps working exactly as before
+(every helper fails open), but the new screens stay empty and tell you which
+migration is missing.
+
+What it adds:
+
+| Area | What you get | Where |
+|---|---|---|
+| **Runtime settings** | Site name, support email, timezone, announcement bar, plan catalog, free-tier limits, XP/streak economy, AI switches + monthly budget, maintenance mode, login policy | `settings.html` |
+| **Feature flags** | 10 seeded kill-switches (`ai_interview`, `write_code`, `battles`, …) with on/off + 0–100% rollout, no deploy needed | `settings.html#flags` |
+| **Team & roles** | Six roles (owner/admin/moderator/support/finance/content), invite existing accounts by email, live permission matrix, remove access | `settings.html#team` |
+| **Admin sessions** | Every tab is a real row in `admin_sessions`; revoke one or "all other sessions"; revoked tabs sign out on next navigation | `settings.html#security` |
+| **Trash (soft delete)** | Problems, submissions, discussions, community posts, notifications and snippets are archived first, then deleted. Restore with one click, purge with typed confirmation | `trash.html` |
+| **⌘K command palette** | Jump to any page, learner, problem or order, or run an action. `Ctrl/⌘ + K`, arrow keys, Enter, Esc | every page |
+| **Audit hardening** | Admin, device, IP, session and request columns; real server-side pagination; date range filter; CSV export; append-only table (UPDATE/DELETE revoked) | `audit.html` |
+| **Security headers** | CSP, HSTS, COOP, `Cache-Control: no-store` on HTML, stricter Permissions-Policy | `netlify.toml`, `vercel.json` |
+
+Role enforcement works at three layers:
+
+1. **UI** — sidebar rows and `data-perm` buttons hide themselves.
+2. **Client handlers** — `ensureCan()` guards destructive actions that are
+   rendered after page load (table rows, modals).
+3. **Database** — every new mutating RPC re-checks `has_perm(...)` inside a
+   `SECURITY DEFINER` function, and each mutation writes its own audit row.
+
+`public.is_admin()` stays backwards compatible: a legacy
+`profiles.is_admin = true` account is treated as **owner**, so applying the
+migration can never lock the existing admin out. To give someone access, they
+must already have a normal PyDebug account; add them under
+**Settings → Team & roles**.
+
+### Quick reference — new RPCs
+
+`admin_identity`, `admin_list_members`, `admin_add_member`,
+`admin_set_member_role`, `admin_remove_member`, `admin_get_settings`,
+`admin_set_setting`, `admin_list_flags`, `admin_set_flag`,
+`admin_soft_delete`, `admin_restore_row`, `admin_purge_row`,
+`admin_start_session`, `admin_touch_session`, `admin_session_state`,
+`admin_list_sessions`, `admin_revoke_session`,
+`admin_revoke_other_sessions`, plus public `public_settings()` and
+`public_feature_flags()` for the learner app.
+
+
 ## ⚡ Speed, mobile menu & charts — what changed
 
 **1. The mobile menu button works again.**

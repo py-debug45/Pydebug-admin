@@ -3,7 +3,7 @@
 let currentNotifAdmin = null;
 
 onAdminReady(async () => {
-  currentNotifAdmin = await requireAdmin();
+  currentNotifAdmin = await requirePerm("notifications.read");
   if (!currentNotifAdmin) return;
 
   await refreshNotificationsPage();
@@ -61,6 +61,7 @@ async function loadPushAnnouncements() {
 }
 
 async function pruneNotifications(days) {
+  if (!ensureCan("notifications.write")) return;
   const msg = days <= 0
     ? "Keep only the newest 3 automated alerts per learner and delete all older duplicate auto-notifications?"
     : `Delete automated notifications (new_problem / streak_warning / leaderboard_rank) older than ${days} days?`;
@@ -139,19 +140,27 @@ async function loadRecent() {
 }
 
 async function deleteNotification(id, btn) {
-  if (!confirm("Delete this notification?")) return;
+  if (!ensureCan("notifications.write")) return;
+  if (!confirm("Move this notification to Trash?\n\nRestorable from Trash if you change your mind.")) return;
   btn.disabled = true;
-  const { error } = await sb.from("notifications").delete().eq("id", id);
+
+  const soft = await softDeleteRow("notifications", id, "deleted from notifications", "Notification");
+  let error = soft.ok ? null : soft.error;
+  if (!soft.ok && isMissingRpc(soft.error)) {
+    ({ error } = await sb.from("notifications").delete().eq("id", id));
+    if (!error) await writeAdminAudit("notification_deleted", "notifications", id, { permanent: true });
+  }
+
   if (error) {
     showToast("Could not delete: " + error.message, "error");
     btn.disabled = false;
     return;
   }
-  showToast("Notification deleted", "success");
   await refreshNotificationsPage();
 }
 
 async function sendBroadcast(e) {
+  if (!ensureCan("notifications.write")) return;
   e.preventDefault();
   const title = document.getElementById("broadcast-title").value.trim();
   const message = document.getElementById("broadcast-message").value.trim();
