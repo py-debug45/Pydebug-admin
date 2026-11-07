@@ -43,7 +43,7 @@
                    autocomplete="current-password" placeholder="Your admin account password">
             <button type="button" class="password-toggle-btn" data-toggle-password aria-label="Show password">Show</button>
           </div>
-          <p class="field-hint">Your <strong>PyDebug account</strong> password (e.g. <code>imtiyaj khan 9329</code>).</p>
+          <p class="field-hint">The password for your <strong>PyDebug account</strong> — the same one you use in the learner app.</p>
         </div>
 
         <button type="submit" class="btn btn--primary btn--full" id="login-submit">Log in</button>
@@ -55,13 +55,13 @@
       </p>
     </div>
 
-    <!-- Step 2: Google Authenticator code or Panel Passcode -->
+    <!-- Step 2: Google Authenticator code -->
     <div class="auth-step" id="step-2fa" data-step="2fa" hidden>
       <h2 class="auth-step__title">Security verification</h2>
-      <p class="auth-step__sub">Enter the 6-digit code from Google Authenticator, or use your panel password.</p>
+      <p class="auth-step__sub">Enter the 6-digit code from your authenticator app.</p>
 
       <div class="auth-note" id="totp-setup-note" hidden>
-        <p><strong>First-time setup:</strong> add this account to Google Authenticator (or any authenticator app), then enter the code below. Or unlock directly with your panel password.</p>
+        <p><strong>First-time setup:</strong> add this account to your authenticator app (Google Authenticator, Authy, 1Password…), then enter the code below.</p>
         <div class="totp-secret-box">
           <code id="totp-secret"></code>
           <button type="button" class="auth-alert__copy" id="copy-totp-secret">Copy</button>
@@ -71,13 +71,12 @@
 
       <form id="admin-totp-form" novalidate>
         <div class="field">
-          <label for="totp-code">Authenticator code or panel password</label>
+          <label for="totp-code">Authenticator code</label>
           <input type="text" id="totp-code" name="code" required
-                 autocomplete="one-time-code" maxlength="40"
-                 autocapitalize="none" spellcheck="false" placeholder="6-digit code or imtiyaj khan 9329">
+                 autocomplete="one-time-code" inputmode="numeric" maxlength="6"
+                 autocapitalize="none" spellcheck="false" placeholder="6-digit code">
         </div>
         <button type="submit" class="btn btn--primary btn--full" id="totp-submit">Verify and enter</button>
-        <button type="button" class="btn btn--secondary btn--full" id="quick-panel-pass-btn">Unlock with panel password</button>
         <button type="button" class="btn btn--secondary btn--full" id="back-to-login">Back to login</button>
       </form>
     </div>

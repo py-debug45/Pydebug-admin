@@ -21,9 +21,9 @@
 //   * a built-in "Run check" panel verifies reachability, session, profile
 //     row and admin flag, and can copy the whole report.
 
-// Master panel password: accepted as account password, and also as the
-// second-factor security unlock code alongside Google Authenticator TOTP.
-const MASTER_PANEL_PASSWORD = "imtiyaj khan 9329";
+// The second factor is a real TOTP code and nothing else. There is
+// deliberately no master passcode: anything hard-coded here ships to the
+// browser and becomes a public 2FA bypass.
 const ADMIN_EMAIL_STORAGE_KEY = "pydebug_admin_email_v1";
 const LOGIN_TIMEOUT_MS = 25000;
 // Set for this tab only after the authenticator / panel code verifies. Panel
@@ -167,7 +167,7 @@ onAdminReady(() => {
   /* ------------------------------------------------------- error texts --- */
 
   function accountPasswordExplainer() {
-    return "Enter your PyDebug <strong>account</strong> password (default: <code>imtiyaj khan 9329</code>).";
+    return "Enter your PyDebug <strong>account</strong> password — the same one you use in the learner app.";
   }
 
   // Turns a Supabase Auth error into a title + plain-language fix.
@@ -413,40 +413,11 @@ onAdminReady(() => {
     }
   }
 
-  async function onSignedIn(data, typedPassword) {
+  async function onSignedIn(data) {
     const result = await verifyAdmin(data.user);
 
     if (result.ok) {
       try { localStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, data.user.email || ""); } catch (e) {}
-
-      // If user signed in with the master panel password, auto-unlock the security step
-      const isMasterPass = typedPassword && (
-        typedPassword.trim().toLowerCase() === MASTER_PANEL_PASSWORD ||
-        typedPassword.trim().toLowerCase() === MASTER_PANEL_PASSWORD.replace(/\s+/g, "")
-      );
-
-      if (isMasterPass) {
-        try {
-          const res = await withTimeout(
-            sb.rpc("verify_admin_totp", { p_code: MASTER_PANEL_PASSWORD }),
-            LOGIN_TIMEOUT_MS,
-            "totp-auto-verify"
-          );
-          if (res.data && res.data.ok) {
-            markTotpPassed();
-            setBusy(false);
-            showAlert({
-              tone: "ok",
-              title: "Verified — opening dashboard…",
-              message: "Welcome to PyDebug Admin.",
-            });
-            window.location.href = "dashboard.html";
-            return;
-          }
-        } catch (e) {
-          console.warn("[admin] auto unlock note:", e);
-        }
-      }
 
       setBusy(false);
       await startTwoFactor(data.user);
@@ -605,7 +576,7 @@ onAdminReady(() => {
     }
 
     try {
-      await onSignedIn(data, password);
+      await onSignedIn(data);
     } catch (err) {
       setBusy(false);
       showAlert({
@@ -619,7 +590,7 @@ onAdminReady(() => {
 
   /* ------------------------------------------------- authenticator ---- */
 
-  // Step 2 — 6-digit code from Google Authenticator OR master panel password.
+  // Step 2 — 6-digit code from the enrolled authenticator app.
   // The dashboard only opens once verify_admin_totp() accepts it (and flags this tab).
   totpForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -635,7 +606,7 @@ onAdminReady(() => {
       showAlert({
         tone: "warn",
         title: "Code or password required",
-        message: "Enter the 6-digit code from Google Authenticator, or enter your panel password.",
+        message: "Enter the 6-digit code from your authenticator app.",
       });
       totpInput.focus();
       return;
@@ -671,22 +642,22 @@ onAdminReady(() => {
         showAlert({
           tone: "warn",
           title: `Too many wrong codes — locked for ~${mins} min`,
-          message: "Five bad tries lock the authenticator check for 15 minutes. Wait it out, or use your panel password.",
+          message: "Five bad tries lock the authenticator check for 15 minutes. Wait it out, then try again.",
         });
       } else if (reason === "no_setup") {
         showAlert({
           tone: "error",
           title: "Authenticator setup not found",
-          message: "Go back and log in again, or unlock directly with the panel password.",
+          message: "Go back and log in again to restart the authenticator setup.",
         });
       } else {
         const left = result && typeof result.attempts_left === "number" ? result.attempts_left : null;
         showAlert({
           tone: "error",
-          title: "Invalid code or password",
+          title: "Invalid code",
           message: left !== null
-            ? `${left} attempt${left === 1 ? "" : "s"} left before a 15-minute lock. You can also tap "Unlock with panel password" below.`
-            : "That code or password did not match. Enter the 6-digit code or your panel password.",
+            ? `${left} attempt${left === 1 ? "" : "s"} left before a 15-minute lock.`
+            : "That code did not match. Enter the current 6-digit code.",
         });
       }
       totpInput.select();
@@ -701,16 +672,6 @@ onAdminReady(() => {
     });
     window.location.href = "dashboard.html";
   });
-
-  const quickPanelPassBtn = document.getElementById("quick-panel-pass-btn");
-  if (quickPanelPassBtn) {
-    quickPanelPassBtn.addEventListener("click", async () => {
-      if (!sb) return;
-      clearAlert();
-      totpInput.value = MASTER_PANEL_PASSWORD;
-      totpForm.dispatchEvent(new Event("submit", { cancelable: true }));
-    });
-  }
 
   // Back to the password step = abandon this login entirely, so a stolen
   // session can't skip the code later.
@@ -948,7 +909,7 @@ onAdminReady(() => {
       if (error && /could not find the function|pgrst202|does not exist/i.test(String(error.message))) {
         push("bad", "Authenticator / panel security", "verify_admin_totp() is missing — run <code>supabase-admin-totp-setup.sql</code>.");
       } else {
-        push("ok", "Authenticator / panel security", "Active and protected (authenticator code or panel password accepted).");
+        push("ok", "Authenticator / panel security", "Active and protected — only a real authenticator code is accepted.");
       }
     } catch (err) {
       push("warn", "Authenticator / panel security", escapeHtml(String(err && err.message || err)));

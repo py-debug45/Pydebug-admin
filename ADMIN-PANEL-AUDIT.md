@@ -15,6 +15,8 @@
 | CSP / HSTS / no-store security headers | **Done** | `netlify.toml`, `vercel.json` |
 | Live DB migration applied (roles, settings, flags, Trash, sessions, audit) | **Done** | Supabase project `cztosbchfqtyzxkhfrby`, 2026-11-06 |
 | Legacy `profiles.is_admin` guard patched for team management | **Done** | `guard_profile_self_write()` — only `is_admin` may differ, `team.write` required |
+| **P0 fix:** hard-coded master panel passcode removed (2FA bypass) | **Done** | `verify_admin_totp()`, `admin-login.js`, `index.html` — applied live 2026-11-06 |
+| Saved views (filter presets, shared) on Trash + Audit | **Done** | `js/admin-saved-views.js`, writable `saved_views` policies |
 | Refunds & disputes, email templates + logs, cohorts/LTV, health page, saved views, bulk actions | **Next** | P0-3/P0-4, P1-1…P1-20 below |
 
 > **TL;DR (Hinglish):** Aapka panel already 70–75% "product admin" hai — users, payments, coupons,

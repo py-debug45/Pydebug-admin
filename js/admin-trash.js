@@ -40,6 +40,18 @@ onAdminReady(async () => {
     loadTrash(0);
   });
 
+  if (window.AdminSavedViews) {
+    AdminSavedViews.init({
+      page: "trash",
+      fields: ["trash-table-filter", "trash-state-filter", "trash-search"],
+      onChange: () => {
+        const field = document.getElementById("trash-search");
+        trashSearchTerm = (field?.value || "").trim().toLowerCase();
+        loadTrash(0);
+      },
+    });
+  }
+
   const tbody = document.getElementById("trash-tbody");
   tbody?.addEventListener("click", onTrashAction);
 });

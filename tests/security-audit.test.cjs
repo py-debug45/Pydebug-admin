@@ -112,3 +112,43 @@ test('Founder Quick Tools expose all four 1-tap external pydebug.in studio links
   assert.match(commonJs, /https:\/\/pydebug\.in\/leaderboard/);
   assert.match(commonJs, /Campus Leaderboard/);
 });
+
+test('no hard-coded admin passcode ships in the bundle, SQL or docs', () => {
+  const files = [
+    ...walkClientFiles(ROOT),
+    ...fs
+      .readdirSync(ROOT)
+      .filter((name) => /\.(sql|md)$/i.test(name))
+      .map((name) => path.join(ROOT, name)),
+  ];
+  const banned = [/imtiyaj/i, /9329/];
+  const offenders = files
+    .filter((file) => {
+      const text = fs.readFileSync(file, 'utf8');
+      return banned.some((re) => re.test(text));
+    })
+    .map((file) => path.relative(ROOT, file));
+  assert.deepEqual(offenders, [], `Hard-coded panel passcode still present in: ${offenders.join(', ')}`);
+});
+
+test('the authenticator check has no master-passcode branch and the login UI offers a code only', () => {
+  const sql = fs.readFileSync(path.join(ROOT, 'supabase-admin-totp-setup.sql'), 'utf8');
+  assert.ok(!sql.includes('panel_password'), 'verify_admin_totp() must not accept a panel password');
+
+  const login = fs.readFileSync(path.join(ROOT, 'js', 'admin-login.js'), 'utf8');
+  assert.ok(!/MASTER_PANEL_PASSWORD/.test(login), 'admin-login.js must not define a master password');
+  assert.ok(!/panel password/i.test(login), 'login copy must not offer a panel password');
+  assert.ok(!/auto-unlock the security step/.test(login), 'login must not auto-skip the second factor');
+
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.ok(!html.includes('quick-panel-pass-btn'), 'the "unlock with panel password" button must be gone');
+  assert.ok(!/authenticator code or panel password/i.test(html), 'the TOTP field must ask for a code only');
+});
+
+test('the applied live migration that strips the bypass is committed', () => {
+  const file = path.join(ROOT, 'db', 'migrations', '20261107_remove_totp_master_passcode.sql');
+  assert.ok(fs.existsSync(file), 'missing db/migrations/20261107_remove_totp_master_passcode.sql');
+  const sql = fs.readFileSync(file, 'utf8');
+  assert.ok(sql.includes('verify_admin_totp'), 'migration must redefine verify_admin_totp');
+  assert.ok(!sql.includes('panel_password'), 'migration must not reintroduce the bypass');
+});

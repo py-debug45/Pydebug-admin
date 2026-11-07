@@ -751,8 +751,18 @@ function exportSettings() {
 }
 
 function copyRotateSql() {
-  const sql = `update public.admin_panel_security
-set password_hash = crypt('REPLACE_WITH_A_NEW_LONG_PASSPHRASE', gen_salt('bf')), updated_at = now()
-where id = 1;`;
-  copyAdminText(sql, "Password rotation SQL copied");
+  // Break-glass recovery, not a bypass: it only clears the TOTP enrolment so
+  // the next login shows a fresh setup QR. It still has to be run from the
+  // Supabase SQL Editor by the project owner.
+  const sql = `-- Lost the authenticator app? Replace the email, run this in Supabase → SQL Editor.
+-- The next login shows a fresh QR code to scan.
+update public.admin_totp
+   set secret = public._totp_base32_encode(extensions.gen_random_bytes(20)),
+       enabled = false,
+       enabled_at = null,
+       failed_attempts = 0,
+       locked_until = null
+ where user_id = (select id from public.profiles
+                   where lower(email) = lower('YOUR_ADMIN_EMAIL'));`;
+  copyAdminText(sql, "Authenticator recovery SQL copied");
 }

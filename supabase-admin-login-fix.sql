@@ -27,7 +27,7 @@ create temp table _pydebug_login_fix_cfg (
 insert into _pydebug_login_fix_cfg (email, new_password)
 values (
   'avenjr80@gmail.com',   -- 👈 change if your admin email is different
-  'Imtiyaj khan 9329'     -- 👈 this becomes the ACCOUNT password too
+  'REPLACE_WITH_A_LONG_STRONG_PASSWORD'  -- 👈 this becomes the ACCOUNT password
 );
 
 -- Do not show these rows to anyone else; already revoked from the panel.
@@ -168,7 +168,7 @@ end $$;
 -- Optional: also reset the PANEL password (the one asked after login).
 -- Uncomment and run if the unlock screen rejects the passcode.
 -- update public.admin_panel_security
---    set password_hash = crypt('Imtiyaj khan 9329', gen_salt('bf')),
+--    set password_hash = crypt('REPLACE_WITH_A_LONG_PASSPHRASE', gen_salt('bf')),
 --        updated_at = now()
 --  where id = 1;
 
