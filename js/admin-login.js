@@ -140,10 +140,43 @@ onAdminReady(() => {
     (isLogin ? emailInput : totpInput).focus();
   }
 
+  let totpLockUntil = 0;
+  let totpLockTimer = null;
+
+  function lockedForSeconds() {
+    return Math.max(0, Math.ceil((totpLockUntil - Date.now()) / 1000));
+  }
+
   function setTotpBusy(next, label) {
-    totpSubmit.disabled = next;
+    const locked = lockedForSeconds();
+    totpSubmit.disabled = next || locked > 0;
     totpSubmit.setAttribute("aria-busy", next ? "true" : "false");
-    totpSubmit.textContent = next ? (label || "Verifying…") : "Verify and enter";
+    totpSubmit.textContent = next
+      ? (label || "Verifying…")
+      : locked > 0
+        ? `Locked — retry in ${locked}s`
+        : "Verify and enter";
+  }
+
+  // The database locks the check after 5 bad codes. Mirror that here so the
+  // form cannot keep hammering it (every submit during the lock is rejected
+  // even with a correct code) and count down until it is allowed again.
+  function startTotpLockout(seconds) {
+    const wait = Math.max(1, Math.ceil(Number(seconds) || 900));
+    totpLockUntil = Date.now() + wait * 1000;
+    if (totpLockTimer) clearInterval(totpLockTimer);
+    const tick = () => {
+      const left = lockedForSeconds();
+      totpInput.disabled = left > 0;
+      setTotpBusy(false);
+      if (left <= 0) {
+        clearInterval(totpLockTimer);
+        totpLockTimer = null;
+        totpInput.focus();
+      }
+    };
+    tick();
+    totpLockTimer = setInterval(tick, 1000);
   }
 
   function markTotpPassed() {
@@ -638,12 +671,14 @@ onAdminReady(() => {
     if (!result || result.ok !== true) {
       const reason = result && result.error;
       if (reason === "locked") {
-        const mins = Math.max(1, Math.ceil(Number(result.retry_after_seconds || 900) / 60));
+        const wait = Number(result.retry_after_seconds || 900);
+        const mins = Math.max(1, Math.ceil(wait / 60));
         showAlert({
           tone: "warn",
           title: `Too many wrong codes — locked for ~${mins} min`,
-          message: "Five bad tries lock the authenticator check for 15 minutes. Wait it out, then try again.",
+          message: "Five bad tries lock the authenticator check for 15 minutes. The box unlocks by itself and counts down; submitting during the lock is always rejected, even with a correct code.",
         });
+        startTotpLockout(wait);
       } else if (reason === "no_setup") {
         showAlert({
           tone: "error",

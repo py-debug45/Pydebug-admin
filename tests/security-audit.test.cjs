@@ -152,3 +152,15 @@ test('the applied live migration that strips the bypass is committed', () => {
   assert.ok(sql.includes('verify_admin_totp'), 'migration must redefine verify_admin_totp');
   assert.ok(!sql.includes('panel_password'), 'migration must not reintroduce the bypass');
 });
+
+test('the TOTP lockout resets its counter once the lock expires', () => {
+  const file = path.join(ROOT, 'db', 'migrations', '20261107_totp_lockout_reset.sql');
+  assert.ok(fs.existsSync(file), 'missing db/migrations/20261107_totp_lockout_reset.sql');
+  const sql = fs.readFileSync(file, 'utf8');
+  assert.match(sql, /Lock expired: start from a clean slate/, 'migration must document the reset');
+  assert.match(sql, /set failed_attempts = 0, locked_until = null/, 'migration must clear the counter');
+
+  const login = fs.readFileSync(path.join(ROOT, 'js', 'admin-login.js'), 'utf8');
+  assert.match(login, /function startTotpLockout/, 'login must mirror the lockout in the UI');
+  assert.match(login, /Locked — retry in/, 'the button must count the lockout down');
+});
