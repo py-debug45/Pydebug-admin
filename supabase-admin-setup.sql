@@ -254,10 +254,11 @@ alter table public.ai_logs enable row level security;
 drop policy if exists "Admins can manage ai logs" on ai_logs;
 create policy "Admins can manage ai logs" on ai_logs for all using (is_admin());
 
--- 12. DB-backed panel password -----------------------------------
--- The browser never receives this value or the hash. The client invokes a
--- SECURITY DEFINER verifier only after Supabase has authenticated an admin.
--- Default passcode: imtiyaj khan 9329
+-- 12. Legacy DB-backed panel password (deprecated) -----------------
+-- Login no longer uses this table. The only second factor is the 6-digit
+-- authenticator code checked by public.verify_admin_totp(); there is no
+-- master passcode anywhere in the flow. The table and verifier are kept
+-- only so older installs do not break, and no default password is seeded.
 create extension if not exists pgcrypto with schema extensions;
 set search_path = public, extensions;
 
@@ -267,10 +268,6 @@ create table if not exists public.admin_panel_security (
   updated_at timestamptz not null default now()
 );
 alter table public.admin_panel_security enable row level security;
-
-insert into public.admin_panel_security (id, password_hash)
-values (1, crypt('imtiyaj khan 9329', gen_salt('bf')))
-on conflict (id) do nothing;
 
 create or replace function public.verify_admin_panel_password(input_password text)
 returns boolean

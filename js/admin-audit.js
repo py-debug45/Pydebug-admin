@@ -28,6 +28,14 @@ onAdminReady(async () => {
 
   const searchEl = document.getElementById("audit-search");
   if (searchEl) searchEl.addEventListener("input", debounce(() => loadAudit(0), 300));
+
+  if (window.AdminSavedViews) {
+    AdminSavedViews.init({
+      page: "audit",
+      fields: ["audit-action", "audit-search", "audit-from", "audit-to"],
+      onChange: () => loadAudit(0),
+    });
+  }
 });
 
 function auditFilters() {

@@ -36,6 +36,8 @@ What it adds:
 | **Trash (soft delete)** | Problems, submissions, discussions, community posts, notifications and snippets are archived first, then deleted. Restore with one click, purge with typed confirmation | `trash.html` |
 | **⌘K command palette** | Jump to any page, learner, problem or order, or run an action. `Ctrl/⌘ + K`, arrow keys, Enter, Esc | every page |
 | **Audit hardening** | Admin, device, IP, session and request columns; real server-side pagination; date range filter; CSV export; append-only table (UPDATE/DELETE revoked) | `audit.html` |
+| **Saved views** | Name the current filter set on Trash and Audit, optionally share it with the team, re-apply it in one click; only the author can edit or delete | `js/admin-saved-views.js` |
+| **2FA without a master passcode** | `verify_admin_totp()` accepts only a real authenticator code (5 tries → 15 min lock). The old hard-coded panel password is gone from the database, the bundle and the login page | `db/migrations/20261107_remove_totp_master_passcode.sql` |
 | **Security headers** | CSP, HSTS, COOP, `Cache-Control: no-store` on HTML, stricter Permissions-Policy | `netlify.toml`, `vercel.json` |
 
 Role enforcement works at three layers:
@@ -124,9 +126,9 @@ code from Google Authenticator; the panel opens only after both.
 
 What it does (assuming the user-panel tables already exist):
 
-- Adds the DB-backed admin panel password verifier and seeds the initial
-  bcrypt password `imtiyaj khan 9329` (change it later with the SQL comment at
-  the bottom of the setup file)
+- Keeps the legacy `admin_panel_security` table for older installs but seeds
+  **no** default password: login is account password + authenticator code, and
+  there is no master passcode anywhere in the flow
 - Adds `profiles.is_admin` + an `is_admin()` helper for RLS checks
 - Backfills columns the user app expects (`problem_number`,
   `submissions.code`, `display_name`, `monthly_xp`, …) and numbers any
@@ -153,10 +155,13 @@ is true, so admin-panel premium grants/revokes keep working.
 Work through these in order. Each step removes one cause; the login page now
 also tells you *which* one you hit.
 
-1. **Admin login.** The login form uses your **PyDebug admin account**
-   password (default: `imtiyaj khan 9329`). If you sign in with `imtiyaj khan 9329`,
-   the panel auto-unlocks directly into the dashboard. You can also verify with a
-   **6-digit code from Google Authenticator** or tap **Unlock with panel password**.
+1. **Admin login.** Step 1 is your **PyDebug account password** (the same one
+   you use in the learner app). Step 2 is the **6-digit code from your
+   authenticator app** — that is the only second factor; there is no master
+   passcode and no "unlock with panel password" shortcut. Lost the
+   authenticator? Settings → Security → *Lost the authenticator app?* has a
+   copyable recovery SQL that clears only the enrolment, and the next login
+   shows a fresh QR code.
 2. **Run [`supabase-admin-login-fix.sql`](supabase-admin-login-fix.sql)** in
    Supabase → SQL Editor. Edit the two config values at the top (email +
    new password) and run everything. It confirms the email, sets the account
@@ -219,9 +224,11 @@ guessable from the main user-facing URL.
   Secrets live in `public.admin_totp` (RLS on, no client access — only the
   SECURITY DEFINER RPCs can use them), codes are verified in the database
   with a ±30 s drift window, and 5 wrong codes lock the check for 15
-  minutes. The code is asked once per browser tab after the password passes;
-  admins can unlock using the Google Authenticator 6-digit code or the master
-  panel password (`imtiyaj khan 9329`).
+  minutes. The code is asked once per browser tab after the password passes
+  and it is the only accepted second factor — the old hard-coded master
+  passcode was removed (`db/migrations/20261107_remove_totp_master_passcode.sql`).
+  Lost phone? Settings → Security offers a recovery SQL that only clears the
+  enrolment, then the next login shows a fresh setup QR.
 - `dashboard.html` — **Live activity** (who is on the site RIGHT NOW by
   name, updates in real time + who practiced today by name) + a polished
   brand command center with real KPI comparisons (new learners and revenue
