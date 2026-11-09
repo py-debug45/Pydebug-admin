@@ -19,6 +19,12 @@ test('affiliate migration keeps money in paise, attributes only captured paid gr
   assert.match(sql, /public\.has_perm\('payments\.write'\)/);
 });
 
+test('affiliate admin partner list casts SUM results to the declared bigint return columns', () => {
+  const sql = read('db/migrations/20261109_affiliate_admin_aggregate_type_fix.sql');
+  assert.match(sql, /pending_paise bigint,approved_paise bigint,paid_paise bigint/);
+  assert.equal((sql.match(/coalesce\(sum\(c\.commission_paise\),0\)::bigint/g) || []).length, 3);
+});
+
 test('partner data is exposed only by caller-scoped RPCs and admin writes are guarded', () => {
   const sql = read('db/migrations/20261109_affiliate_partners_weekly_payouts.sql');
   assert.match(sql, /enable row level security/);
@@ -35,6 +41,7 @@ test('the admin and partner frontends use Supabase RPCs without bundling privile
   const html = read('partner.html');
   assert.match(admin, /affiliate_admin_create_sunday_payout_run/);
   assert.match(admin, /affiliate_admin_mark_payout/);
+  assert.match(admin, /Affiliate dashboard data could not be read because of a database response mismatch/);
   assert.match(admin, /requirePerm\("coupons\.read"\)/);
   assert.match(partner, /affiliate_partner_dashboard/);
   assert.match(partner, /affiliate_apply/);
