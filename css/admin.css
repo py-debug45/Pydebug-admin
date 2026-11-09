@@ -2833,3 +2833,28 @@ body.cmdk-open { overflow: hidden; }
   color: var(--muted, #8b93a7);
   user-select: none;
 }
+
+/* Affiliate partner operations workspace */
+.affiliate-section { margin: 20px 0; }
+.affiliate-section .section-card__head { margin-bottom: 14px; }
+.affiliate-section .section-card__head h3 { margin: 0 0 5px; }
+.affiliate-section .section-card__head p { color: var(--text-muted, #94a3b8); font-size: .78rem; line-height: 1.5; margin: 0; }
+.affiliate-policy-note { display: grid; gap: 5px; line-height: 1.55; }
+.affiliate-policy-note strong { color: var(--accent-mint, #55d6c3); }
+.affiliate-policy-note span { color: var(--text-muted, #94a3b8); }
+.affiliate-table { min-width: 850px; }
+.affiliate-table td { vertical-align: top; }
+.affiliate-muted { color: var(--text-muted, #94a3b8); font-size: .72rem; margin-top: 4px; }
+.affiliate-inline-number { width: 76px; padding: 7px 8px; border-radius: 7px; border: 1px solid var(--admin-line-strong, #38465e); color: var(--text-primary, #e6edf6); background: var(--admin-input, #0d1420); }
+.affiliate-actions { display: flex; flex-wrap: wrap; gap: 5px; min-width: 175px; }
+.affiliate-actions .btn, .affiliate-table .btn { white-space: nowrap; }
+.affiliate-status { display: inline-flex; padding: 4px 8px; border: 1px solid #45536a; border-radius: 999px; font-size: .68rem; text-transform: capitalize; }
+.affiliate-status--approved, .affiliate-status--paid { color: #66dfb1; border-color: rgba(102,223,177,.35); }
+.affiliate-status--pending { color: #ffd174; border-color: rgba(255,209,116,.35); }
+.affiliate-status--rejected, .affiliate-status--suspended, .affiliate-status--failed { color: #ff9292; border-color: rgba(255,146,146,.35); }
+.affiliate-link-form { display: grid; grid-template-columns: 1fr 1.3fr .75fr auto; gap: 10px; align-items: end; margin: 14px 0 20px; }
+.affiliate-link-form label { display: grid; gap: 6px; color: var(--text-muted, #94a3b8); font-size: .75rem; }
+.affiliate-link-form input, .affiliate-link-form select { width: 100%; min-width: 0; padding: 10px; border-radius: 8px; color: var(--text-primary, #e6edf6); background: var(--admin-input, #0d1420); border: 1px solid var(--admin-line-strong, #38465e); }
+.affiliate-payout-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.affiliate-error { border-color: rgba(255,100,100,.4) !important; color: #ffaaaa; }
+@media (max-width: 760px) { .affiliate-link-form { grid-template-columns: 1fr 1fr; } .affiliate-link-form button { width: 100%; } .affiliate-payout-head { display: grid !important; } }

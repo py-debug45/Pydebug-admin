@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark"><meta name="theme-color" content="#0d111a"><meta name="robots" content="noindex,nofollow">
+<title>Affiliate Partners — PyDebug Admin</title>
+<link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="css/dashboard.css"><link rel="stylesheet" href="css/responsive.css"><link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-protected admin-panel-locked">
+<div class="admin-shell">
+  <aside class="admin-sidebar"><div class="admin-sidebar__logo">&gt;_ PyDebug</div><div class="admin-sidebar__tag">ADMIN PANEL</div><nav></nav><div class="admin-sidebar__account"><span id="admin-name">...</span><button data-admin-logout aria-label="Log out" title="Log out">⇥</button></div></aside>
+  <main class="admin-main">
+    <div class="admin-topbar"><div><div class="admin-eyebrow">GROWTH · PARTNER PROGRAM</div><h1>Affiliate Partners <span class="pill-count" id="partner-count">0</span></h1></div><div class="admin-topbar__actions"><button class="btn btn--secondary btn--sm" id="refresh-affiliates">↻ Refresh</button><a class="btn btn--secondary btn--sm" href="partner.html" target="_blank" rel="noopener">Partner portal ↗</a></div></div>
+    <div class="admin-hint affiliate-policy-note"><strong>Sunday settlements · India time</strong><span>Only successful Razorpay-paid orders count. Commission uses the captured amount after discount, stays pending for 7 days for refund protection, then becomes payable in the Sunday run. Record the RazorpayX/bank transfer reference after you pay.</span></div>
+    <div id="affiliate-message"></div>
+    <div class="admin-stats-row">
+      <div class="stat-card"><div class="value" id="affiliate-stat-pending">0</div><div class="label">Applications to review</div></div>
+      <div class="stat-card"><div class="value value--mint" id="affiliate-stat-partners">0</div><div class="label">Approved partners</div></div>
+      <div class="stat-card"><div class="value" id="affiliate-stat-payable">₹0</div><div class="label">Eligible, unpaid</div><div class="sub">released in a Sunday payout run</div></div>
+      <div class="stat-card"><div class="value" id="affiliate-stat-paid">₹0</div><div class="label">Paid lifetime</div></div>
+    </div>
+    <section class="section-card affiliate-section">
+      <div class="section-card__head"><div><h3>Applications &amp; partner rates</h3><p>Set each person's commission and default coupon discount before approving. Rate changes apply to future paid orders only.</p></div></div>
+      <div class="admin-table-wrap"><table class="admin-table affiliate-table"><thead><tr><th>Partner</th><th>Application</th><th>Discount</th><th>Commission</th><th>Sales / Earnings</th><th>Decision</th></tr></thead><tbody id="affiliate-partners"><tr><td colspan="6" class="empty-row">Loading…</td></tr></tbody></table></div>
+    </section>
+    <section class="section-card affiliate-section">
+      <div class="section-card__head"><div><h3>Coupon assignment</h3><p>Create the coupon first in <a href="coupons.html">Coupons &amp; Creators</a>, then assign the code here to an approved collaborator. Commission is snapshotted when an order is paid.</p></div></div>
+      <form class="affiliate-link-form" id="affiliate-link-form">
+        <label>Coupon code<input id="affiliate-coupon-code" required maxlength="24" placeholder="DEVIN25" autocapitalize="characters"></label>
+        <label>Approved partner<select id="affiliate-coupon-partner" required><option value="">Select partner…</option></select></label>
+        <label>Commission %<input id="affiliate-coupon-rate" type="number" min="0" max="50" step="0.5" placeholder="Use partner default"></label>
+        <button type="submit" class="btn btn--primary">Assign coupon</button>
+      </form>
+      <div class="admin-table-wrap"><table class="admin-table affiliate-table"><thead><tr><th>Code</th><th>Discount</th><th>Assigned partner</th><th>Commission</th><th>Action</th></tr></thead><tbody id="affiliate-coupons"><tr><td colspan="5" class="empty-row">Loading…</td></tr></tbody></table></div>
+    </section>
+    <section class="section-card affiliate-section">
+      <div class="section-card__head"><div><h3>Verified commission ledger</h3><p>Each row is created from a verified Razorpay-paid grant. For a refund/chargeback, reverse the unpaid commission here after checking Razorpay. Paid entries are immutable and need an explicit balance adjustment.</p></div></div>
+      <div class="admin-table-wrap"><table class="admin-table affiliate-table"><thead><tr><th>Partner / code</th><th>Payment</th><th>Plan</th><th>Customer paid</th><th>Commission</th><th>State</th><th>Refund / action</th></tr></thead><tbody id="affiliate-commissions"><tr><td colspan="7" class="empty-row">Loading…</td></tr></tbody></table></div>
+    </section>
+    <section class="section-card affiliate-section">
+      <div class="section-card__head affiliate-payout-head"><div><h3>Sunday payout queue</h3><p>Run on Sunday (Asia/Kolkata). Every eligible commission is grouped per partner. Payments are manual until RazorpayX Payouts is configured.</p></div><button class="btn btn--primary" id="create-sunday-run">Prepare Sunday payout run</button></div>
+      <div class="admin-table-wrap"><table class="admin-table affiliate-table"><thead><tr><th>Period</th><th>Partner / UPI</th><th>Amount</th><th>Sales</th><th>Status</th><th>Transfer reference / action</th></tr></thead><tbody id="affiliate-payouts"><tr><td colspan="6" class="empty-row">Loading…</td></tr></tbody></table></div>
+    </section>
+  </main>
+</div>
+<script src="js/vendor/supabase.min.js" defer></script><script src="js/admin-boot.js" defer></script><script src="js/supabaseClient.js" defer></script><script src="js/utils.js" defer></script><script src="js/admin-icons.js" defer></script><script src="js/admin-common.js" defer></script><script src="js/admin-command.js" defer></script><script src="js/admin-export.js" defer></script><script src="js/admin-affiliates.js" defer></script>
+</body></html>

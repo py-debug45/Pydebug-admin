@@ -187,7 +187,7 @@ test('feature flags reuse server_flags so existing product switches stay in one 
 
 test('⌘K palette is loaded on every protected page and is permission-aware', () => {
   const pages = fs.readdirSync(ROOT).filter((f) => f.endsWith('.html')
-    && !['index.html', 'reset-password.html'].includes(f));
+    && !['index.html', 'reset-password.html', 'partner.html'].includes(f));
   assert.ok(pages.length >= 16, `expected all admin pages, got ${pages.length}`);
   for (const page of pages) {
     const html = read(page);

@@ -475,6 +475,11 @@ const couponState = {
 
 function getRowCommission(row) {
   const code = row && row.code ? row.code : "";
+  if (row && row.affiliatePartnerId && Number.isFinite(Number(row.affiliateCommissionPercent))) {
+    const pct = Math.min(50, Math.max(0, Number(row.affiliateCommissionPercent)));
+    const mode = [20, 25, 30].includes(pct) ? String(pct) : "custom";
+    return { mode, pct, persisted: true, partnerName: row.affiliatePartnerName || "approved partner" };
+  }
   const saved = code ? couponState.commissions[code] : null;
   if (saved && Number.isFinite(Number(saved.pct))) {
     const pct = Math.min(100, Math.max(0, Number(saved.pct)));
@@ -558,6 +563,9 @@ function normalizeCouponRow(row) {
     expiresAt: read("expiresAt", "expires_at", null),
     isActive: read("isActive", "is_active", true) !== false,
     isExpired: read("isExpired", "is_expired", false) === true,
+    affiliatePartnerId: read("affiliatePartnerId", "affiliate_partner_id", null),
+    affiliatePartnerName: read("affiliatePartnerName", "partner_name", null),
+    affiliateCommissionPercent: nullableNumber(read("affiliateCommissionPercent", "affiliate_commission_percent", null)),
     revenuePaise: Math.max(0, Number(read("revenuePaise", "revenue_paise", 0)) || 0),
     createdAt: read("createdAt", "created_at", null),
     updatedAt: read("updatedAt", "updated_at", null),
@@ -591,7 +599,26 @@ async function loadCoupons(options) {
   const list = Array.isArray(data)
     ? data
     : (data && Array.isArray(data.coupons) ? data.coupons : []);
-  couponState.rows = list.map(normalizeCouponRow).filter((row) => !!row.code);
+  // The affiliate-specific RPC is the source of truth for collaborator ownership
+  // and commission rates. If the affiliate migration is not installed yet, keep
+  // coupon management usable but never show legacy browser-only estimates as
+  // real partner liabilities.
+  let affiliateByCode = {};
+  try {
+    const { data: affiliateRows, error: affiliateError } = await sb.rpc("affiliate_admin_list_coupons");
+    if (!affiliateError && Array.isArray(affiliateRows)) {
+      affiliateByCode = Object.fromEntries(affiliateRows.map((item) => [String(item.code || "").toUpperCase(), item]));
+    }
+  } catch (e) { /* optional until the partner migration is installed */ }
+  couponState.rows = list.map(normalizeCouponRow).filter((row) => !!row.code).map((row) => {
+    const linked = affiliateByCode[row.code];
+    return linked ? {
+      ...row,
+      affiliatePartnerId: linked.affiliate_partner_id || null,
+      affiliatePartnerName: linked.partner_name || null,
+      affiliateCommissionPercent: linked.commission_percent == null ? null : Number(linked.commission_percent),
+    } : row;
+  });
 
   // Keep an open edit form pointing at the freshest row (usage/revenue move
   // between loads) without wiping whatever the admin is typing.
@@ -649,6 +676,7 @@ function renderCouponStats() {
   );
 
   const totalPayoutPaise = couponState.rows.reduce((sum, row) => {
+    if (!row.affiliatePartnerId) return sum; // Unassigned campaign codes are not affiliate liabilities.
     const comm = getRowCommission(row);
     return sum + calculateAffiliatePayout(row.revenuePaise, comm.pct).payoutPaise;
   }, 0);
@@ -753,7 +781,7 @@ function couponRowHtml(row) {
       <div class="payout-calc">
         <strong class="coupon-payout-val" data-coupon-payout-val="${code}">${escapeHtml(formatCouponRupees(payout.payoutPaise))}</strong>
         <div class="payout-calc__controls">
-          <select class="coupon-comm-select" data-coupon-comm-select="${code}" aria-label="Commission percent for ${code}">
+          <select class="coupon-comm-select" data-coupon-comm-select="${code}" aria-label="Commission percent for ${code}" ${comm.persisted ? "disabled title=\"Set the real commission in Affiliate Partners\"" : ""}>
             <option value="20"${comm.mode === "20" ? " selected" : ""}>20%</option>
             <option value="25"${comm.mode === "25" ? " selected" : ""}>25%</option>
             <option value="30"${comm.mode === "30" ? " selected" : ""}>30%</option>
@@ -762,9 +790,9 @@ function couponRowHtml(row) {
           <input type="number" class="coupon-comm-custom" data-coupon-comm-custom="${code}"
                  min="0" max="100" step="0.5" value="${comm.pct}"
                  aria-label="Custom commission percent for ${code}"
-                 ${comm.mode === "custom" ? "" : "hidden"}>
+                 ${comm.mode === "custom" ? "" : "hidden"} ${comm.persisted ? "disabled" : ""}>
         </div>
-        <div class="coupon-cell-sub" data-coupon-payout-sub="${code}">${comm.pct}% of ${escapeHtml(formatCouponRupees(row.revenuePaise))}</div>
+        <div class="coupon-cell-sub" data-coupon-payout-sub="${code}">${comm.persisted ? `${escapeHtml(comm.partnerName)} · ${comm.pct}% of` : `preview only · ${comm.pct}% of`} ${escapeHtml(formatCouponRupees(row.revenuePaise))}</div>
       </div>
     </td>
     <td data-label="Status"><span class="tag ${status.cls}">${escapeHtml(status.label)}</span></td>

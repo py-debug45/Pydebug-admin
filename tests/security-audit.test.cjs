@@ -62,7 +62,7 @@ test('all protected admin pages verify Supabase JWT session and profiles.is_admi
   assert.match(commonJs, /sb\.auth\.getSession\(\)/, 'Expected Supabase JWT session check in requireAdmin');
   assert.match(commonJs, /profile\.is_admin\s*===\s*true/, 'Expected strict profiles.is_admin === true check in requireAdmin');
 
-  const publicAuthPages = new Set(['index.html', 'reset-password.html']);
+  const publicAuthPages = new Set(['index.html', 'reset-password.html', 'partner.html']);
   const htmlFiles = fs.readdirSync(ROOT).filter((f) => f.endsWith('.html') && !publicAuthPages.has(f));
   assert.ok(htmlFiles.length >= 14);
 
