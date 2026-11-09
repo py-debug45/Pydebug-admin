@@ -1163,6 +1163,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "submissions.html", label: "Submissions", icon: "code", perm: "submissions.read" },
   { href: "payments.html", label: "Payments", icon: "card", perm: "payments.read" },
   { href: "coupons.html", label: "Coupons & Creators", icon: "ticket", perm: "coupons.read" },
+  { href: "affiliates.html", label: "Affiliate Partners", icon: "users", perm: "coupons.read" },
   { href: "discussions.html", label: "Discussions", icon: "chat", perm: "community.read" },
   { href: "notifications.html", label: "Notifications", icon: "bell", perm: "notifications.read" },
   { href: "ai.html", label: "AI Control", icon: "bot", perm: "ai.read" },
