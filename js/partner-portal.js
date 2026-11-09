@@ -2,11 +2,23 @@
 // narrow per-user RPCs; no admin data or admin token is available here.
 let partnerMode = "login";
 let partnerInfo = null;
+let partnerPendingEmail = "";
 const partnerById = (id) => document.getElementById(id);
 const partnerCash = (n) => "₹" + (Math.max(0, Number(n) || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 function partnerMessage(id, text, isError) {
   const el = partnerById(id); if (!el) return;
   el.textContent = text || ""; el.classList.toggle("partner-error", !!isError);
+}
+function partnerRedirectUrl() {
+  return new URL("/partner", window.location.origin).toString();
+}
+function partnerAuthError(error) {
+  const message = String(error?.message || error || "Authentication failed");
+  if (/email not confirmed/i.test(message)) return "Please confirm your email first. You can resend the confirmation message below.";
+  if (/user already confirmed/i.test(message)) return "This email is already confirmed. Choose Sign in instead.";
+  if (/rate limit|too many requests/i.test(message)) return "Too many email requests were made. Wait a few minutes, then try again. Check Spam and Promotions too.";
+  if (/invalid login credentials/i.test(message)) return "Email/password did not match. If this is a new account, confirm its email first.";
+  return message;
 }
 function setPartnerMode(mode) {
   partnerMode = mode;
@@ -14,6 +26,8 @@ function setPartnerMode(mode) {
   partnerById("partner-signup-tab").className = mode === "signup" ? "btn btn--primary" : "btn btn--secondary";
   partnerById("partner-auth-submit").textContent = mode === "login" ? "Sign in" : "Create account";
   partnerById("partner-password").autocomplete = mode === "login" ? "current-password" : "new-password";
+  partnerById("partner-password").minLength = mode === "signup" ? 8 : 0;
+  partnerById("partner-resend-confirmation").classList.toggle("partner-hidden", !partnerPendingEmail);
   partnerMessage("partner-auth-message", "");
 }
 function showPartnerApp(loggedIn) {
@@ -79,6 +93,22 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   partnerById("partner-login-tab").addEventListener("click", () => setPartnerMode("login"));
   partnerById("partner-signup-tab").addEventListener("click", () => setPartnerMode("signup"));
+  partnerById("partner-resend-confirmation").addEventListener("click", async () => {
+    const email = partnerById("partner-email").value.trim();
+    if (!email) { partnerMessage("partner-auth-message", "Enter your email address first.", true); return; }
+    const resend = partnerById("partner-resend-confirmation"); resend.disabled = true;
+    try {
+      const { error } = await sb.auth.resend({
+        type: "signup", email,
+        options: { emailRedirectTo: partnerRedirectUrl() },
+      });
+      if (error) throw error;
+      partnerPendingEmail = email;
+      partnerMessage("partner-auth-message", "If this email has an unconfirmed account, a new confirmation email was sent. Check Spam/Promotions and wait a few minutes. If already confirmed, choose Sign in.");
+    } catch (e) {
+      partnerMessage("partner-auth-message", partnerAuthError(e), true);
+    } finally { resend.disabled = false; }
+  });
   partnerById("partner-auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const email = partnerById("partner-email").value.trim();
@@ -89,17 +119,32 @@ document.addEventListener("DOMContentLoaded", () => {
         const { data, error } = await sb.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: new URL("partner.html", window.location.href).toString() },
+          options: { emailRedirectTo: partnerRedirectUrl() },
         });
         if (error) throw error;
-        if (data.session) await refreshPartnerSession();
-        else partnerMessage("partner-auth-message", "Account created. Check your email to confirm, then return here and sign in.");
+        if (data.session) {
+          partnerPendingEmail = "";
+          partnerById("partner-resend-confirmation").classList.add("partner-hidden");
+          await refreshPartnerSession();
+        } else {
+          partnerPendingEmail = email;
+          partnerById("partner-resend-confirmation").classList.remove("partner-hidden");
+          partnerMessage("partner-auth-message", "If this is a new, unconfirmed account, check your inbox, Spam and Promotions. Already have a PyDebug account? Choose Sign in. If no email arrives, tap Resend confirmation email.");
+        }
       } else {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        partnerPendingEmail = "";
+        partnerById("partner-resend-confirmation").classList.add("partner-hidden");
         await refreshPartnerSession();
       }
-    } catch (e) { partnerMessage("partner-auth-message", e.message || "Authentication failed", true); }
+    } catch (e) {
+      if (partnerMode === "login" && /email not confirmed/i.test(String(e?.message || ""))) {
+        partnerPendingEmail = email;
+        partnerById("partner-resend-confirmation").classList.remove("partner-hidden");
+      }
+      partnerMessage("partner-auth-message", partnerAuthError(e), true);
+    }
     finally { submit.disabled = false; }
   });
   partnerById("partner-apply-form").addEventListener("submit", async (event) => {
