@@ -52,6 +52,24 @@ test('the admin and partner frontends use Supabase RPCs without bundling privile
   assert.doesNotMatch(html, /admin-boot\.js/); // collaborators do not share the admin session
 });
 
+test('partner portal password field has an accessible show/hide control for sign-in and signup', () => {
+  const html = read('partner.html');
+  const js = read('js/partner-portal.js');
+  assert.match(html, /id="partner-password-toggle" type="button"[^>]*aria-controls="partner-password"[^>]*aria-label="Show password"/);
+  assert.match(js, /passwordInput\.type = isHidden \? "text" : "password"/);
+  assert.match(js, /passwordToggle\.setAttribute\("aria-pressed", String\(isHidden\)\)/);
+});
+
+test('partner signup offers confirmation resend and redirects back to the same portal domain', () => {
+  const html = read('partner.html');
+  const js = read('js/partner-portal.js');
+  assert.match(html, /id="partner-resend-confirmation"[^>]*>Resend confirmation email/);
+  assert.match(js, /sb\.auth\.resend\(\{\s*type: "signup", email,/);
+  assert.match(js, /new URL\("\/partner", window\.location\.origin\)/);
+  assert.match(js, /partnerPendingEmail = email/);
+  assert.match(js, /partnerById\("partner-password"\)\.minLength = mode === "signup" \? 8 : 0/);
+});
+
 test('price example for recommended 10% discount and 20% commission uses customer-paid amount', () => {
   const monthlyPaidPaise = Math.round(14900 * 0.90);
   const yearlyPaidPaise = Math.round(99900 * 0.90);
