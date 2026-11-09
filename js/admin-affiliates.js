@@ -24,7 +24,8 @@ async function affiliateRpc(name, args) {
 }
 function affiliateError(error) {
   const msg = String(error?.message || error || "Request failed");
-  if (/function.*not found|schema cache|PGRST202/i.test(msg)) return "Affiliate database migration not installed. Run db/migrations/20261109_affiliate_partners_weekly_payouts.sql in Supabase SQL Editor first.";
+  if (/function.*not found|schema cache|PGRST202/i.test(msg)) return "Affiliate database migration not installed. Contact the administrator to apply the latest affiliate database migration.";
+  if (/structure of query does not match function result type/i.test(msg)) return "Affiliate dashboard data could not be read because of a database response mismatch. Refresh after the database fix has been applied.";
   return msg;
 }
 function affiliateNotice(text, bad) {
