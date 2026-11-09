@@ -68,6 +68,15 @@ async function refreshPartnerSession() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const passwordInput = partnerById("partner-password");
+  const passwordToggle = partnerById("partner-password-toggle");
+  passwordToggle.addEventListener("click", () => {
+    const isHidden = passwordInput.type === "password";
+    passwordInput.type = isHidden ? "text" : "password";
+    passwordToggle.textContent = isHidden ? "Hide" : "Show";
+    passwordToggle.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+    passwordToggle.setAttribute("aria-pressed", String(isHidden));
+  });
   partnerById("partner-login-tab").addEventListener("click", () => setPartnerMode("login"));
   partnerById("partner-signup-tab").addEventListener("click", () => setPartnerMode("signup"));
   partnerById("partner-auth-form").addEventListener("submit", async (event) => {
