@@ -124,6 +124,13 @@ adds the Google Authenticator second login step: a per-admin secret table
 functions the login page calls. Login = admin email + password → 6-digit
 code from Google Authenticator; the panel opens only after both.
 
+Lost the authenticator (or want a fresh key)? Run
+**`supabase-admin-totp-reset.sql`** — edit the email at the top, run it, and
+the next login shows a brand-new setup secret/QR. It only clears that one
+admin's enrolment (`enabled`, `enabled_at`, attempt counter and lock) and
+never reveals or reuses an old secret; there is no master passcode or 2FA
+bypass in the panel.
+
 What it does (assuming the user-panel tables already exist):
 
 - Keeps the legacy `admin_panel_security` table for older installs but seeds
@@ -220,6 +227,11 @@ guessable from the main user-facing URL.
 - `supabase-admin-login-fix.sql` — one-shot SQL that repairs a login: confirms
   the email, sets a known password, creates the `profiles` row, grants
   `is_admin`, and adds the own-row read policy.
+- `supabase-admin-totp-reset.sql` — “I lost my authenticator / I want a new
+  key” repair. It clears one admin's enrolment in `public.admin_totp`
+  (`enabled = false`, counters and lock reset) so the next login on
+  `index.html` shows a fresh secret + QR. Nothing else is touched; an old
+  secret is never returned or reused.
 - `supabase-admin-totp-setup.sql` — the Google Authenticator (TOTP) login.
   Secrets live in `public.admin_totp` (RLS on, no client access — only the
   SECURITY DEFINER RPCs can use them), codes are verified in the database
