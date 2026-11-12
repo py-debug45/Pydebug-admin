@@ -16,6 +16,9 @@ Thumbs.db
 _site/
 .preview/
 
+# One-off authenticator enrolment exports (contain the live TOTP secret)
+assets/admin-authenticator-*
+
 # Node (only if you add tooling locally — project has no build step)
 node_modules/
 npm-debug.log*
